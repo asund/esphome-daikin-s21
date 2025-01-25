@@ -175,9 +175,7 @@ std::string str_repr(const uint8_t *bytes, size_t len) {
 }
 
 void DaikinS21::write_frame(const uint8_t *payload, size_t payload_len) {
-  uint8_t tx_buffer[S21_MAX_COMMAND_SIZE + S21_MAX_PAYLOAD_SIZE];
   size_t command_len = strlen(tx_command);
-
   if (command_len > S21_MAX_COMMAND_SIZE) {
     ESP_LOGE(TAG, "S21: Command '%s' too large", tx_command);
     comm_state = CommState::Error;
@@ -193,14 +191,18 @@ void DaikinS21::write_frame(const uint8_t *payload, size_t payload_len) {
   this->tx_uart->write_byte(STX);
   
   this->tx_uart->write_str(tx_command);
-  uint8_t checksum = std::accumulate(tx_command, tx_command + strlen(tx_command), 0U);
+  uint8_t checksum = std::accumulate(tx_command, tx_command + command_len, 0U);
 
   if (payload_len) {
     this->tx_uart->write_array(payload, payload_len);
     checksum = std::accumulate(payload, payload + payload_len, checksum);
   }
 
+  if (checksum == STX) {
+    checksum = ENQ;
+  }
   this->tx_uart->write_byte(checksum);
+  
   this->tx_uart->write_byte(ETX);
 }
 
@@ -276,41 +278,57 @@ void DaikinS21::parse_command_response() {
   std::copy_n(&rx_buffer[0], rcode_len, rcode);
   std::copy_n(&rx_buffer[rcode_len], payload_len, payload);
 
-  if (this->debug_protocol) {
-    ESP_LOGD(TAG, "S21: %s -> %s (%d)", rcode,
-             hex_repr(payload, payload_len).c_str(), payload_len);
-  }
-
+  bool known = true;
   switch (rcode[0]) {
     case 'G':  // F -> G
       switch (rcode[1]) {
         case '1':  // F1 -> Basic State
           this->active.power_on = (payload[0] == '1');
-          this->active.mode = (DaikinClimateMode) payload[1];
+          this->active.mode = static_cast<DaikinClimateMode>(payload[1]);
           this->active.setpoint = ((payload[2] - 28) * 5);  // Celsius * 10
-          this->active.fan = (DaikinFanMode) payload[3];
+          if (this->support_rg == false) {  // prefer RG (silent not reported here)
+            this->active.fan = static_cast<DaikinFanMode>(payload[3]);
+          }
           this->ready.set(0);
           return;
+        case '2': // 3D:3B:00:80
+          break;
+        case '3': // 30:FE:FE:00
+          this->active.powerful = payload[0] == '1';
+          break;
+        case '4': // 30:00:80:00
+          break;
         case '5':  // F5 -> G5 -- Swing state
           this->active.swing_v = payload[0] & 1;
           this->active.swing_h = payload[0] & 2;
           this->ready.set(1);
-          return;
+          break;
         case '6':  // F6 -> G6 - "powerful" mode
-          this->active.powerful = (payload[0] == '2') ? 1 : 0;
-          return;
-        case '7':  // F7 - G7 - "eco" mode
-          this->active.econo = (payload[1] == '2') ? 1 : 0;
-          return;
-        case '9':  // F9 -> G9 -- Inside temperature
+          this->active.powerful = payload[0] == '2';
+          break;
+        case '7':  // F7 - G7 - "eco" mode and demand
+          this->active.econo = payload[1] == '2';
+          break;
+        case '8': // 30:00:00:00, protocol version acording to faikin docs
+          break;
+        case '9':  // F9 -> G9 -- Inside temperature, don't poll if unit supports RH and Ra (0.5 degree granularity there)
           this->temp_inside = temp_f9_byte_to_c10(&payload[0]);
           this->temp_outside = temp_f9_byte_to_c10(&payload[1]);
-          return;
+          break;
+        default:
+          known = false;
+          break;
       }
       break;
 
     case 'S':  // R -> S
       switch (rcode[1]) {
+        case 'B':  // Operational mode, single character, shadows F1
+          return;
+        case 'G':  // Fan mode, better detail than F1
+          this->active.fan = static_cast<daikin_s21::DaikinFanMode>(payload[0]);
+          this->support_rg = true;
+          return;
         case 'H':  // Inside temperature
           this->temp_inside = temp_bytes_to_c10(payload);
           return;
@@ -323,11 +341,24 @@ void DaikinS21::parse_command_response() {
         case 'L':  // Fan speed
           this->fan_rpm = bytes_to_num(payload, payload_len) * 10;
           return;
-        case 'd':  // Compressor state / frequency? Idle if 0.
-          this->idle =
-              (payload[0] == '0' && payload[1] == '0' && payload[2] == '0');
+        case 'd':  // Compressor frequency in hertz? Idle if 0.
+          this->demand = bytes_to_num(payload, payload_len);
           this->ready.set(2);
           return;
+        case 'C':  // Setpoint, G1 has same info
+          this->active.setpoint = bytes_to_num(payload, payload_len);
+          return;
+        case 'M': // related to v_swing somehow
+          break;
+        case 'N':
+          this->swing_vertical_angle = bytes_to_num(payload, 4);
+          return;
+        case 'F': // Swing mode, G5 has same info. ascii hex string: 2F herizontal 1F vertical 7F both 00 off
+          break;
+        case 'X':
+        case 'z':
+          ESP_LOGD(TAG, "Unknown value: %s %d", rcode, bytes_to_num(payload, payload_len));
+          break;
         default:
           if (payload_len > 3) {
             int8_t temp = temp_bytes_to_c10(payload);
@@ -335,15 +366,42 @@ void DaikinS21::parse_command_response() {
                      hex_repr(payload, payload_len).c_str(), c10_c(temp),
                      c10_f(temp));
           }
-          return;
+          known = false;
+          break;
       }
+
+  case 'M':
+    // was 3E53 or 0x35E3 100WH units power? faikin
+    break;
 
     default:
       break;
   }
 
-  ESP_LOGD(TAG, "Unknown response %s -> \"%s\"", rcode,
-           hex_repr(payload, payload_len).c_str());
+  // protocol decoding
+  if (this->debug_protocol) {
+    ESP_LOGD(TAG, "S21: %s -> %s %s", rcode,
+      str_repr(payload, payload_len).c_str(),
+      hex_repr(payload, payload_len).c_str());
+  }
+
+  if (this->debug_protocol) {
+    auto curr = std::vector<uint8_t>(payload, payload + payload_len);
+    if (val_cache[rcode] != curr) {
+      const auto prev = val_cache[rcode];
+      ESP_LOGI(TAG, "S21 %s changed: %s %s -> %s %s", rcode,
+        str_repr(prev.data(), prev.size()).c_str(),
+        hex_repr(prev.data(), prev.size()).c_str(),
+        str_repr(curr.data(), curr.size()).c_str(),
+        hex_repr(curr.data(), curr.size()).c_str());
+      val_cache[rcode] = curr;
+    }
+  }
+
+  // if (!known) {
+  //   ESP_LOGD(TAG, "Unknown response %s -> \"%s\"", rcode,
+  //           hex_repr(payload, payload_len).c_str());
+  // }
 }
 
 void DaikinS21::handle_rx_byte(uint8_t byte) {
@@ -358,6 +416,7 @@ void DaikinS21::handle_rx_byte(uint8_t byte) {
           if (comm_state == CommState::QueryAck) {
             comm_state = CommState::QueryStx;
           } else {
+            ESP_LOGD(TAG, "ACK from S21 for command %s", tx_command);
             comm_state = CommState::Idle;
             rx_timeout = millis();
             refresh_state = true;  // command took, refresh whole state

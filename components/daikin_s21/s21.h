@@ -61,6 +61,7 @@ class DaikinS21 : public PollingComponent {
   void dump_config() override;
   void set_uarts(uart::UARTComponent *tx, uart::UARTComponent *rx);
   void set_debug_protocol(bool set) { this->debug_protocol = set; }
+
   bool is_ready() { return this->ready.all(); }
 
   bool is_power_on() { return this->active.power_on; }
@@ -83,17 +84,16 @@ class DaikinS21 : public PollingComponent {
   float get_temp_outside() { return this->temp_outside / 10.0; }
   float get_temp_coil() { return this->temp_coil / 10.0; }
   uint16_t get_fan_rpm() { return this->fan_rpm; }
-  bool is_idle() { return this->idle; }
-
-  void set_has_presets(bool value) {
-    this->has_presets = value;
-  };
+  uint8_t get_swing_vertical_angle() { return this->swing_vertical_angle; }
+  uint16_t get_compressor_frequency() { return this->demand; }
+  bool is_idle() { return this->demand == 0; }
+  void set_has_presets(bool value) { this->has_presets = value; }
 
  protected:
-  static constexpr uint32_t S21_RESPONSE_TURNAROUND = (80 * 1000) / 2400;
+  static constexpr uint32_t S21_RESPONSE_TURNAROUND = 75;
   static constexpr uint32_t S21_RESPONSE_TIMEOUT = 250;
   static constexpr uint32_t S21_ERROR_TIMEOUT = 3000;
-  static constexpr uint32_t S21_MAX_COMMAND_SIZE = 2;
+  static constexpr uint32_t S21_MAX_COMMAND_SIZE = 4;
   static constexpr uint32_t S21_MAX_PAYLOAD_SIZE = 4;
 
   void dump_state();
@@ -127,8 +127,12 @@ class DaikinS21 : public PollingComponent {
   int16_t temp_outside = 0;
   int16_t temp_coil = 0;
   uint16_t fan_rpm = 0;
-  bool idle = true;
+  int16_t swing_vertical_angle = 0;
+  uint16_t demand = 0;
+
+  //proto support
   bool has_presets = true;
+  bool support_rg = false;
 };
 
 class DaikinS21Client {

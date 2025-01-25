@@ -8,6 +8,10 @@ from esphome.components import sensor
 from esphome.const import (
     CONF_ID,
     UNIT_CELSIUS,
+    UNIT_DEGREES,
+    UNIT_HERTZ,
+    UNIT_REVOLUTIONS_PER_MINUTE,
+    ICON_FAN,
     ICON_THERMOMETER,
     DEVICE_CLASS_SPEED,
     DEVICE_CLASS_TEMPERATURE,
@@ -30,6 +34,8 @@ CONF_INSIDE_TEMP = "inside_temperature"
 CONF_OUTSIDE_TEMP = "outside_temperature"
 CONF_COIL_TEMP = "coil_temperature"
 CONF_FAN_SPEED = "fan_speed"
+CONF_SWING_VERTICAL_ANGLE = "swing_vertical_angle"
+CONF_COMPRESSOR_FREQUENCY = "compressor_frequency"
 
 CONFIG_SCHEMA = (
     cv.COMPONENT_SCHEMA.extend(
@@ -57,8 +63,22 @@ CONFIG_SCHEMA = (
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
             cv.Optional(CONF_FAN_SPEED): sensor.sensor_schema(
-                unit_of_measurement="rpm",
-                icon="mdi:fan",
+                unit_of_measurement=UNIT_REVOLUTIONS_PER_MINUTE,
+                icon=ICON_FAN,
+                accuracy_decimals=0,
+                device_class=DEVICE_CLASS_SPEED,
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_SWING_VERTICAL_ANGLE): sensor.sensor_schema(
+                unit_of_measurement=UNIT_DEGREES,
+                icon="mdi:pan-vertical",
+                accuracy_decimals=0,
+                device_class=DEVICE_CLASS_SPEED,
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_COMPRESSOR_FREQUENCY): sensor.sensor_schema(
+                unit_of_measurement=UNIT_HERTZ,
+                icon="mdi:pan-vertical",
                 accuracy_decimals=0,
                 device_class=DEVICE_CLASS_SPEED,
                 state_class=STATE_CLASS_MEASUREMENT,
@@ -93,3 +113,11 @@ async def to_code(config):
     if CONF_FAN_SPEED in config:
         sens = await sensor.new_sensor(config[CONF_FAN_SPEED])
         cg.add(var.set_fan_speed_sensor(sens))
+
+    if CONF_SWING_VERTICAL_ANGLE in config:
+        sens = await sensor.new_sensor(config[CONF_SWING_VERTICAL_ANGLE])
+        cg.add(var.set_swing_vertical_angle_sensor(sens))
+
+    if CONF_COMPRESSOR_FREQUENCY in config:
+        sens = await sensor.new_sensor(config[CONF_COMPRESSOR_FREQUENCY])
+        cg.add(var.set_compressor_frequency_sensor(sens))
