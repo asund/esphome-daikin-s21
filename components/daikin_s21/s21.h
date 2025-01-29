@@ -1,6 +1,8 @@
 #pragma once
 
 #include <bitset>
+#include <vector>
+#include "esphome/components/climate/climate.h"
 #include "esphome/components/uart/uart.h"
 #include "esphome/core/component.h"
 
@@ -38,10 +40,8 @@ struct DaikinSettings {
   DaikinFanMode fan = DaikinFanMode::Auto;
   int16_t setpoint = 23;
 
-  bool swing_v = false;
-  bool swing_h = false;
-  bool powerful = false;
-  bool econo = false;
+  climate::ClimateSwingMode swing_mode;
+  climate::ClimatePreset preset;
 };
 
 class DaikinS21 : public PollingComponent {
@@ -68,25 +68,22 @@ class DaikinS21 : public PollingComponent {
   DaikinClimateMode get_climate_mode() { return this->active.mode; }
   DaikinFanMode get_fan_mode() { return this->active.fan; }
   float get_setpoint() { return this->active.setpoint / 10.0; }
-  bool get_swing_h() { return this->active.swing_h; }
-  bool get_swing_v() { return this->active.swing_v; }
-  bool get_powerful() { return this->active.powerful; }
-  bool get_econo() { return this->active.econo; }
+  climate::ClimateSwingMode get_swing_mode() { return this->active.swing_mode; }
+  climate::ClimatePreset get_preset() { return this->active.preset; }
 
   // external command actions
   void set_daikin_climate_settings(bool power_on, DaikinClimateMode mode,
                                    float setpoint, DaikinFanMode fan_mode);
-  void set_swing_settings(bool swing_v, bool swing_h);
-  void set_powerful_settings(bool value);
-  void set_econo_settings(bool value);
+  void set_swing_mode_settings(climate::ClimateSwingMode value);
+  void set_preset_settings(climate::ClimatePreset value);
 
   float get_temp_inside() { return this->temp_inside / 10.0; }
   float get_temp_outside() { return this->temp_outside / 10.0; }
   float get_temp_coil() { return this->temp_coil / 10.0; }
   uint16_t get_fan_rpm() { return this->fan_rpm; }
   uint8_t get_swing_vertical_angle() { return this->swing_vertical_angle; }
-  uint16_t get_compressor_frequency() { return this->demand; }
-  bool is_idle() { return this->demand == 0; }
+  uint16_t get_compressor_frequency() { return this->compressor_hz; }
+  bool is_idle() { return this->compressor_hz == 0; }
   void set_has_presets(bool value) { this->has_presets = value; }
 
  protected:
@@ -108,6 +105,7 @@ class DaikinS21 : public PollingComponent {
   std::bitset<3> ready = {};
   bool debug_protocol = false;
   bool refresh_state = false;
+  std::unordered_map<std::string, std::vector<uint8_t>> val_cache;
   
   CommState comm_state = CommState::Idle;
   std::vector<const char *> queries = {};
@@ -117,20 +115,21 @@ class DaikinS21 : public PollingComponent {
   uint32_t rx_timeout = 0;
 
   DaikinSettings active = {};
+  bool powerful = false;
+  bool econo = false;
   DaikinSettings pending = {};
   bool activate_climate = false;
-  bool activate_swing = false;
-  bool activate_powerful = false;
-  bool activate_econo = false;
+  bool activate_swing_mode = false;
+  bool activate_preset = false;
 
   int16_t temp_inside = 0;
   int16_t temp_outside = 0;
   int16_t temp_coil = 0;
   uint16_t fan_rpm = 0;
   int16_t swing_vertical_angle = 0;
-  uint16_t demand = 0;
+  uint8_t compressor_hz = 0;
 
-  //proto support
+  //protocol support
   bool has_presets = true;
   bool support_rg = false;
 };

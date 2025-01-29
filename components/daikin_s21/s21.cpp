@@ -179,30 +179,24 @@ void DaikinS21::write_frame(const uint8_t *payload, size_t payload_len) {
   if (command_len > S21_MAX_COMMAND_SIZE) {
     ESP_LOGE(TAG, "S21: Command '%s' too large", tx_command);
     comm_state = CommState::Error;
-    return;  // todo skip command gracefully
+    return;
   }
 
   if (this->debug_protocol) {
     ESP_LOGD(TAG, "S21: Tx: %s %s %s", tx_command,
              str_repr(payload, payload_len).c_str(),
              hex_repr(payload, payload_len).c_str());
-  }
-
   this->tx_uart->write_byte(STX);
-  
   this->tx_uart->write_str(tx_command);
   uint8_t checksum = std::accumulate(tx_command, tx_command + command_len, 0U);
-
   if (payload_len) {
     this->tx_uart->write_array(payload, payload_len);
     checksum = std::accumulate(payload, payload + payload_len, checksum);
   }
-
   if (checksum == STX) {
     checksum = ENQ;
   }
   this->tx_uart->write_byte(checksum);
-  
   this->tx_uart->write_byte(ETX);
 }
 
@@ -220,29 +214,38 @@ void DaikinS21::tx_next_command() {
         c10_to_setpoint_byte(lroundf(round(pending.setpoint * 2) / 2 * 10.0)));
     payload[3] = static_cast<uint8_t>(pending.fan);
     comm_state = CommState::CommandAck;
-  } else if (activate_swing) {
-    activate_swing = false;
+  } else if (activate_swing_mode) {
+    activate_swing_mode = false;
     tx_command = "D5";  // todo encoding deviates from faikin docs:
-    payload[0] += 
-        ((pending.swing_h && pending.swing_v) ? 4 : 0) +
-        (pending.swing_h ? 2 : 0) +
-        (pending.swing_v ? 1 : 0);
-    if (pending.swing_v || pending.swing_h) {
-      payload[1] = static_cast<uint8_t>('?');
+    if (pending.swing_mode == climate::CLIMATE_SWING_BOTH) {
+      payload[0] = '7';
+      payload[1] = '?';
+    } else if (pending.swing_mode == climate::CLIMATE_SWING_HORIZONTAL) {
+      payload[0] = '2';
+      payload[1] = '?';
+    } else if (pending.swing_mode == climate::CLIMATE_SWING_VERTICAL) {
+      payload[0] = '1';
+      payload[1] = '?';
     }
     comm_state = CommState::CommandAck;
-  } else if (activate_powerful) {
-    activate_powerful = false;
-    tx_command = "D6";
-    if (pending.powerful) {
-      payload[0] += 2;
+  } else if (activate_preset) {
+    // could take two commands
+    // disable the active one first when switching
+    if (this->econo && (pending.preset == climate::CLIMATE_PRESET_BOOST)) {
+      tx_command = "D7";  // turn off eco
+    } else if (this->powerful && (pending.preset == climate::CLIMATE_PRESET_ECO)) {
+      tx_command = "D6";  // turn off powerful
     }
-    comm_state = CommState::CommandAck;
-  } else if (activate_econo) {
-    activate_econo = false;
-    tx_command = "D7";
-    if (pending.econo) {
-      payload[1] += 2;
+    // clear command if we're on the last step
+    if (!this->econo && !this->powerful) {
+      activate_preset = false;
+      if (pending.preset == climate::CLIMATE_PRESET_BOOST) {
+        tx_command = "D6";
+        payload[0] += 2;
+      } else if (pending.preset == climate::CLIMATE_PRESET_ECO) {
+        tx_command = "D7";
+        payload[1] += 2;
+      }
     }
     comm_state = CommState::CommandAck;
   } else if (current_query != queries.end()) {
@@ -294,24 +297,28 @@ void DaikinS21::parse_command_response() {
         case '2': // 3D:3B:00:80
           break;
         case '3': // 30:FE:FE:00
-          this->active.powerful = payload[0] == '1';
+          this->powerful = payload[0] & 1;
           break;
         case '4': // 30:00:80:00
           break;
         case '5':  // F5 -> G5 -- Swing state
-          this->active.swing_v = payload[0] & 1;
-          this->active.swing_h = payload[0] & 2;
+          switch(payload[0] & 0b11) {
+            case 0b00: active.swing_mode = climate::CLIMATE_SWING_OFF; break;
+            case 0b01: active.swing_mode = climate::CLIMATE_SWING_VERTICAL; break;
+            case 0b10: active.swing_mode = climate::CLIMATE_SWING_HORIZONTAL; break;
+            case 0b11: active.swing_mode = climate::CLIMATE_SWING_BOTH; break;
+          }
           this->ready.set(1);
           break;
         case '6':  // F6 -> G6 - "powerful" mode
-          this->active.powerful = payload[0] == '2';
+          this->powerful = payload[0] & 2;
           break;
         case '7':  // F7 - G7 - "eco" mode and demand
-          this->active.econo = payload[1] == '2';
+          this->econo = payload[1] & 2;
           break;
-        case '8': // 30:00:00:00, protocol version acording to faikin docs
+        case '8': // 30:00:00:00, protocol version acording to faikin docs. 0 for me.
           break;
-        case '9':  // F9 -> G9 -- Inside temperature, don't poll if unit supports RH and Ra (0.5 degree granularity there)
+        case '9':  // F9 -> G9 -- Inside temperature, todo don't poll if unit supports RH and Ra (0.5 degree granularity there)
           this->temp_inside = temp_f9_byte_to_c10(&payload[0]);
           this->temp_outside = temp_f9_byte_to_c10(&payload[1]);
           break;
@@ -341,8 +348,8 @@ void DaikinS21::parse_command_response() {
         case 'L':  // Fan speed
           this->fan_rpm = bytes_to_num(payload, payload_len) * 10;
           return;
-        case 'd':  // Compressor frequency in hertz? Idle if 0.
-          this->demand = bytes_to_num(payload, payload_len);
+        case 'd':  // Compressor frequency in hertz, idle if 0.
+          this->compressor_hz = bytes_to_num(payload, payload_len);
           this->ready.set(2);
           return;
         case 'C':  // Setpoint, G1 has same info
@@ -493,22 +500,33 @@ void DaikinS21::handle_rx_byte(uint8_t byte) {
 void DaikinS21::setup() {
   // populate messages to poll
   // clang-format off
-  queries = {"F1", "F5", "Rd",  // required
-      "F6", "F7", "F9", "RH", "RI", "Ra", "RL"
-#ifdef S21_EXPERIMENTS
-      "F2", "F3", "F4", "F8", "F9", "F0",
-      "FA", "FB", "FC", "FD", "FE", "FF",
-      "FG", "FH", "FI", "FJ", "FK", "FL",
-      "FM", "FN", "FO", "FP", "FQ", "FR",
-      "FS", "FT", "FU", "FV", "FW", "FX",
-      "FY", "FZ",
-  //   // Observed BRP device querying these.
-  //   std::vector<std::string> experiments = {"F2", "F3", "F4", "RN",
-  //                                          "RX", "RD", "M",  "FU0F"};
-  //   this->run_queries(experiments);
+#define S21_EXPERIMENTS 1
+  queries = {
+      "F1", "F5",
+      // redundant/worse: "F9",
+      // unknown/unchanging: "F2", "F3", "F4", "F8",
+      // FA-FZ,Fa-Fz nil, Fe times out instead of nack
+      "Rd", // required
+      "RG", // better fan mode
+      // redundant/worse: "RC", "RF", "RB",
+      "RH", "RI", "Ra", "RL",
+#if S21_EXPERIMENTS
+      // // Observed BRP device querying these.
+      // "RN",
+      // "RX", "RD", "M", "FU0F",
+      // // Experiments
+      // "RA", 
+      // "RE",
+      // "RK", "RM", "RW",
+      // "Rb", "Re", "Rg", "Rz",
 #endif
   };
   // clang-format on
+
+  if (this->has_presets) {
+    queries.push_back("F6");
+    queries.push_back("F7");
+  }
 
   current_query = queries.begin();
 }
@@ -530,9 +548,8 @@ void DaikinS21::loop() {
         current_query = queries.end();
         refresh_state = true;
         activate_climate = false;
-        activate_swing = false;
-        activate_powerful = false;
-        activate_econo = false;
+        activate_swing_mode = false;
+        activate_preset = false;
         // todo anything else?
       }
       break;
@@ -563,7 +580,7 @@ void DaikinS21::update() {
     ESP_LOGI(TAG, "Daikin S21 Ready");
     ready_printed = true;
   }
-  
+
   if (this->debug_protocol) {
     this->dump_state();
   }
@@ -604,20 +621,14 @@ void DaikinS21::set_daikin_climate_settings(bool power_on,
   activate_climate = true;
 }
 
-void DaikinS21::set_swing_settings(bool swing_v, bool swing_h) {
-  pending.swing_v = swing_v;
-  pending.swing_h = swing_h;
-  activate_swing = true;
-};
-
-void DaikinS21::set_powerful_settings(bool value) {
-  pending.powerful = value;
-  activate_powerful = true;
+void DaikinS21::set_swing_mode_settings(climate::ClimateSwingMode value) {
+  pending.swing_mode = value;
+  activate_swing_mode = true;
 }
 
-void DaikinS21::set_econo_settings(bool value) {
-  pending.econo = value;
-  activate_econo = true;
+void DaikinS21::set_preset_settings(climate::ClimatePreset value) {
+  pending.preset = value;
+  activate_preset = true;
 }
 
 }  // namespace daikin_s21

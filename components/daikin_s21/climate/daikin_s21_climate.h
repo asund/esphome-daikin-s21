@@ -49,12 +49,6 @@ class DaikinS21Climate : public climate::Climate,
   DaikinClimateMode e2d_climate_mode(climate::ClimateMode mode);
   const std::string d2e_fan_mode(DaikinFanMode mode);
   DaikinFanMode e2d_fan_mode(std::string mode);
-  climate::ClimateSwingMode d2e_swing_mode(bool swing_v, bool swing_h);
-  bool e2d_swing_v(climate::ClimateSwingMode mode);
-  bool e2d_swing_h(climate::ClimateSwingMode mode);
-  climate::ClimatePreset d2e_preset_mode(bool powerful, bool econo);
-  bool e2d_powerful(climate::ClimatePreset mode);
-  bool e2d_econo(climate::ClimatePreset mode);
 
   void set_supported_modes(const std::set<esphome::climate::ClimateMode> &modes);
 
