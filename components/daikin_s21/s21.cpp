@@ -10,7 +10,7 @@ namespace daikin_s21 {
 #define ACK 6
 #define NAK 21
 
-#define S21_RESPONSE_TIMEOUT 500
+#define S21_RESPONSE_TIMEOUT 250
 
 static const char *const TAG = "daikin_s21";
 
@@ -328,16 +328,16 @@ bool DaikinS21::parse_response(std::vector<uint8_t> rcode,
       this->setpoint = ((payload[2] - 28) * 5);  // Celsius * 10
       this->fan = (DaikinFanMode) payload[3];
       return true;
-    } else if(uint8_starts_with_str(rcode, StateResponse::Swing)) {
+    } else if(uint8_starts_with_str(rcode, StateResponse::SwingOrHumidity)) {
       // F5 -> G5 -- Swing state
       this->swing_v = payload[0] & 1;
       this->swing_h = payload[0] & 2;
       return true;
-    } else if(uint8_starts_with_str(rcode, StateResponse::Powerful)) {
+    } else if(uint8_starts_with_str(rcode, StateResponse::SpecialModes)) {
       // F6 -> G6 - "powerful" mode
       this->powerful = (payload[0] == '2') ? 1 : 0;
       return true;
-    } else if(uint8_starts_with_str(rcode, StateResponse::Econo)) {
+    } else if(uint8_starts_with_str(rcode, StateResponse::DemandAndEcono)) {
       // F7 -> G7 - "eco" mode
       this->econo = (payload[1] == '2') ? 1 : 0;
       return true;
@@ -379,6 +379,10 @@ bool DaikinS21::parse_response(std::vector<uint8_t> rcode,
         this->fy00_protocol_major = 3;
         this->fy00_protocol_minor = 2;
         this->protocol_checked = true;
+      } else if(uint8_starts_with_str(payload, NewProtocol::Protocol3_40)) {
+        this->fy00_protocol_major = 3;
+        this->fy00_protocol_minor = 4;
+        this->protocol_checked = true;
       } else {
         return false;
       }
@@ -388,17 +392,77 @@ bool DaikinS21::parse_response(std::vector<uint8_t> rcode,
       this->temp_inside = temp_f9_byte_to_c10(&payload[0]);
       this->temp_outside = temp_f9_byte_to_c10(&payload[1]);
       return true;
-    } 
+    } else if(uint8_starts_with_str(rcode, StateResponse::OptionalFeatures)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, StateResponse::OnOffTimer)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, StateResponse::ErrorStatus)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, StateResponse::ModelCode)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, StateResponse::IRCounter)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, StateResponse::V2OptionalFeatures)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, StateResponse::PowerConsumption)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, StateResponse::LouvreAngle)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, StateResponse::V3OptionalFeatures)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, StateResponse::AllowedTemperatureRange)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, StateResponse::ModelName)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, StateResponse::ProductionInformation)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, StateResponse::ProductionOrder)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, StateResponse::IndoorProductionInformation)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, StateResponse::OutdoorProductionInformation)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    }
   } else if(uint8_starts_with_str(rcode, "S")) {
-    if(uint8_starts_with_str(rcode, EnvironmentResponse::Inside)) {
+    if(uint8_starts_with_str(rcode, EnvironmentResponse::InsideTemperature)) {
       // RH -> SH - inside temperature
       this->temp_inside = temp_bytes_to_c10(payload);
       return true;
-    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::Coil)) {
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::LiquidTemperature)) {
       // RI -> SI - coil temperature
       this->temp_coil = temp_bytes_to_c10(payload);
       return true;
-    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::Outside)) {
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::OutsideTemperature)) {
       // Ra -> Sa - outside temperature
       this->temp_outside = temp_bytes_to_c10(payload);
       return true;
@@ -406,10 +470,70 @@ bool DaikinS21::parse_response(std::vector<uint8_t> rcode,
       // RL -> SL - fan speed
       this->fan_rpm = bytes_to_num(payload) * 10;
       return true;
-    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::Compressor)) {
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::CompressorFrequency)) {
       // Rd -> Sd - compressor state / frequency? Idle if 0.
       this->idle =
       (payload[0] == '0' && payload[1] == '0' && payload[2] == '0');
+      return true;
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::PowerOnOff)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::IndoorUnitMode)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::TemperatureSetPoint)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::OnTimerSetting)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::OffTimerSetting)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::FanMode)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::FanSetPoint)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::LouvreAngleSetPoint)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::VerticalSwingAngle)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::TargetTemperature)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::IndoorFrequencyCommandSignal)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::IndoorHumidity)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::CompressorOnOff)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::UnitState)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
+      return true;
+    } else if(uint8_starts_with_str(rcode, EnvironmentResponse::SystemState)) {
+      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
+             str_repr(payload).c_str(), payload.size());
       return true;
     } else {
       // default
@@ -431,39 +555,308 @@ bool DaikinS21::run_queries(std::vector<std::string> queries) {
   bool success = true;
 
   for (auto q : queries) {
-    std::vector<uint8_t> code(q.begin(), q.end());
-    success = this->s21_query(code) && success;
+    success = this->run_query(q) && success;
   }
 
   return success;  // True if all queries successful
 }
 
-std::vector<std::string> queries = {StateQuery::Basic, StateQuery::Swing, EnvironmentQuery::Compressor};
+bool DaikinS21::run_query(std::string query) {
+  std::vector<uint8_t> code(query.begin(), query.end());
+  if(query == "FY00" && this->f8_protocol != -1){
+    this->s21_query(code);
+    return true; // special case where FY00 can return NAK
+  }
+  return this->s21_query(code);
+}
+
+/**
+ * Runs the next startup query command
+ * @return true if all the startup queries have been run successfully
+ */
+bool DaikinS21::run_next_startup_query() {
+  if (startup_queries.size() == 0) {
+    ESP_LOGD(TAG, "Startup query size is 0");
+    return false; // special case if queries are empty
+  }
+  if (startup_query_index < startup_queries.size()) {
+    ESP_LOGD(TAG, "Running startup query: %s", startup_queries[this->startup_query_index].c_str());
+    if(this->run_query(startup_queries[this->startup_query_index])) {
+      startup_query_index++; // increment once this query is successful
+    }
+  } else {
+    startup_complete = true; // if all queries are done, set startup_complete to true
+  }
+
+  return startup_complete;  // true if all queries successful else false
+}
+
+/**
+ * Runs the next required query command
+ * @return true if query was run successfully
+ */
+bool DaikinS21::run_next_required_query() {
+  if (required_queries.size() == 0) {
+    ESP_LOGD(TAG, "Required query size is 0");
+    return false; // special case if queries are empty
+  }
+  if (required_query_index >= required_queries.size()){
+    required_query_index = 0; // reset the index to 0
+  }
+  ESP_LOGD(TAG, "Running required query: %s", required_queries[this->required_query_index].c_str());
+  bool success = this->run_query(required_queries[this->required_query_index]);
+  if (success) {
+    required_query_index++; // increment once this query is successful
+  }
+  return success;
+}
+
+/**
+ * Runs the next optional query command
+ * @return true if query was run successfully
+ */
+bool DaikinS21::run_next_optional_query() {
+  if (optional_queries.size() == 0) {
+    ESP_LOGD(TAG, "Optional query size is 0");
+    return false; // special case if queries are empty
+  }
+  if (optional_query_index >= optional_queries.size()){
+    optional_query_index = 0; // reset the index to 0
+  }
+  ESP_LOGD(TAG, "Running optional query: %s", optional_queries[this->optional_query_index].c_str());
+  bool success = this->run_query(optional_queries[this->optional_query_index]);
+  if (success) {
+    optional_query_index++; // increment once this query is successful
+  }
+  return success;
+}
+
+void DaikinS21::set_queries() {
+  ESP_LOGD(TAG, "Setting queries with protocol %s", this->get_protocol_version());
+  this->startup_queries = this->get_startup_queries();
+  this->required_queries = this->get_required_update_queries();
+  this->optional_queries = this->get_optional_update_queries();
+}
+
+// Protocol 0
+//  Supported R commands: RA, RB, RC, RD, RE, RF, RG, RH, RI, RK, RL, RM, RN, RW, RX, Ra, Rb, Rd, Re, Rg, Rz
+//  Supported F commands: F1, F2, F3, F4, F5, F8
+//  Supported miscellaneous commands: A, M, V
+//  BRP069B41 startup sequence: F2 F1 F3 F4 F5 F8 RH Ra M
+//  BRP069B41 polling loop: F2 F1 F3 F4 F5 F8 [sensor]
+// Protocol 2
+//  Supported R commands: RA, RB, RC, RD, RE, RF, RG, RH, RI, RK, RL, RM, RN, RW, RX, Ra, Rb, Rd, Re, Rg, Rz
+//  Supported miscellaneous commands: A, M, V, VS000M
+//  BRP068B41 startup sequence: F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT FC FY00 M DJ2010
+//  BRP068B41 polling loop: F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT [sensor]
+// Protocol 3.0
+//  BRP069B41 startup sequence: F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT FC FY00 FY10 FY20 M DJ2030 DJ2010
+//  BRP069B41 polling loop: F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT [sensor]
+// Protocol 3.1
+//  BRP069B41 startup sequence: F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT FC FY00 FY10 FY20 M VS000M DJ4030
+//  BRP069B41 polling loop: F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT [sensor]
+// Protocol 3.2
+//  BRP069B41 startup sequence: F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT FC FY00 FY10 FY20 FU00 FU02 VS000M DJ5010 D70000
+//  BRP069B41 polling loop: F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT FU02 FU04 [sensor]
+//  BRP069C41 startup sequence: F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT FC FY00 FY10 FY20 FU00 FU02 VS000M Rd RL RH RN RI Ra RX FX00 FX10 FX20 FX30 FX40 FX50 FX60 FX70 FX80 Rz52 Rz72 FX90 FXA0 FXB0 FXC0 DY10 DY20
+
+// Below commands, queried by BRP069B41 controller are listed in their order. 
+// This gives a good overview of which commands are actually known by the controller and officially used by Daikin. 
+// [sensor] denotes one R family command out of sensor query sequence (TBD). 
+// I. e. the controller asks one particular each poll iteration. 
+// On next iteration next sensor will be queried.
+
+// TODO set up start up queries and then polling loop queries
+
+const char* DaikinS21::get_protocol_version() {
+  if (!this->protocol_checked)
+  {
+    return HumanReadableProtocol::ProtocolUnknown;
+  }
+  switch (f8_protocol)
+  {
+    case 0:
+      return HumanReadableProtocol::Protocol0;
+    case 2: 
+      switch (fy00_protocol_minor)
+      {
+      case 0:
+        return HumanReadableProtocol::Protocol3_0;
+      case 1:
+        return HumanReadableProtocol::Protocol3_1;
+      case 2:
+        return HumanReadableProtocol::Protocol3_2;
+      case 4:
+        return HumanReadableProtocol::Protocol3_4;
+      default:
+        return HumanReadableProtocol::Protocol2;
+      }
+    default:
+      return HumanReadableProtocol::ProtocolUnknown;
+  }
+}
+
+std::vector<std::string> DaikinS21::get_startup_queries(){
+  const char* protocol = this->get_protocol_version();
+  if (protocol == HumanReadableProtocol::ProtocolUnknown) {
+    return {StateQuery::OldProtocol, StateQuery::NewProtocol};
+  } else if (protocol == HumanReadableProtocol::Protocol0) 
+  {
+    //  BRP069B41 startup sequence: F2 F1 F3 F4 F5 F8 
+    // RH Ra M
+    return {
+      StateQuery::OldProtocol, 
+      StateQuery::NewProtocol,
+      StateQuery::OptionalFeatures, // F2
+      StateQuery::Basic, // F1
+      StateQuery::OnOffTimer, // F3
+      StateQuery::ErrorStatus, // F4
+      StateQuery::SwingOrHumidity, //F5
+      EnvironmentQuery::InsideTemperature, // RH
+      EnvironmentQuery::OutsideTemperature // Ra
+    };
+  } else if (protocol == HumanReadableProtocol::Protocol2) {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {StateQuery::OldProtocol, StateQuery::NewProtocol};
+  } else if (protocol == HumanReadableProtocol::Protocol3_0) {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {StateQuery::OldProtocol, StateQuery::NewProtocol};
+  } else if (protocol == HumanReadableProtocol::Protocol3_1) {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {StateQuery::OldProtocol, StateQuery::NewProtocol};
+  } else if (protocol == HumanReadableProtocol::Protocol3_2) {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {StateQuery::OldProtocol, StateQuery::NewProtocol};
+  } else if (protocol == HumanReadableProtocol::Protocol3_4) {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {StateQuery::OldProtocol, StateQuery::NewProtocol};
+  } else {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {StateQuery::OldProtocol, StateQuery::NewProtocol};
+  }
+}
+
+std::vector<std::string> DaikinS21::get_required_update_queries(){
+  const char* protocol = this->get_protocol_version();
+  if (protocol == HumanReadableProtocol::ProtocolUnknown) {
+    return {};
+  } else if (protocol == HumanReadableProtocol::Protocol0) {
+    //  BRP069B41 polling loop: F2 F1 F3 F4 F5 F8 [sensor]
+    // RA, RB, RC, RD, RE, RF, RG, RH, RI, RK, RL, RM, RN, RW, RX, Ra, Rb, Rd, Re, Rg, Rz
+    return {
+      StateQuery::OptionalFeatures, // F2
+      StateQuery::Basic, // F1
+      StateQuery::OnOffTimer, // F3
+      StateQuery::ErrorStatus, // F4
+      StateQuery::SwingOrHumidity, //F5
+      EnvironmentQuery::CompressorFrequency // Rd
+    };
+  } else if (protocol == HumanReadableProtocol::Protocol2) {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {};
+  } else if (protocol == HumanReadableProtocol::Protocol3_0) {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {};
+  } else if (protocol == HumanReadableProtocol::Protocol3_1) {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {};
+  } else if (protocol == HumanReadableProtocol::Protocol3_2) {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {};
+  } else if (protocol == HumanReadableProtocol::Protocol3_4) {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {};
+  } else {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {};
+  }
+}
+
 // These queries might fail but they won't affect the basic functionality
 // F6, F7 and F9 should only be run for protocols that support it (after F8 and FY00)
-std::vector<std::string> failable_queries = {EnvironmentQuery::Inside, EnvironmentQuery::Coil, EnvironmentQuery::Outside, EnvironmentQuery::FanSpeed};
-// TODO set up queries for different protocol versions
+// std::vector<std::string> failable_queries = {EnvironmentQuery::InsideTemperature, EnvironmentQuery::LiquidTemperature, EnvironmentQuery::OutsideTemperature, EnvironmentQuery::FanSpeed};
+std::vector<std::string> DaikinS21::get_optional_update_queries(){
+  const char* protocol = this->get_protocol_version();
+  if (protocol == HumanReadableProtocol::ProtocolUnknown) {
+    return {};
+  } else if (protocol == HumanReadableProtocol::Protocol0) {
+    return {
+      EnvironmentQuery::InsideTemperature, 
+      EnvironmentQuery::LiquidTemperature, 
+      EnvironmentQuery::OutsideTemperature, 
+      EnvironmentQuery::FanSpeed
+    };
+  } else if (protocol == HumanReadableProtocol::Protocol2) {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {};
+  } else if (protocol == HumanReadableProtocol::Protocol3_0) {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {};
+  } else if (protocol == HumanReadableProtocol::Protocol3_1) {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {};
+  } else if (protocol == HumanReadableProtocol::Protocol3_2) {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {};
+  } else if (protocol == HumanReadableProtocol::Protocol3_4) {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {};
+  } else {
+    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
+    this->mark_failed();
+    return {};
+  }
+}
 
 void DaikinS21::update() {
   // if protocol has not been set then we run the protocol queries
   if(!this->protocol_checked || this->f8_protocol == 2 && this->fy00_protocol_major == -1) {
-    // protocol_checked is set when:
+    // protocol_checked is set true when:
     // - F8 returns 0
     // - F8 returns one of the 2 version 2 variants and FY00 returns 3
     // - FY00 returns protocol 3.2
     // - FY00 returns protocol 3.0/3.1 and F8 is already one of the version 2 variants
     // special case is when f8 version is 2 and fy00 is NAK, then we need to just assume protocol version 2
-    this->run_queries({StateQuery::OldProtocol, StateQuery::NewProtocol});
-  }
-  if (this->run_queries(queries)) {
-    this->run_queries(failable_queries);
-    if(!this->ready) {
-      ESP_LOGI(TAG, "Daikin S21 Ready");
-      this->ready = true;
+    this->run_next_startup_query();
+    if (this->protocol_checked){ // when it first gets set to true
+      this->set_queries(); // set the three sets of queries
     }
-  }
-  if (this->debug_protocol) {
-    this->dump_state();
+  } else {
+    if(!this->startup_complete) {
+      // startup queries can run at once and block
+      this->startup_complete = this->run_next_startup_query();
+      ESP_LOGI(TAG, "Daikin S21 startup complete: %s", YESNO(this->startup_complete));
+    } else {
+      // required updates should run one per loop
+      if (this->run_next_required_query()) {
+        // optional updates should run one per loop and only if the required update succeeded
+        this->run_next_optional_query();
+        if(!this->ready) {
+          ESP_LOGI(TAG, "Daikin S21 Ready");
+          this->ready = true;
+        }
+      }
+      if (this->debug_protocol) {
+        this->dump_state();
+      }
+    }
   }
 
 #ifdef S21_EXPERIMENTS
@@ -499,8 +892,8 @@ void DaikinS21::dump_state() {
            c10_f(this->temp_outside));
   ESP_LOGD(TAG, "   Coil: %.1f C (%.1f F)", c10_c(this->temp_coil),
            c10_f(this->temp_coil));
-  ESP_LOGD(TAG, "    Protocol: x (F8: %d, FY00: %.1f)",
-           this->f8_protocol, this->fy00_protocol);
+  ESP_LOGD(TAG, "    Protocol: %s (F8: %d [variant: %d], FY00: [major: %d, minor: %d])",
+           this->get_protocol_version(), this->f8_protocol, this->f8_protocol_variant, this->fy00_protocol_major, this->fy00_protocol_minor);
 
   ESP_LOGD(TAG, "** END STATE *****************************");
 }
