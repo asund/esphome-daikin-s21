@@ -325,6 +325,7 @@ class DaikinS21 : public PollingComponent {
   uint8_t required_query_index = 0;
   std::vector<std::string> optional_queries = {};
   uint8_t optional_query_index = 0;
+  bool little_endian = false;
 };
 
 class DaikinS21Client {

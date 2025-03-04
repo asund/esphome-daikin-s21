@@ -141,60 +141,6 @@ void DaikinS21::dump_config() {
   this->check_uart_settings();
 }
 
-// Adapated from ESPHome UART debugger
-std::string hex_repr(uint8_t *bytes, size_t len) {
-  std::string res;
-  char buf[5];
-  for (size_t i = 0; i < len; i++) {
-    if (i > 0)
-      res += ':';
-    sprintf(buf, "%02X", bytes[i]);
-    res += buf;
-  }
-  return res;
-}
-
-// Adapated from ESPHome UART debugger
-std::string str_repr(uint8_t *bytes, size_t len) {
-  std::string res;
-  char buf[5];
-  for (size_t i = 0; i < len; i++) {
-    if (bytes[i] == 7) {
-      res += "\\a";
-    } else if (bytes[i] == 8) {
-      res += "\\b";
-    } else if (bytes[i] == 9) {
-      res += "\\t";
-    } else if (bytes[i] == 10) {
-      res += "\\n";
-    } else if (bytes[i] == 11) {
-      res += "\\v";
-    } else if (bytes[i] == 12) {
-      res += "\\f";
-    } else if (bytes[i] == 13) {
-      res += "\\r";
-    } else if (bytes[i] == 27) {
-      res += "\\e";
-    } else if (bytes[i] == 34) {
-      res += "\\\"";
-    } else if (bytes[i] == 39) {
-      res += "\\'";
-    } else if (bytes[i] == 92) {
-      res += "\\\\";
-    } else if (bytes[i] < 32 || bytes[i] > 127) {
-      sprintf(buf, "\\x%02X", bytes[i]);
-      res += buf;
-    } else {
-      res += bytes[i];
-    }
-  }
-  return res;
-}
-
-std::string str_repr(std::vector<uint8_t> &bytes) {
-  return str_repr(&bytes[0], bytes.size());
-}
-
 bool DaikinS21::wait_byte_available(uint32_t  timeout)
 {
   uint32_t start = millis();
@@ -288,7 +234,8 @@ bool DaikinS21::s21_query(std::vector<uint8_t> code) {
     return false;
   }
   if (byte != ACK) {
-    ESP_LOGW(TAG, "No ACK from S21 for %s query", c.c_str());
+    ESP_LOGW(TAG, "No ACK from S21 for %s query (was: %d (0x%02X) '%c'", c.c_str(), byte, byte, 
+        (byte >= 32 && byte <= 126) ? byte : '?');
     return false;
   }
 
@@ -393,17 +340,122 @@ bool DaikinS21::parse_response(std::vector<uint8_t> rcode,
       this->temp_outside = temp_f9_byte_to_c10(&payload[1]);
       return true;
     } else if(uint8_starts_with_str(rcode, StateResponse::OptionalFeatures)) {
-      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
-             str_repr(payload).c_str(), payload.size());
-      return true;
+      // F2 -> G2 - optional features
+      if (payload.size() == 4) {
+        ESP_LOGD(TAG, "Optional features: %s -> %s -> %s (%s (%s)) (%d)", str_repr(rcode).c_str(),
+        str_repr(payload).c_str(), this->little_endian ? "little" : "big", bin_repr(payload, this->little_endian).c_str(), this->little_endian ? "little" : "big", payload.size());
+
+        // https://github.com/revk/ESP32-Faikin/wiki/S21-Protocol#f2-command
+
+        // G2 -> 4:\x00\x00 -> little (00101100 01011100 00000000 00000000 (little)) (4)
+
+        // Response format: G2 [byte0] [byte1] [byte2] [byte3]
+        // Payload bytes are bit masks:
+
+        // byte0
+        // bit 0 - Unkown. set to 1 on CTXMxxRVMA, ignored by BRP069B41
+        // bit 1 - Zero
+        // bit 2 - Swing (any kind) is avaiiable
+        // bit 3 - Horizontal swing is available
+        // bit 4 - Shield bit (0x30)
+        // bit 5 - Shield bit (0x30)
+        // bit 6 - Zero
+        // bit 7 - Zero
+
+        // byte1
+        // bit 0 - Unkown. set to 1 on CTXMxxRVMA, ignored by BRP069B41
+        // bit 1 - Awlays 1, unknown
+        // bit 2 - Zero
+        // bit 3 - Unknown. Reflected by BRP069B41 in aircon/model_info. 0 => type=C, 1 => type=N
+        // bit 4 - Shield bit (0x30)
+        // bit 5 - Shield bit (0x30)
+        // bit 6 - Zero
+        // bit 7 - Zero
+
+        // byte2 - seen to be 0x00 on startup
+        // bit 7 - Set to 1 by DJ command. Purpose is unknown.
+
+        // byte3
+        // bit 0 - Zero
+        // bit 1 - "humidity" operation mode is available
+        // bit 2 - Zero
+        // bit 3 - Zero
+        // bit 4 - Humidity setting is available for additional operation modes (see matrix below)
+        // bit 5 - Zero
+        // bit 6 - Zero
+        // bit 7 - Always 1. Perhaps shield ?
+
+        return true;
+      } else {
+        ESP_LOGW(TAG, "S21 issue, payload should be 4: %s -> %s (%d)", str_repr(rcode).c_str(),
+        str_repr(payload).c_str(), payload.size());
+        return false;
+      }
     } else if(uint8_starts_with_str(rcode, StateResponse::OnOffTimer)) {
-      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
-             str_repr(payload).c_str(), payload.size());
-      return true;
+      // F3 -> G3 - on/off timer
+      if (payload.size() == 4) {
+        ESP_LOGD(TAG, "On/off timer: %s -> %s -> %s (%s) (%d)", str_repr(rcode).c_str(),
+        str_repr(payload).c_str(), bin_repr(payload, this->little_endian).c_str(), this->little_endian ? "little" : "big", payload.size());
+
+        // https://github.com/revk/ESP32-Faikin/wiki/S21-Protocol#f3-command
+
+        // On-off timer
+        // 0\x95\x80\x00
+
+        // byte 0:
+        // Bit 0 - On timer is set
+        // Bit 1 - Off timer is set
+        // Bits 4, 5 - shield bits, making up 0x30 (ASCII '0')
+
+        // byte 1 - On timer setting
+
+        // byte 2 - Off timer setting
+
+        // byte 3 - Reports 0x00 after bootup, changed to 0x30 by DJ. Meaning unknown.
+
+        // Timer settings range from 1 to 12 hours, 
+        // and corresponding values are: 
+        // 0x36, 0x3C, 0x42, 0x48, 0x4E, 0x54, 
+        // 0x5A, 0x60, 0x66, 0x6C, 0x72, 0x78. 
+        // In other words, time value starts from 0x30 (which would be 0), 
+        // then one hour equals to an increment of 6. 
+        // This gives an idea that perhaps timer granularity 
+        // is 10 minutes (1/6 of hour), but it's unclear if the 
+        // unit would accept them properly.
+
+        // On majority of units if the timer is disabled, 
+        // the respective setting bytes are set to 0xFE. 
+        // However, on ATX20K2V1B and S22ZTES-W they read as 0x30 in this case.
+        return true;
+      } else {
+        ESP_LOGW(TAG, "S21 issue, payload should be 4: %s -> %s (%d)", str_repr(rcode).c_str(),
+        str_repr(payload).c_str(), payload.size());
+        return false;
+      }
     } else if(uint8_starts_with_str(rcode, StateResponse::ErrorStatus)) {
-      ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
-             str_repr(payload).c_str(), payload.size());
-      return true;
+      // F4 -> G4 - error status
+      if (payload.size() == 4) {
+        ESP_LOGD(TAG, "Error status: %s -> %s -> %s (%s) (%d)", str_repr(rcode).c_str(),
+        str_repr(payload).c_str(), bin_repr(payload, this->little_endian).c_str(), this->little_endian ? "little" : "big", payload.size());
+
+        // https://github.com/revk/ESP32-Faikin/wiki/S21-Protocol#f4-command
+
+        // 0\xB2\x80\x00 Error status: G4 -> 0\x00\x80\x00 -> 00110000 00000000 10000000 00000000 (4)
+
+        // byte0: 0x30 ('0')
+        // byte1: 0x00
+        // byte2
+        // Bit 5: Conditioner internal error flag. If reported as 1, BRP069B41 only polls 4 commands F1-F3-F4-F2 and reports in /aircon/model_info:
+        // ret=SERIAL IF FAILURE,err=252
+        // Experiments show, that once read, the bit resets to 0. It's not known which actions cause it to raise.
+        // byte3: 0x30 ('0')
+
+        return true;
+      } else {
+        ESP_LOGW(TAG, "S21 issue, payload should be 4: %s -> %s (%d)", str_repr(rcode).c_str(),
+        str_repr(payload).c_str(), payload.size());
+        return false;
+      }
     } else if(uint8_starts_with_str(rcode, StateResponse::ModelCode)) {
       ESP_LOGW(TAG, "S21 unhandled: %s -> %s (%d)", str_repr(rcode).c_str(),
              str_repr(payload).c_str(), payload.size());
@@ -539,15 +591,15 @@ bool DaikinS21::parse_response(std::vector<uint8_t> rcode,
       // default
       if (payload.size() > 3) {
         int8_t temp = temp_bytes_to_c10(payload);
-        ESP_LOGD(TAG, "Unknown temp: %s -> %s -> %.1f C (%.1f F)",
-                 str_repr(rcode).c_str(), str_repr(payload).c_str(),
+        ESP_LOGD(TAG, "Unknown temp: %s -> %s -> %s -> %s (%s) -> %.1f C (%.1f F)",
+                 str_repr(rcode).c_str(), str_repr(payload).c_str(), hex_repr(payload).c_str(), bin_repr(payload, this->little_endian).c_str(), this->little_endian ? "little" : "big",
                  c10_c(temp), c10_f(temp));
         return false;
       }
     }
   }
-  ESP_LOGD(TAG, "Unknown response %s -> \"%s\"", str_repr(rcode).c_str(),
-           str_repr(payload).c_str());
+  ESP_LOGD(TAG, "Unknown response %s -> %s -> %s -> %s (%s)", str_repr(rcode).c_str(), 
+           str_repr(payload).c_str(), hex_repr(payload).c_str(), bin_repr(payload, this->little_endian).c_str(), this->little_endian ? "little" : "big");
   return false;
 }
 
@@ -576,11 +628,13 @@ bool DaikinS21::run_query(std::string query) {
  */
 bool DaikinS21::run_next_startup_query() {
   if (startup_queries.size() == 0) {
-    ESP_LOGD(TAG, "Startup query size is 0");
+    ESP_LOGW(TAG, "Startup query size is 0");
     return false; // special case if queries are empty
   }
   if (startup_query_index < startup_queries.size()) {
-    ESP_LOGD(TAG, "Running startup query: %s", startup_queries[this->startup_query_index].c_str());
+    if (this->debug_protocol) {
+      ESP_LOGD(TAG, "Running startup query: %s", startup_queries[this->startup_query_index].c_str());
+    }
     if(this->run_query(startup_queries[this->startup_query_index])) {
       startup_query_index++; // increment once this query is successful
     }
@@ -597,13 +651,15 @@ bool DaikinS21::run_next_startup_query() {
  */
 bool DaikinS21::run_next_required_query() {
   if (required_queries.size() == 0) {
-    ESP_LOGD(TAG, "Required query size is 0");
+    ESP_LOGW(TAG, "Required query size is 0");
     return false; // special case if queries are empty
   }
   if (required_query_index >= required_queries.size()){
     required_query_index = 0; // reset the index to 0
   }
-  ESP_LOGD(TAG, "Running required query: %s", required_queries[this->required_query_index].c_str());
+  if (this->debug_protocol) {
+    ESP_LOGD(TAG, "Running required query: %s", required_queries[this->required_query_index].c_str());
+  }
   bool success = this->run_query(required_queries[this->required_query_index]);
   if (success) {
     required_query_index++; // increment once this query is successful
@@ -617,13 +673,15 @@ bool DaikinS21::run_next_required_query() {
  */
 bool DaikinS21::run_next_optional_query() {
   if (optional_queries.size() == 0) {
-    ESP_LOGD(TAG, "Optional query size is 0");
+    ESP_LOGW(TAG, "Optional query size is 0");
     return false; // special case if queries are empty
   }
   if (optional_query_index >= optional_queries.size()){
     optional_query_index = 0; // reset the index to 0
   }
-  ESP_LOGD(TAG, "Running optional query: %s", optional_queries[this->optional_query_index].c_str());
+  if (this->debug_protocol) {
+    ESP_LOGD(TAG, "Running optional query: %s", optional_queries[this->optional_query_index].c_str());
+  }
   bool success = this->run_query(optional_queries[this->optional_query_index]);
   if (success) {
     optional_query_index++; // increment once this query is successful
@@ -837,6 +895,7 @@ void DaikinS21::update() {
     this->run_next_startup_query();
     if (this->protocol_checked){ // when it first gets set to true
       this->set_queries(); // set the three sets of queries
+      this->little_endian=is_little_endian(); // sets endian-ness
     }
   } else {
     if(!this->startup_complete) {
@@ -894,7 +953,7 @@ void DaikinS21::dump_state() {
            c10_f(this->temp_coil));
   ESP_LOGD(TAG, "    Protocol: %s (F8: %d [variant: %d], FY00: [major: %d, minor: %d])",
            this->get_protocol_version(), this->f8_protocol, this->f8_protocol_variant, this->fy00_protocol_major, this->fy00_protocol_minor);
-
+  ESP_LOGD(TAG, "System is %s-endian", this->little_endian ? "little" : "big");
   ESP_LOGD(TAG, "** END STATE *****************************");
 }
 
