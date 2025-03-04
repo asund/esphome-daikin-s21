@@ -932,6 +932,16 @@ void DaikinS21::update() {
 #endif
 }
 
+void DaikinS21::full_update() {
+  ESP_LOGI(TAG, "Performing full required update");
+  if(!this->run_queries(this->required_queries)) { // run all required queries
+    ESP_LOGW(TAG, "Full update failed");
+  }
+  if (this->debug_protocol) {
+    this->dump_state();
+  }
+}
+
 void DaikinS21::dump_state() {
   ESP_LOGD(TAG, "** BEGIN STATE *****************************");
 
@@ -974,7 +984,7 @@ void DaikinS21::set_daikin_climate_settings(bool power_on,
   if (!this->send_cmd({'D', '1'}, cmd)) {
     ESP_LOGW(TAG, "Failed basic climate CMD");
   } else {
-    this->update();
+    this->full_update();
   }
 }
 
@@ -987,7 +997,7 @@ void DaikinS21::set_swing_settings(bool swing_v, bool swing_h) {
   if (!this->send_cmd({'D', '5'}, cmd)) {
     ESP_LOGW(TAG, "Failed swing CMD");
   } else {
-    this->update();
+    this->full_update();
   }
 }
 
@@ -999,7 +1009,7 @@ void DaikinS21::set_powerful_settings(bool value)
   if (!this->send_cmd({'D', '6'}, cmd)) {
     ESP_LOGW(TAG, "Failed powerful CMD");
   } else {
-    this->update();
+    this->full_update();
   }
 }
 
@@ -1011,7 +1021,7 @@ void DaikinS21::set_econo_settings(bool value)
   if (!this->send_cmd({'D', '7'}, cmd)) {
     ESP_LOGW(TAG, "Failed econo CMD");
   } else {
-    this->update();
+    this->full_update();
   }
 }
 

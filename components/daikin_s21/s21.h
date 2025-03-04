@@ -246,6 +246,7 @@ inline float c10_f(int16_t c10) { return c10_c(c10) * 1.8 + 32.0; }
 class DaikinS21 : public PollingComponent {
  public:
   void update() override;
+  void full_update();
   void dump_config() override;
   void set_uarts(uart::UARTComponent *tx, uart::UARTComponent *rx);
   void set_debug_protocol(bool set) { this->debug_protocol = set; }
