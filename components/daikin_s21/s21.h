@@ -289,10 +289,12 @@ class DaikinS21 : public PollingComponent {
   const char* get_protocol_version();
   std::vector<std::string> get_startup_queries();
   bool run_next_startup_query();
-  std::vector<std::string> get_required_update_queries();
-  bool run_next_required_query();
-  std::vector<std::string> get_optional_update_queries();
-  bool run_next_optional_query();
+  std::vector<std::string> get_state_queries();
+  bool run_next_state_query();
+  std::vector<std::string> get_environment_queries();
+  bool run_next_environment_query();
+  std::vector<std::string> get_basic_queries();
+  bool run_next_basic_query();
   void set_queries();
 
   uart::UARTComponent *tx_uart{nullptr};
@@ -322,10 +324,12 @@ class DaikinS21 : public PollingComponent {
   uint8_t fy00_protocol_minor = -1;
   std::vector<std::string> startup_queries = {StateQuery::OldProtocol, StateQuery::NewProtocol};
   uint8_t startup_query_index = 0;
-  std::vector<std::string> required_queries = {};
-  uint8_t required_query_index = 0;
-  std::vector<std::string> optional_queries = {};
-  uint8_t optional_query_index = 0;
+  std::vector<std::string> state_queries = {};
+  uint8_t state_query_index = 0;
+  std::vector<std::string> environment_queries = {};
+  uint8_t environment_query_index = 0;
+  std::vector<std::string> basic_queries = {};
+  uint8_t basic_query_index = 0;
   bool little_endian = false;
 };
 

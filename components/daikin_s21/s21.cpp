@@ -341,9 +341,9 @@ bool DaikinS21::parse_response(std::vector<uint8_t> rcode,
       this->temp_outside = temp_f9_byte_to_c10(&payload[1]);
       return true;
     } else if(uint8_starts_with_str(rcode, StateResponse::OptionalFeatures)) {
-      // F2 -> G2 - optional features
+      // F2 -> G2 - environment features
       if (payload.size() == 4) {
-        ESP_LOGD(TAG, "Optional features: %s -> %s -> %s (%s (%s)) (%d)", str_repr(rcode).c_str(),
+        ESP_LOGD(TAG, "Environment features: %s -> %s -> %s (%s (%s)) (%d)", str_repr(rcode).c_str(),
         str_repr(payload).c_str(), this->little_endian ? "little" : "big", bin_repr(payload, this->little_endian).c_str(), this->little_endian ? "little" : "big", payload.size());
 
         // https://github.com/revk/ESP32-Faikin/wiki/S21-Protocol#f2-command
@@ -647,54 +647,71 @@ bool DaikinS21::run_next_startup_query() {
 }
 
 /**
- * Runs the next required query command
+ * Runs the next state query command
  * @return true if query was run successfully
  */
-bool DaikinS21::run_next_required_query() {
-  if (required_queries.size() == 0) {
-    ESP_LOGW(TAG, "Required query size is 0");
+bool DaikinS21::run_next_state_query() {
+  if (state_queries.size() == 0) {
+    ESP_LOGW(TAG, "State query size is 0");
     return false; // special case if queries are empty
   }
-  if (required_query_index >= required_queries.size()){
-    required_query_index = 0; // reset the index to 0
+  if (state_query_index >= state_queries.size()){
+    state_query_index = 0; // reset the index to 0
   }
   if (this->debug_protocol) {
-    ESP_LOGD(TAG, "Running required query: %s", required_queries[this->required_query_index].c_str());
+    ESP_LOGD(TAG, "Running state query: %s", state_queries[this->state_query_index].c_str());
   }
-  bool success = this->run_query(required_queries[this->required_query_index]);
+  bool success = this->run_query(state_queries[this->state_query_index]);
   if (success) {
-    required_query_index++; // increment once this query is successful
+    state_query_index++; // increment once this query is successful
   }
   return success;
 }
 
 /**
- * Runs the next optional query command
+ * Runs the next environment query command and always increments the index
  * @return true if query was run successfully
  */
-bool DaikinS21::run_next_optional_query() {
-  if (optional_queries.size() == 0) {
-    ESP_LOGW(TAG, "Optional query size is 0");
+bool DaikinS21::run_next_environment_query() {
+  if (environment_queries.size() == 0) {
+    ESP_LOGW(TAG, "Environment query size is 0");
     return false; // special case if queries are empty
   }
-  if (optional_query_index >= optional_queries.size()){
-    optional_query_index = 0; // reset the index to 0
+  if (environment_query_index >= environment_queries.size()){
+    environment_query_index = 0; // reset the index to 0
   }
   if (this->debug_protocol) {
-    ESP_LOGD(TAG, "Running optional query: %s", optional_queries[this->optional_query_index].c_str());
+    ESP_LOGD(TAG, "Running environment query: %s", environment_queries[this->environment_query_index].c_str());
   }
-  bool success = this->run_query(optional_queries[this->optional_query_index]);
+  bool success = this->run_query(environment_queries[this->environment_query_index++]);
+  return success;
+}
+
+bool DaikinS21::run_next_basic_query() {
+if (basic_queries.size() == 0) {
+    ESP_LOGW(TAG, "Basic query size is 0");
+    return false; // special case if queries are empty
+  }
+  if (basic_query_index >= basic_queries.size()){
+    basic_query_index = 0; // reset the index to 0
+  }
+  if (this->debug_protocol) {
+    ESP_LOGD(TAG, "Running basic query: %s", basic_queries[this->basic_query_index].c_str());
+  }
+  bool success = this->run_query(basic_queries[this->basic_query_index]);
   if (success) {
-    optional_query_index++; // increment once this query is successful
+    basic_query_index++; // increment once this query is successful
   }
   return success;
 }
 
+
 void DaikinS21::set_queries() {
   ESP_LOGD(TAG, "Setting queries with protocol %s", this->get_protocol_version());
   this->startup_queries = this->get_startup_queries();
-  this->required_queries = this->get_required_update_queries();
-  this->optional_queries = this->get_optional_update_queries();
+  this->state_queries = this->get_state_queries();
+  this->environment_queries = this->get_environment_queries();
+  this->basic_queries = this->get_basic_queries();
 }
 
 // Protocol 0
@@ -724,8 +741,6 @@ void DaikinS21::set_queries() {
 // [sensor] denotes one R family command out of sensor query sequence (TBD). 
 // I. e. the controller asks one particular each poll iteration. 
 // On next iteration next sensor will be queried.
-
-// TODO set up start up queries and then polling loop queries
 
 const char* DaikinS21::get_protocol_version() {
   if (!this->protocol_checked)
@@ -761,8 +776,7 @@ std::vector<std::string> DaikinS21::get_startup_queries(){
     return {StateQuery::OldProtocol, StateQuery::NewProtocol};
   } else if (protocol == HumanReadableProtocol::Protocol0) 
   {
-    //  BRP069B41 startup sequence: F2 F1 F3 F4 F5 F8 
-    // RH Ra M
+    //  BRP069B41 startup sequence: F2 F1 F3 F4 F5 F8 RH Ra M
     return {
       StateQuery::OldProtocol, 
       StateQuery::NewProtocol,
@@ -775,112 +789,407 @@ std::vector<std::string> DaikinS21::get_startup_queries(){
       EnvironmentQuery::OutsideTemperature // Ra
     };
   } else if (protocol == HumanReadableProtocol::Protocol2) {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {StateQuery::OldProtocol, StateQuery::NewProtocol};
-  } else if (protocol == HumanReadableProtocol::Protocol3_0) {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {StateQuery::OldProtocol, StateQuery::NewProtocol};
-  } else if (protocol == HumanReadableProtocol::Protocol3_1) {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {StateQuery::OldProtocol, StateQuery::NewProtocol};
-  } else if (protocol == HumanReadableProtocol::Protocol3_2) {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {StateQuery::OldProtocol, StateQuery::NewProtocol};
-  } else if (protocol == HumanReadableProtocol::Protocol3_4) {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {StateQuery::OldProtocol, StateQuery::NewProtocol};
-  } else {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {StateQuery::OldProtocol, StateQuery::NewProtocol};
-  }
-}
-
-std::vector<std::string> DaikinS21::get_required_update_queries(){
-  const char* protocol = this->get_protocol_version();
-  if (protocol == HumanReadableProtocol::ProtocolUnknown) {
-    return {};
-  } else if (protocol == HumanReadableProtocol::Protocol0) {
-    //  BRP069B41 polling loop: F2 F1 F3 F4 F5 F8 [sensor]
-    // RA, RB, RC, RD, RE, RF, RG, RH, RI, RK, RL, RM, RN, RW, RX, Ra, Rb, Rd, Re, Rg, Rz
+    //  BRP068B41 startup sequence: F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT FC FY00 M DJ2010
     return {
+      StateQuery::OldProtocol, 
+      StateQuery::NewProtocol,
+      StateQuery::OptionalFeatures, // F2
+      StateQuery::Basic, // F1
+      StateQuery::OnOffTimer, // F3
+      StateQuery::ErrorStatus, // F4
+      StateQuery::SwingOrHumidity, // F5
+      StateQuery::InsideOutsideTemperatures, // F9
+      StateQuery::SpecialModes, // F6
+      StateQuery::DemandAndEcono, // F7
+      // FB
+      StateQuery::IRCounter, // FG
+      StateQuery::V2OptionalFeatures, // FK
+      StateQuery::PowerConsumption, // FM 
+      //FN 
+      //FP 
+      //FQ 
+      //FS 
+      //FT 
+      StateQuery::ModelCode, //FC
+      //DJ2010
+    };
+  } else if (protocol == HumanReadableProtocol::Protocol3_0) {
+    //  BRP069B41 startup sequence: F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT FC FY00 FY10 FY20 M DJ2030 DJ2010
+    return {
+      StateQuery::OldProtocol, 
+      StateQuery::NewProtocol,
+      StateQuery::OptionalFeatures, // F2
+      StateQuery::Basic, // F1
+      StateQuery::OnOffTimer, // F3
+      StateQuery::ErrorStatus, // F4
+      StateQuery::SwingOrHumidity, // F5
+      StateQuery::InsideOutsideTemperatures, // F9
+      StateQuery::SpecialModes, // F6
+      StateQuery::DemandAndEcono, // F7
+      // FB
+      StateQuery::IRCounter, // FG
+      StateQuery::V2OptionalFeatures, // FK
+      StateQuery::PowerConsumption, // FM 
+      //FN 
+      //FP 
+      //FQ 
+      //FS 
+      //FT 
+      StateQuery::ModelCode, //FC
+      // FY10 
+      // FY20
+      // DJ2030 
+      // DJ2010
+    };
+  } else if (protocol == HumanReadableProtocol::Protocol3_1) {
+    //  BRP069B41 startup sequence: F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT FC FY00 FY10 FY20 M VS000M DJ4030
+    return {
+      StateQuery::OldProtocol, 
+      StateQuery::NewProtocol,
+      StateQuery::OptionalFeatures, // F2
+      StateQuery::Basic, // F1
+      StateQuery::OnOffTimer, // F3
+      StateQuery::ErrorStatus, // F4
+      StateQuery::SwingOrHumidity, // F5
+      StateQuery::InsideOutsideTemperatures, // F9
+      StateQuery::SpecialModes, // F6
+      StateQuery::DemandAndEcono, // F7
+      // FB
+      StateQuery::IRCounter, // FG
+      StateQuery::V2OptionalFeatures, // FK
+      StateQuery::PowerConsumption, // FM 
+      //FN 
+      //FP 
+      //FQ 
+      //FS 
+      //FT 
+      StateQuery::ModelCode, //FC
+      // FY10 
+      // FY20
+      // VS000M
+      // DJ4030
+    };
+  } else if (protocol == HumanReadableProtocol::Protocol3_2) {
+    //  BRP069B41 startup sequence: F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT FC FY00 FY10 FY20 FU00 FU02 VS000M DJ5010 D70000
+    return {
+      StateQuery::OldProtocol, 
+      StateQuery::NewProtocol,
+      StateQuery::OptionalFeatures, // F2
+      StateQuery::Basic, // F1
+      StateQuery::OnOffTimer, // F3
+      StateQuery::ErrorStatus, // F4
+      StateQuery::SwingOrHumidity, // F5
+      StateQuery::InsideOutsideTemperatures, // F9
+      StateQuery::SpecialModes, // F6
+      StateQuery::DemandAndEcono, // F7
+      // FB
+      StateQuery::IRCounter, // FG
+      StateQuery::V2OptionalFeatures, // FK
+      StateQuery::PowerConsumption, // FM 
+      //FN 
+      //FP 
+      //FQ 
+      //FS 
+      //FT 
+      StateQuery::ModelCode, //FC
+      // FY10 
+      // FY20
+      StateQuery::V3OptionalFeatures, // FU00
+      StateQuery::AllowedTemperatureRange, // FU02
+      // DJ5010 
+      // D70000
+    };
+  } else if (protocol == HumanReadableProtocol::Protocol3_4) {
+    ESP_LOGW(TAG, "Protocol %s doesn't have full support yet so falling back to %s", protocol, HumanReadableProtocol::Protocol3_2);
+    return {
+      StateQuery::OldProtocol, 
+      StateQuery::NewProtocol,
+      StateQuery::OptionalFeatures, // F2
+      StateQuery::Basic, // F1
+      StateQuery::OnOffTimer, // F3
+      StateQuery::ErrorStatus, // F4
+      StateQuery::SwingOrHumidity, // F5
+      StateQuery::InsideOutsideTemperatures, // F9
+      StateQuery::SpecialModes, // F6
+      StateQuery::DemandAndEcono, // F7
+      // FB
+      StateQuery::IRCounter, // FG
+      StateQuery::V2OptionalFeatures, // FK
+      StateQuery::PowerConsumption, // FM 
+      //FN 
+      //FP 
+      //FQ 
+      //FS 
+      //FT 
+      StateQuery::ModelCode, //FC
+      // FY10 
+      // FY20
+      StateQuery::V3OptionalFeatures, // FU00
+      StateQuery::AllowedTemperatureRange, // FU02
+      // DJ5010 
+      // D70000
+    };
+  } else {
+    ESP_LOGW(TAG, "Protocol %s is not supported yet, defaulting to %s", protocol, HumanReadableProtocol::Protocol0);
+    return {
+      StateQuery::OldProtocol, 
+      StateQuery::NewProtocol,
       StateQuery::OptionalFeatures, // F2
       StateQuery::Basic, // F1
       StateQuery::OnOffTimer, // F3
       StateQuery::ErrorStatus, // F4
       StateQuery::SwingOrHumidity, //F5
-      EnvironmentQuery::CompressorFrequency // Rd
+      EnvironmentQuery::InsideTemperature, // RH
+      EnvironmentQuery::OutsideTemperature // Ra
+    };
+  }
+}
+
+std::vector<std::string> DaikinS21::get_state_queries(){
+  const char* protocol = this->get_protocol_version();
+  if (protocol == HumanReadableProtocol::ProtocolUnknown) {
+    return {};
+  } else if (protocol == HumanReadableProtocol::Protocol0) {
+    //  BRP069B41 polling loop: F2 F1 F3 F4 F5 F8 [sensor]
+    // F8 and F2 are moved to startup only
+    // RA, RB, RC, RD, RE, RF, RG, RH, RI, RK, RL, RM, RN, RW, RX, Ra, Rb, Rd, Re, Rg, Rz
+    return {
+      StateQuery::Basic, // F1
+      StateQuery::OnOffTimer, // F3
+      // StateQuery::ErrorStatus, // F4
+      StateQuery::SwingOrHumidity //F5
     };
   } else if (protocol == HumanReadableProtocol::Protocol2) {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {};
+    // F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT
+    return {
+      StateQuery::Basic, // F1
+      StateQuery::OnOffTimer, // F3
+      StateQuery::ErrorStatus, // F4
+      StateQuery::SwingOrHumidity, // F5
+      StateQuery::InsideOutsideTemperatures, // F9
+      StateQuery::SpecialModes, // F6
+      StateQuery::DemandAndEcono, // F7
+      // FB
+      StateQuery::IRCounter, // FG
+      StateQuery::V2OptionalFeatures, // FK
+      StateQuery::PowerConsumption, // FM 
+      //FN 
+      //FP 
+      //FQ 
+      //FS 
+      //FT 
+    };
   } else if (protocol == HumanReadableProtocol::Protocol3_0) {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {};
+    // F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT
+    return {
+      StateQuery::Basic, // F1
+      StateQuery::OnOffTimer, // F3
+      StateQuery::ErrorStatus, // F4
+      StateQuery::SwingOrHumidity, // F5
+      StateQuery::InsideOutsideTemperatures, // F9
+      StateQuery::SpecialModes, // F6
+      StateQuery::DemandAndEcono, // F7
+      // FB
+      StateQuery::IRCounter, // FG
+      StateQuery::V2OptionalFeatures, // FK
+      StateQuery::PowerConsumption, // FM 
+      //FN 
+      //FP 
+      //FQ 
+      //FS 
+      //FT 
+    };
   } else if (protocol == HumanReadableProtocol::Protocol3_1) {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {};
+    // F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT
+    return {
+      StateQuery::Basic, // F1
+      StateQuery::OnOffTimer, // F3
+      StateQuery::ErrorStatus, // F4
+      StateQuery::SwingOrHumidity, // F5
+      StateQuery::InsideOutsideTemperatures, // F9
+      StateQuery::SpecialModes, // F6
+      StateQuery::DemandAndEcono, // F7
+      // FB
+      StateQuery::IRCounter, // FG
+      StateQuery::V2OptionalFeatures, // FK
+      StateQuery::PowerConsumption, // FM 
+      //FN 
+      //FP 
+      //FQ 
+      //FS 
+      //FT 
+    };
   } else if (protocol == HumanReadableProtocol::Protocol3_2) {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {};
+    // F2 F1 F3 F4 F5 F8 F9 F6 F7 FB FG FK FM FN FP FQ FS FT FU02 FU04
+    return {
+      StateQuery::Basic, // F1
+      StateQuery::OnOffTimer, // F3
+      StateQuery::ErrorStatus, // F4
+      StateQuery::SwingOrHumidity, // F5
+      StateQuery::InsideOutsideTemperatures, // F9
+      StateQuery::SpecialModes, // F6
+      StateQuery::DemandAndEcono, // F7
+      // FB
+      StateQuery::IRCounter, // FG
+      StateQuery::V2OptionalFeatures, // FK
+      StateQuery::PowerConsumption, // FM 
+      //FN 
+      //FP 
+      //FQ 
+      //FS 
+      //FT 
+      StateQuery::AllowedTemperatureRange, // FU02
+      // FU04
+    };
   } else if (protocol == HumanReadableProtocol::Protocol3_4) {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {};
+    ESP_LOGW(TAG, "Protocol %s doesn't have full support yet so falling back to %s", protocol, HumanReadableProtocol::Protocol3_2);
+    return {
+      StateQuery::Basic, // F1
+      StateQuery::OnOffTimer, // F3
+      StateQuery::ErrorStatus, // F4
+      StateQuery::SwingOrHumidity, // F5
+      StateQuery::InsideOutsideTemperatures, // F9
+      StateQuery::SpecialModes, // F6
+      StateQuery::DemandAndEcono, // F7
+      // FB
+      StateQuery::IRCounter, // FG
+      StateQuery::V2OptionalFeatures, // FK
+      StateQuery::PowerConsumption, // FM 
+      //FN 
+      //FP 
+      //FQ 
+      //FS 
+      //FT 
+      StateQuery::AllowedTemperatureRange, // FU02
+      // FU04
+    };
   } else {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {};
+    ESP_LOGW(TAG, "Protocol %s is not supported yet, defaulting to %s", protocol, HumanReadableProtocol::Protocol0);
+    return {
+      StateQuery::Basic, // F1
+      StateQuery::OnOffTimer, // F3
+      // StateQuery::ErrorStatus, // F4
+      StateQuery::SwingOrHumidity, //F5
+      EnvironmentQuery::CompressorFrequency // Rd
+    };
   }
 }
 
 // These queries might fail but they won't affect the basic functionality
 // F6, F7 and F9 should only be run for protocols that support it (after F8 and FY00)
 // std::vector<std::string> failable_queries = {EnvironmentQuery::InsideTemperature, EnvironmentQuery::LiquidTemperature, EnvironmentQuery::OutsideTemperature, EnvironmentQuery::FanSpeed};
-std::vector<std::string> DaikinS21::get_optional_update_queries(){
+std::vector<std::string> DaikinS21::get_environment_queries(){
+  const char* protocol = this->get_protocol_version();
+  // RA, RB, RC, RD, RE, RF, RG, RH, RI, RK, RL, RM, RN, RW, RX, Ra, Rb, Rd, Re, Rg, Rz
+  if (protocol == HumanReadableProtocol::ProtocolUnknown) {
+    return {};
+  } else if (
+    protocol == HumanReadableProtocol::Protocol0 || 
+    protocol == HumanReadableProtocol::Protocol2 || 
+    protocol == HumanReadableProtocol::Protocol3_0 ||
+    protocol == HumanReadableProtocol::Protocol3_1 ||
+    protocol == HumanReadableProtocol::Protocol3_2
+  ) {
+    return {
+      EnvironmentQuery::PowerOnOff, // RA
+      EnvironmentQuery::IndoorUnitMode, // RB
+      EnvironmentQuery::TemperatureSetPoint, // RC
+      EnvironmentQuery::OnTimerSetting, // RD
+      EnvironmentQuery::OffTimerSetting, // RE
+      // RF
+      EnvironmentQuery::FanMode, // RG
+      EnvironmentQuery::FanSetPoint, // RK
+      EnvironmentQuery::FanSpeed, // RL
+      EnvironmentQuery::LouvreAngleSetPoint, // RM
+      EnvironmentQuery::VerticalSwingAngle, // RN
+      // RW
+      EnvironmentQuery::TargetTemperature, // RX
+      EnvironmentQuery::IndoorFrequencyCommandSignal, // Rb
+      EnvironmentQuery::IndoorHumidity, // Re
+      EnvironmentQuery::CompressorOnOff, // Rg
+      EnvironmentQuery::UnitState, // RzB2
+      EnvironmentQuery::SystemState // RzC3
+    };
+  } else if (protocol == HumanReadableProtocol::Protocol3_4) {
+    ESP_LOGW(TAG, "Protocol %s doesn't have full support yet so falling back to %s", protocol, HumanReadableProtocol::Protocol3_2);
+    return {
+      EnvironmentQuery::PowerOnOff, // RA
+      EnvironmentQuery::IndoorUnitMode, // RB
+      EnvironmentQuery::TemperatureSetPoint, // RC
+      EnvironmentQuery::OnTimerSetting, // RD
+      EnvironmentQuery::OffTimerSetting, // RE
+      // RF
+      EnvironmentQuery::FanMode, // RG
+      EnvironmentQuery::FanSetPoint, // RK
+      EnvironmentQuery::FanSpeed, // RL
+      EnvironmentQuery::LouvreAngleSetPoint, // RM
+      EnvironmentQuery::VerticalSwingAngle, // RN
+      // RW
+      EnvironmentQuery::TargetTemperature, // RX
+      EnvironmentQuery::IndoorFrequencyCommandSignal, // Rb
+      EnvironmentQuery::IndoorHumidity, // Re
+      EnvironmentQuery::CompressorOnOff, // Rg
+      EnvironmentQuery::UnitState, // RzB2
+      EnvironmentQuery::SystemState // RzC3
+    };
+  } else {
+    ESP_LOGW(TAG, "Protocol %s is not supported yet, defaulting to %s", protocol, HumanReadableProtocol::Protocol0);
+    return {
+      EnvironmentQuery::PowerOnOff, // RA
+      EnvironmentQuery::IndoorUnitMode, // RB
+      EnvironmentQuery::TemperatureSetPoint, // RC
+      EnvironmentQuery::OnTimerSetting, // RD
+      EnvironmentQuery::OffTimerSetting, // RE
+      // RF
+      EnvironmentQuery::FanMode, // RG
+      EnvironmentQuery::FanSetPoint, // RK
+      EnvironmentQuery::FanSpeed, // RL
+      EnvironmentQuery::LouvreAngleSetPoint, // RM
+      EnvironmentQuery::VerticalSwingAngle, // RN
+      // RW
+      EnvironmentQuery::TargetTemperature, // RX
+      EnvironmentQuery::IndoorFrequencyCommandSignal, // Rb
+      EnvironmentQuery::IndoorHumidity, // Re
+      EnvironmentQuery::CompressorOnOff, // Rg
+      EnvironmentQuery::UnitState, // RzB2
+      EnvironmentQuery::SystemState // RzC3
+    };
+  }
+}
+
+std::vector<std::string> DaikinS21::get_basic_queries(){
   const char* protocol = this->get_protocol_version();
   if (protocol == HumanReadableProtocol::ProtocolUnknown) {
     return {};
-  } else if (protocol == HumanReadableProtocol::Protocol0) {
+  } else if (
+    protocol == HumanReadableProtocol::Protocol0 || 
+    protocol == HumanReadableProtocol::Protocol2 || 
+    protocol == HumanReadableProtocol::Protocol3_0 ||
+    protocol == HumanReadableProtocol::Protocol3_1 ||
+    protocol == HumanReadableProtocol::Protocol3_2
+  ) {
     return {
-      EnvironmentQuery::InsideTemperature, 
-      EnvironmentQuery::LiquidTemperature, 
-      EnvironmentQuery::OutsideTemperature, 
-      EnvironmentQuery::FanSpeed
+      EnvironmentQuery::InsideTemperature, // RH
+      EnvironmentQuery::LiquidTemperature, // RI
+      EnvironmentQuery::OutsideTemperature, // Ra
+      EnvironmentQuery::CompressorFrequency, // Rd
     };
-  } else if (protocol == HumanReadableProtocol::Protocol2) {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {};
-  } else if (protocol == HumanReadableProtocol::Protocol3_0) {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {};
-  } else if (protocol == HumanReadableProtocol::Protocol3_1) {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {};
-  } else if (protocol == HumanReadableProtocol::Protocol3_2) {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {};
   } else if (protocol == HumanReadableProtocol::Protocol3_4) {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {};
+    ESP_LOGW(TAG, "Protocol %s doesn't have full support yet so falling back to %s", protocol, HumanReadableProtocol::Protocol3_2);
+    return {
+      EnvironmentQuery::InsideTemperature, // RH
+      EnvironmentQuery::LiquidTemperature, // RI
+      EnvironmentQuery::OutsideTemperature, // Ra
+      EnvironmentQuery::CompressorFrequency, // Rd
+    };
   } else {
-    ESP_LOGE(TAG, "Protocol %s is not supported yet", protocol);
-    this->mark_failed();
-    return {};
+    ESP_LOGW(TAG, "Protocol %s is not supported yet, defaulting to %s", protocol, HumanReadableProtocol::Protocol0);
+    return {
+      EnvironmentQuery::InsideTemperature, // RH
+      EnvironmentQuery::LiquidTemperature, // RI
+      EnvironmentQuery::OutsideTemperature, // Ra
+      EnvironmentQuery::CompressorFrequency, // Rd
+    };
   }
 }
 
@@ -905,9 +1214,9 @@ void DaikinS21::update() {
       ESP_LOGI(TAG, "Daikin S21 startup complete: %s", YESNO(this->startup_complete));
     } else {
       // required updates should run one per loop
-      if (this->run_next_required_query()) {
-        // optional updates should run one per loop and only if the required update succeeded
-        this->run_next_optional_query();
+      if (this->run_next_state_query() && this->run_next_basic_query()) {
+        // environment updates should run one per loop and only if the required update succeeded
+        this->run_next_environment_query();
         if(!this->ready) {
           ESP_LOGI(TAG, "Daikin S21 Ready");
           this->ready = true;
@@ -934,7 +1243,8 @@ void DaikinS21::update() {
 
 void DaikinS21::full_update() {
   ESP_LOGI(TAG, "Performing full required update");
-  if(!this->run_queries(this->required_queries)) { // run all required queries
+  if(!this->run_queries(this->state_queries) || !this->run_queries(this->basic_queries)) { 
+    // run all required queries
     ESP_LOGW(TAG, "Full update failed");
   }
   if (this->debug_protocol) {

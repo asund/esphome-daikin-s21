@@ -8,8 +8,10 @@ from esphome.components import sensor
 from esphome.const import (
     CONF_ID,
     UNIT_CELSIUS,
+    UNIT_REVOLUTIONS_PER_MINUTE,
     ICON_THERMOMETER,
-    DEVICE_CLASS_SPEED,
+    ICON_FAN,
+    DEVICE_CLASS_EMPTY,
     DEVICE_CLASS_TEMPERATURE,
     STATE_CLASS_MEASUREMENT,
 )
@@ -57,16 +59,16 @@ CONFIG_SCHEMA = (
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
             cv.Optional(CONF_FAN_SPEED): sensor.sensor_schema(
-                unit_of_measurement="rpm",
-                icon="mdi:fan",
+                unit_of_measurement=UNIT_REVOLUTIONS_PER_MINUTE,
+                icon=ICON_FAN,
                 accuracy_decimals=0,
-                device_class=DEVICE_CLASS_SPEED,
+                device_class=DEVICE_CLASS_EMPTY,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
         }
     )
     .extend(S21_CLIENT_SCHEMA)
-    .extend(cv.polling_component_schema("10s"))
+    .extend(cv.polling_component_schema("5s"))
 )
 
 
