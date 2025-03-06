@@ -1243,7 +1243,8 @@ void DaikinS21::update() {
 
 void DaikinS21::full_update() {
   ESP_LOGI(TAG, "Performing full required update");
-  if(!this->run_queries(this->state_queries) || !this->run_queries(this->basic_queries)) { 
+  delay(500); // delay to allow the device to process the previous command
+  if(!this->run_queries(this->basic_queries) || !this->run_queries(this->state_queries)) { 
     // run all required queries
     ESP_LOGW(TAG, "Full update failed");
   }
