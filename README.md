@@ -96,9 +96,6 @@ uart:
     tx_pin: GPIO1
     rx_pin: GPIO3
     baud_rate: 2400
-    data_bits: 8
-    parity: EVEN
-    stop_bits: 2
 
 # The base UART communication hub.
 daikin_s21:

@@ -2,6 +2,9 @@
 
 #include <bitset>
 #include <limits>
+#include <span>
+#include <string>
+#include <string_view>
 #include <vector>
 #include "esphome/components/climate/climate.h"
 #include "esphome/components/uart/uart.h"
@@ -10,6 +13,10 @@
 
 namespace esphome {
 namespace daikin_s21 {
+
+// printf format specifier macros for std::string_view
+#define PRI_SV ".*s"
+#define PRI_SV_ARGS(x) (x).size(), (x).data()
 
 class DaikinSerial {
 public:
@@ -29,7 +36,7 @@ public:
   DaikinSerial(uart::UARTComponent *tx, uart::UARTComponent *rx);
   
   Result service();
-  Result send_frame(const char *cmd, const std::array<char, S21_PAYLOAD_SIZE> *payload = nullptr);
+  Result send_frame(std::string_view cmd, std::span<const uint8_t> payload = {});
   void flush_input();
   
   std::vector<uint8_t> response{};
@@ -157,16 +164,16 @@ class DaikinS21 : public PollingComponent {
   std::bitset<ReadyCount> ready{};
 
   // communication state
-  bool is_query_active(const char * query_str);
-  bool prune_query(const char * query_str);
-  std::vector<const char *> queries{};
-  std::vector<const char *>::iterator current_query{};
-  const char *tx_command{""};  // used when matching responses - value must have persistent lifetime across serial state machine runs
+  bool is_query_active(std::string_view query);
+  bool prune_query(std::string_view query);
+  std::vector<std::string_view> queries{};
+  std::vector<std::string_view>::iterator current_query{};
+  std::string_view tx_command{};  // used when matching responses - backing value must have persistent lifetime across serial state machine runs
   
   // debugging support
   bool debug_protocol{false};
   std::unordered_map<std::string, std::vector<uint8_t>> val_cache{};
-  std::vector<const char *> nak_queries{};
+  std::vector<std::string_view> nak_queries{};
   uint32_t cycle_time_start_ms{0};
   uint32_t cycle_time_ms{0};
 

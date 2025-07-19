@@ -26,14 +26,14 @@ class DaikinS21Climate : public climate::Climate,
   void set_supports_current_humidity(bool supports_current_humidity) { this->supports_current_humidity_ = supports_current_humidity; }
 
  protected:
-  static constexpr uint32_t state_publication_timeout_ms{8 * 1000};
+  static constexpr uint32_t state_publication_timeout_ms{8 * 1000}; // experimentally determined with fudge factor
 
   climate::ClimateTraits traits() override;
   optional<std::set<climate::ClimateMode>> supported_modes_override_{};
   bool supports_current_humidity_{false};
 
-  sensor::Sensor *room_sensor_{nullptr};
-  uint16_t setpoint_interval_s{0};
+  sensor::Sensor *room_sensor_{};
+  uint16_t setpoint_interval_s{};
   uint32_t last_setpoint_check_ms{millis()};
 
   uint32_t command_timeout_end_ms{millis()}; // publish current state immediately on startup

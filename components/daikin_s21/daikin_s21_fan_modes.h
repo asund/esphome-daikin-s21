@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include "esphome/core/string_ref.h"
+#include <string_view>
 
 namespace esphome {
 namespace daikin_s21 {
@@ -26,29 +26,29 @@ static constexpr DaikinFanMode supported_daikin_fan_modes[] = {
   DaikinFanMode::Speed5,
 };
 
-constexpr StringRef daikin_fan_mode_to_string_ref(const DaikinFanMode mode) {
+constexpr std::string_view daikin_fan_mode_to_string_view(const DaikinFanMode mode) {
   switch (mode) {
     case DaikinFanMode::Auto:
     default:
-      return StringRef::from_lit("Automatic");
+      return "Automatic";
     case DaikinFanMode::Silent:
-      return StringRef::from_lit("Silent");
+      return "Silent";
     case DaikinFanMode::Speed1:
-      return StringRef::from_lit("1");
+      return "1";
     case DaikinFanMode::Speed2:
-      return StringRef::from_lit("2");
+      return "2";
     case DaikinFanMode::Speed3:
-      return StringRef::from_lit("3");
+      return "3";
     case DaikinFanMode::Speed4:
-      return StringRef::from_lit("4");
+      return "4";
     case DaikinFanMode::Speed5:
-      return StringRef::from_lit("5");
+      return "5";
   }
 }
 
-constexpr DaikinFanMode string_to_daikin_fan_mode(const std::string &mode) {
+constexpr DaikinFanMode string_to_daikin_fan_mode(const std::string_view mode) {
   for (const auto supported_mode : supported_daikin_fan_modes) {
-    if (daikin_fan_mode_to_string_ref(supported_mode) == mode) {
+    if (daikin_fan_mode_to_string_view(supported_mode) == mode) {
       return supported_mode;
     }
   }

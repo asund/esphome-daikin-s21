@@ -39,7 +39,7 @@ void DaikinS21Climate::loop() {
                              (this->commanded == reported);                         // command took effect, no longer in progress
     if (can_publish) {
       // Clear the updated flag only if there's no command in progress.
-      // A command timeout could occur before the next update and we'd want to publish the current state
+      // A command timeout could occur before the next update and we'll want to publish the current state before then
       this->s21->climate_updated = false;
       this->command_timeout_end_ms = millis(); // move forward to avoid underflow in subsequent expiry calculations
 
@@ -47,9 +47,9 @@ void DaikinS21Climate::loop() {
       bool do_publish = false;
 
       // Detect and integrate new sensor values into component state
-      if ((this->current_temperature != this->get_effective_current_temperature()) ||
-          (this->current_humidity != this->s21->get_humidity()) ||
-          (this->action != this->s21->get_climate_action())) {
+      if ((this->action != this->s21->get_climate_action()) ||
+          (this->current_temperature != this->get_effective_current_temperature()) ||
+          (this->current_humidity != this->s21->get_humidity())) {
         this->action = this->s21->get_climate_action();
         this->current_temperature = this->get_effective_current_temperature();
         this->current_humidity = this->s21->get_humidity();
@@ -92,7 +92,7 @@ void DaikinS21Climate::loop() {
         }
       }
 
-      // If the resulting commanded settings of the above are currently being reported, there's no update to publish
+      // If the resulting commanded settings of the above are not being reported we should publish them
       if (this->commanded != reported) {
         if (this->commanded.fan != reported.fan) {
           this->set_custom_fan_mode(reported.fan);   // avoid custom string operations until there's a change that requires publishing
@@ -144,7 +144,7 @@ climate::ClimateTraits DaikinS21Climate::traits() {
       climate::CLIMATE_MODE_DRY,
   });
   std::array<std::string, std::size(supported_daikin_fan_modes)> supported_fan_mode_strings;
-  std::transform(std::begin(supported_daikin_fan_modes), std::end(supported_daikin_fan_modes), std::begin(supported_fan_mode_strings), [](const auto &arg){ return daikin_fan_mode_to_string_ref(arg).str(); } );
+  std::ranges::transform(supported_daikin_fan_modes, std::begin(supported_fan_mode_strings), [](const auto &arg){ return daikin_fan_mode_to_string_view(arg); } );
   traits.set_supported_custom_fan_modes({std::begin(supported_fan_mode_strings), std::end(supported_fan_mode_strings)});
   traits.set_supported_swing_modes({
       climate::CLIMATE_SWING_OFF,
@@ -166,7 +166,7 @@ climate::ClimateTraits DaikinS21Climate::traits() {
 
 void DaikinS21Climate::set_custom_fan_mode(const DaikinFanMode mode) {
   this->commanded.fan = mode;
-  this->custom_fan_mode = daikin_fan_mode_to_string_ref(mode).str(); 
+  this->custom_fan_mode = static_cast<std::string>(daikin_fan_mode_to_string_view(mode)); 
 }
 
 bool DaikinS21Climate::use_room_sensor() {
@@ -228,7 +228,7 @@ void DaikinS21Climate::save_setpoint(float value, ESPPreferenceObject &pref) {
 
 void DaikinS21Climate::save_setpoint(float value) {
   optional<float> prev = this->load_setpoint();
-  // Only save if value is diff from what's already saved.
+  // Only save if value is different from what's already saved.
   if (abs(value - prev.value_or(0.0F)) >= SETPOINT_STEP) {
     switch (this->mode) {
       case climate::CLIMATE_MODE_HEAT_COOL:
@@ -301,11 +301,11 @@ void DaikinS21Climate::control(const climate::ClimateCall &call) {
   if (call.get_target_temperature().has_value()) {
     this->target_temperature = nearest_step(call.get_target_temperature().value());
   }
-  if (call.get_custom_fan_mode().has_value()) {
-    this->custom_fan_mode = call.get_custom_fan_mode().value();
-  }
   if (call.get_swing_mode().has_value()) {
     this->swing_mode = call.get_swing_mode().value();
+  }
+  if (call.get_custom_fan_mode().has_value()) {
+    this->custom_fan_mode = call.get_custom_fan_mode().value();
   }
   this->set_s21_climate();
   this->publish_state();
@@ -327,7 +327,7 @@ void DaikinS21Climate::set_s21_climate() {
   ESP_LOGI(TAG, "Controlling S21 climate:");
   ESP_LOGI(TAG, "  Mode: %s", LOG_STR_ARG(climate::climate_mode_to_string(this->commanded.mode)));
   ESP_LOGI(TAG, "  Setpoint: %.1f (s21: %.1f)", this->target_temperature, this->commanded.setpoint.f_degc());
-  ESP_LOGI(TAG, "  Fan: %s", LOG_STR_ARG(daikin_fan_mode_to_string_ref(this->commanded.fan).c_str()));
+  ESP_LOGI(TAG, "  Fan: %" PRI_SV, PRI_SV_ARGS(daikin_fan_mode_to_string_view(this->commanded.fan)));
   ESP_LOGI(TAG, "  Swing: %s", LOG_STR_ARG(climate::climate_swing_mode_to_string(this->commanded.swing)));
 
   // HVAC unit takes a few seconds to begin reporting settings changes back to

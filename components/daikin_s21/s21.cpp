@@ -1,7 +1,6 @@
 #include <algorithm>
 #include <cinttypes>
 #include <numeric>
-#include <string>
 #include "s21.h"
 
 using namespace esphome;
@@ -99,13 +98,13 @@ uint8_t climate_swing_mode_to_daikin(const climate::ClimateSwingMode mode) {
   }
 }
 
-int16_t bytes_to_num(uint8_t *bytes, size_t len) {
+int16_t bytes_to_num(std::span<const uint8_t> bytes) {
   // <ones><tens><hundreds><neg/pos>
   int16_t val = 0;
   val = bytes[0] - '0';
   val += (bytes[1] - '0') * 10;
   val += (bytes[2] - '0') * 100;
-  if (len > 3 && bytes[3] == '-')
+  if (bytes.size() > 3 && bytes[3] == '-')
     val *= -1;
   return val;
 }
@@ -129,10 +128,10 @@ void DaikinS21::dump_config() {
 }
 
 // Adapated from ESPHome UART debugger
-std::string hex_repr(const uint8_t *bytes, size_t len) {
+std::string hex_repr(std::span<const uint8_t> bytes) {
   std::string res;
   char buf[5];
-  for (size_t i = 0; i < len; i++) {
+  for (size_t i = 0; i < bytes.size(); i++) {
     if (i > 0)
       res += ':';
     sprintf(buf, "%02X", bytes[i]);
@@ -142,10 +141,10 @@ std::string hex_repr(const uint8_t *bytes, size_t len) {
 }
 
 // Adapated from ESPHome UART debugger
-std::string str_repr(const uint8_t *bytes, size_t len) {
+std::string str_repr(std::span<const uint8_t> bytes) {
   std::string res;
   char buf[5];
-  for (size_t i = 0; i < len; i++) {
+  for (size_t i = 0; i < bytes.size(); i++) {
     if (bytes[i] == 7) {
       res += "\\a";
     } else if (bytes[i] == 8) {
@@ -223,9 +222,7 @@ DaikinSerial::Result DaikinSerial::handle_rx(const uint8_t byte) {
         response.push_back(byte);
         if (response.size() > (S21_MAX_COMMAND_SIZE + S21_PAYLOAD_SIZE + 1)) {  // +1 for checksum byte
           ESP_LOGW(TAG, "Rx ETX: Overflow %s %s + 0x%02X",
-            str_repr(response.data(), response.size()).c_str(),
-            hex_repr(response.data(), response.size()).c_str(),
-            byte);
+            str_repr(response).c_str(), hex_repr(response).c_str(), byte);
           this->comm_state = CommState::ErrorDelay;
           result = Result::Error;
         }
@@ -233,14 +230,14 @@ DaikinSerial::Result DaikinSerial::handle_rx(const uint8_t byte) {
         // frame received, validate checksum
         const uint8_t checksum = response.back();
         response.pop_back();
-        const uint8_t calc_checksum = std::accumulate(response.begin(), response.end(), 0U);
+        const uint8_t calc_checksum = std::reduce(response.begin(), response.end(), 0U);
         if ((calc_checksum == checksum)
             || ((calc_checksum == STX) && (checksum == ENQ))) {  // protocol avoids STX in message body
           this->comm_state = CommState::AckResponseDelay;
           result = Result::Ack;
         } else {
           ESP_LOGW(TAG, "Rx ETX: Checksum mismatch: 0x%02X != 0x%02X (calc from %s)",
-            checksum, calc_checksum, hex_repr(response.data(), response.size()).c_str());
+            checksum, calc_checksum, hex_repr(response).c_str());
           this->comm_state = CommState::ErrorDelay;
           result = Result::Error;
         }
@@ -316,24 +313,24 @@ DaikinSerial::Result DaikinSerial::service() {
   return result;
 }
 
-DaikinSerial::Result DaikinSerial::send_frame(const char *cmd, const std::array<char, S21_PAYLOAD_SIZE> *payload) {
+DaikinSerial::Result DaikinSerial::send_frame(std::string_view cmd, const std::span<const uint8_t> payload /*= {}*/) {
   if (comm_state != CommState::Idle) {
     return Result::Busy;
   }
 
-  size_t cmd_len = strlen(cmd);
-  if (cmd_len > S21_MAX_COMMAND_SIZE) {
-    ESP_LOGW(TAG, "Tx: Command '%s' too large", cmd);
+  if (cmd.size() > S21_MAX_COMMAND_SIZE) {
+    ESP_LOGW(TAG, "Tx: Command '%" PRI_SV "' too large", PRI_SV_ARGS(cmd));
     return Result::Error;
   }
 
   if (this->debug) {
-    if (payload == nullptr) {
-      ESP_LOGD(TAG, "Tx: %s", cmd);
+    if (payload.empty()) {
+      ESP_LOGD(TAG, "Tx: %" PRI_SV, PRI_SV_ARGS(cmd));
     } else {
-      ESP_LOGD(TAG, "Tx: %s %s %s", cmd,
-               str_repr(reinterpret_cast<const uint8_t*>(payload->data()), payload->size()).c_str(),
-               hex_repr(reinterpret_cast<const uint8_t*>(payload->data()), payload->size()).c_str());
+      ESP_LOGD(TAG, "Tx: %" PRI_SV " %s %s", 
+               PRI_SV_ARGS(cmd),
+               str_repr({reinterpret_cast<const uint8_t *>(payload.data()), payload.size()}).c_str(),
+               hex_repr({reinterpret_cast<const uint8_t *>(payload.data()), payload.size()}).c_str());
     }
   }
 
@@ -343,11 +340,11 @@ DaikinSerial::Result DaikinSerial::send_frame(const char *cmd, const std::array<
 
   // transmit
   tx_uart->write_byte(STX);
-  tx_uart->write_array(reinterpret_cast<const uint8_t *>(cmd), cmd_len);
-  uint8_t checksum = std::accumulate(cmd, cmd + cmd_len, 0U);
-  if (payload) {
-    tx_uart->write_array(reinterpret_cast<const uint8_t *>(payload->data()), payload->size());
-    checksum = std::accumulate(payload->data(), payload->data() + payload->size(), checksum);
+  tx_uart->write_array(reinterpret_cast<const uint8_t *>(cmd.data()), cmd.size());
+  uint8_t checksum = std::reduce(cmd.begin(), cmd.end(), 0U);
+  if (payload.empty() == false) {
+    tx_uart->write_array(payload.data(), payload.size());
+    checksum = std::reduce(payload.begin(), payload.end(), checksum);
   }
   if (checksum == STX) {
     checksum = ENQ;  // mid-message STX characters are escaped
@@ -357,7 +354,7 @@ DaikinSerial::Result DaikinSerial::send_frame(const char *cmd, const std::array<
 
   // wait for result
   last_event_time_ms = millis();
-  this->comm_state = (payload != nullptr) ? CommState::CommandAck : CommState::QueryAck;
+  this->comm_state = payload.empty() ? CommState::QueryAck : CommState::CommandAck;
 
   return Result::Ack;
 }
@@ -369,13 +366,13 @@ void DaikinSerial::flush_input() {  // would be a nice ESPHome API improvement
   }
 }
 
-bool DaikinS21::is_query_active(const char * const query_str) {
-  return std::find_if(std::begin(queries), std::end(queries), [=](const char * query){ return strcmp(query_str, query) == 0; }) != std::end(queries);
+bool DaikinS21::is_query_active(std::string_view query) {
+  return std::ranges::find(queries, query) != queries.end();
 }
 
-bool DaikinS21::prune_query(const char * const query_str) {
-  const auto it = std::find_if(std::begin(queries), std::end(queries), [=](const char * query){ return strcmp(query_str, query) == 0; });
-  if (it != std::end(queries)) {
+bool DaikinS21::prune_query(std::string_view query) {
+  const auto it = std::ranges::find(queries, query);
+  if (it != queries.end()) {
     queries.erase(it);
     return true;
   } else {
@@ -427,7 +424,7 @@ void DaikinS21::refine_queries() {
  * Select the next command to issue to the unit
  */
 void DaikinS21::tx_next() {
-  std::array<char, DaikinSerial::S21_PAYLOAD_SIZE> payload;
+  std::array<uint8_t, DaikinSerial::S21_PAYLOAD_SIZE> payload;
 
   // Apply any pending settings
   // Important to clear the activate flag here as another command can be queued while waiting for this one to complete
@@ -438,7 +435,7 @@ void DaikinS21::tx_next() {
     payload[1] = climate_mode_to_daikin(pending.mode);
     payload[2] = (static_cast<int16_t>(pending.setpoint) / 5) + 28;
     payload[3] = static_cast<char>(pending.fan);
-    this->serial.send_frame(tx_command, &payload);
+    this->serial.send_frame(tx_command, payload);
     return;
   }
 
@@ -449,7 +446,7 @@ void DaikinS21::tx_next() {
     payload[1] = (pending.swing != climate::CLIMATE_SWING_OFF) ? '?' : '0';
     payload[2] = '0';
     payload[3] = '0';
-    this->serial.send_frame(tx_command, &payload);
+    this->serial.send_frame(tx_command, payload);
     return;
   }
   
@@ -475,28 +472,24 @@ void DaikinS21::tx_next() {
   this->serial.send_frame(tx_command);
 }
 
-static DaikinC10 temp_bytes_to_c10(uint8_t *bytes) { return bytes_to_num(bytes, 4); }
+static DaikinC10 temp_bytes_to_c10(std::span<const uint8_t> bytes) { return bytes_to_num(bytes); }
 static constexpr DaikinC10 temp_f9_byte_to_c10(uint8_t byte) { return (byte - 128) * 5; }
 static constexpr uint8_t ahex_digit(uint8_t digit) { return (digit >= 'A') ? (digit - 'A') + 10 : digit - '0'; }
 static constexpr uint8_t ahex_u8_le(uint8_t first, uint8_t second) { return (ahex_digit(second) << 4) | ahex_digit(first); }
 
 void DaikinS21::parse_ack() {
-  char rcode[DaikinSerial::S21_MAX_COMMAND_SIZE + 1] = {};
-  uint8_t payload[DaikinSerial::S21_PAYLOAD_SIZE];
-  const size_t rcode_len = strlen(tx_command);
-  size_t payload_len = 0;
+  std::span<const uint8_t> rcode{};
+  std::span<const uint8_t> payload{};
 
-  ESP_LOGV(TAG, "Rx: ACK from S21 for command %s", tx_command);
+  ESP_LOGV(TAG, "Rx: ACK from S21 for command %" PRI_SV, PRI_SV_ARGS(tx_command));
 
   // prepare response buffers for decoding
   if (serial.response.empty()) {
-    payload_len = 0;
     // commands don't return anything except an Ack, pretend we received the command itself to provide something to distinguish handling below
-    std::copy_n(tx_command, rcode_len, rcode);
+    rcode = { reinterpret_cast<const uint8_t *>(tx_command.data()), tx_command.size() };
   } else {
-    payload_len = serial.response.size() - rcode_len;
-    std::copy_n(serial.response.data(), rcode_len, rcode);
-    std::copy_n(serial.response.data() + rcode_len, payload_len, payload);
+    rcode = { serial.response.begin(), tx_command.size() };
+    payload = { serial.response.begin() + rcode.size(), serial.response.end() };
     // query response reveived, move to the next one
     current_query++;
   }
@@ -550,7 +543,7 @@ void DaikinS21::parse_ack() {
           this->modifiers[ModifierEcono] =    (payload[1] == '2');
           return;
         case '8':  // F8 -> G8 -- Original protocol version
-          std::copy_n(std::begin(payload), std::min(payload_len, this->detect_responses.G8.size()), std::begin(this->detect_responses.G8));
+          std::copy_n(std::begin(payload), std::min(payload.size(), this->detect_responses.G8.size()), std::begin(this->detect_responses.G8));
           return;
         case '9':  // F9 -> G9 -- Temperature and humidity, better granularity in RH, Ra and Re
           this->temp_inside = temp_f9_byte_to_c10(payload[0]);  // 1 degree
@@ -558,11 +551,11 @@ void DaikinS21::parse_ack() {
           this->humidity = payload[2] - '0';  // 5%, danijelt reports 0xFF when unsupported
           return;
         case 'C':  // FC -> GC -- Model code (hex, not reversed here)
-          std::copy_n(std::begin(payload), std::min(payload_len, this->detect_responses.GC.size()), std::begin(this->detect_responses.GC));
+          std::copy_n(std::begin(payload), std::min(payload.size(), this->detect_responses.GC.size()), std::begin(this->detect_responses.GC));
           return;
         case 'Y':
           if ((rcode[2] == '0') && (rcode[3] == '0')) { // FY00 -> GY00 Newer protocol version
-            this->detect_responses.GY00 = bytes_to_num(payload, payload_len);
+            this->detect_responses.GY00 = bytes_to_num(payload);
           }
           return;
         default:
@@ -575,7 +568,7 @@ void DaikinS21::parse_ack() {
         case 'B':  // Operational mode, single character, same info as G1
           return;
         case 'C':  // Setpoint, same info as G1
-          this->active.setpoint = bytes_to_num(payload, payload_len) * 10;  // whole degrees C
+          this->active.setpoint = bytes_to_num(payload) * 10;  // whole degrees C
           return;
         case 'F':  // Swing mode, same info as G5. ascii hex string: 2F herizontal 1F vertical 7F both 00 off
           return;
@@ -589,12 +582,12 @@ void DaikinS21::parse_ack() {
           this->temp_coil = temp_bytes_to_c10(payload);
           return;
         case 'L':  // Fan speed
-          this->fan_rpm = bytes_to_num(payload, payload_len) * 10;
+          this->fan_rpm = bytes_to_num(payload) * 10;
           return;
         case 'M':  // v_swing setpoint
           break;
         case 'N':  // Vertical swing angle
-          this->swing_vertical_angle = bytes_to_num(payload, payload_len);
+          this->swing_vertical_angle = bytes_to_num(payload);
           return;
         case 'X':  // Internal control loop target temperature
           this->temp_target = temp_bytes_to_c10(payload);
@@ -603,16 +596,16 @@ void DaikinS21::parse_ack() {
           this->temp_outside = temp_bytes_to_c10(payload);
           return;
         case 'b':  // Demand, 0-15
-          this->demand = bytes_to_num(payload, payload_len) / 10;
+          this->demand = bytes_to_num(payload) / 10;
           return;
         case 'd':  // Compressor frequency in hertz, idle if 0.
-          this->compressor_hz = bytes_to_num(payload, payload_len);
+          this->compressor_hz = bytes_to_num(payload);
           if (this->compressor_hz == 999) {
             this->compressor_hz = 0;  // reported by danijelt
           }
           return;
         case 'e':  // Humidity, %
-          this->humidity = bytes_to_num(payload, payload_len);
+          this->humidity = bytes_to_num(payload);
           return;
         case 'z':
           if ((rcode[2] == 'B') && (rcode[3] == '2')) { // FzB2 -> GzB2 Unit state
@@ -623,10 +616,11 @@ void DaikinS21::parse_ack() {
           }
           return;
         default:
-          if (payload_len > 3) {
+          if (payload.size() > 3) {
             auto temp = temp_bytes_to_c10(payload);
-            ESP_LOGD(TAG, "Unknown sensor: %s -> %s -> %.1f C (%.1f F)", rcode,
-                     hex_repr(payload, payload_len).c_str(),
+            ESP_LOGD(TAG, "Unknown sensor: %" PRI_SV " -> %s -> %.1f C (%.1f F)",
+                     PRI_SV_ARGS(rcode),
+                     hex_repr(payload).c_str(),
                      temp.f_degc(), temp.f_degf());
           }
           break;
@@ -634,11 +628,11 @@ void DaikinS21::parse_ack() {
       break;
 
     case 'M':  // some sort of model? always "3E53" for me, regardless of head unit
-      std::copy_n(std::begin(payload), std::min(payload_len, this->detect_responses.M.size()), std::begin(this->detect_responses.M));
+      std::copy_n(std::begin(payload), std::min(payload.size(), this->detect_responses.M.size()), std::begin(this->detect_responses.M));
       return;
 
     case 'V':  // purportedly another version, always "00C0" for me
-      std::copy_n(std::begin(payload), std::min(payload_len, this->detect_responses.V.size()), std::begin(this->detect_responses.V));
+      std::copy_n(std::begin(payload), std::min(payload.size(), this->detect_responses.V.size()), std::begin(this->detect_responses.V));
       return;
 
     default:
@@ -651,37 +645,40 @@ void DaikinS21::parse_ack() {
 
   // print everything
   if (this->debug_protocol) {
-    ESP_LOGD(TAG, "S21: %s -> %s %s", rcode,
-             str_repr(payload, payload_len).c_str(),
-             hex_repr(payload, payload_len).c_str());
+    ESP_LOGD(TAG, "S21: %" PRI_SV " -> %s %s",
+             PRI_SV_ARGS(rcode),
+             str_repr(payload).c_str(),
+             hex_repr(payload).c_str());
   }
 
   // print changed values
   if (this->debug_protocol) {
-    auto curr = std::vector<uint8_t>(payload, payload + payload_len);
-    if (val_cache[rcode] != curr) {
-      const auto prev = val_cache[rcode];
-      ESP_LOGI(TAG, "S21 %s changed: %s %s -> %s %s", rcode,
-               str_repr(prev.data(), prev.size()).c_str(),
-               hex_repr(prev.data(), prev.size()).c_str(),
-               str_repr(curr.data(), curr.size()).c_str(),
-               hex_repr(curr.data(), curr.size()).c_str());
-      val_cache[rcode] = curr;
+    std::string key(rcode.begin(), rcode.end());
+    auto curr = std::vector<uint8_t>(payload.begin(), payload.end());
+    if (val_cache[key] != curr) {
+      const auto prev = val_cache[key];
+      ESP_LOGI(TAG, "S21 %s changed: %s %s -> %s %s",
+               key.c_str(),
+               str_repr(prev).c_str(),
+               hex_repr(prev).c_str(),
+               str_repr(curr).c_str(),
+               hex_repr(curr).c_str());
+      val_cache[key] = curr;
     }
   }
 }
 
 void DaikinS21::handle_nak() {
-  ESP_LOGW(TAG, "Rx: NAK from S21 for %s", tx_command);
-  if (strcmp(tx_command, *current_query) == 0) {
-    ESP_LOGW(TAG, "Removing %s from query pool (assuming unsupported)", tx_command);
+  ESP_LOGW(TAG, "Rx: NAK from S21 for %" PRI_SV, PRI_SV_ARGS(tx_command));
+  if (tx_command == *current_query) {
+    ESP_LOGW(TAG, "Removing %" PRI_SV " from query pool (assuming unsupported)", PRI_SV_ARGS(tx_command));
     nak_queries.emplace_back(*current_query);
     // current_query iterator will be invalidated, recover index and recreate
     const auto index = std::distance(queries.begin(), current_query);
     queries.erase(current_query);
     current_query = queries.begin() + index;
   } else {
-    ESP_LOGW(TAG, "Acknowledging %s command despite NAK", tx_command);
+    ESP_LOGW(TAG, "Acknowledging %" PRI_SV " command despite NAK", PRI_SV_ARGS(tx_command));
     parse_ack();  // don't get stuck retrying unsupported command
   }
 }
@@ -699,21 +696,21 @@ bool DaikinS21::determine_protocol_version() {
   static constexpr uint8_t G8_version2or3[4] = {'0','2',0,0};
   static constexpr uint8_t G8_version31plus[4] = {'0','2','0','0'};
 
-  if (std::equal(std::begin(this->detect_responses.G8), std::end(this->detect_responses.G8), std::begin(G8_version0), std::end(G8_version0))) {
+  if (std::ranges::equal(this->detect_responses.G8, G8_version0)) {
     this->protocol_version = {0,0};
     return true;
   }
-  if (std::equal(std::begin(this->detect_responses.G8), std::end(this->detect_responses.G8), std::begin(G8_version2or3), std::end(G8_version2or3)) && (is_query_active("FY00") == false)) {
+  if (std::ranges::equal(this->detect_responses.G8, G8_version2or3) && (is_query_active("FY00") == false)) {
     this->protocol_version = {2,0};  // NAK rules out 3.0
     return true;
   }
   switch (this->detect_responses.GY00) {
     case 300:
-      if (std::equal(std::begin(this->detect_responses.G8), std::end(this->detect_responses.G8), std::begin(G8_version2or3), std::end(G8_version2or3))) {
+      if (std::ranges::equal(this->detect_responses.G8, G8_version2or3)) {
         this->protocol_version = {3,0};  // ACK means 3.0 has support for this query
         return true;
       }
-      if (std::equal(std::begin(this->detect_responses.G8), std::end(this->detect_responses.G8), std::begin(G8_version31plus), std::end(G8_version31plus))) {
+      if (std::ranges::equal(this->detect_responses.G8, G8_version31plus)) {
         this->protocol_version = {3,1};
         return true;
       }
@@ -789,7 +786,7 @@ void DaikinS21::loop() {
       break;
 
     case Result::Timeout:
-      ESP_LOGW(TAG, "Timeout waiting for response to %s", tx_command);
+      ESP_LOGW(TAG, "Timeout waiting for response to %" PRI_SV, PRI_SV_ARGS(tx_command));
       break;
 
     default:
@@ -809,17 +806,17 @@ void DaikinS21::dump_state() {
   ESP_LOGD(TAG, "  Proto: v%u.%u", this->protocol_version.major, this->protocol_version.minor);
   if (this->debug_protocol) {
     ESP_LOGD(TAG, "      G8: %s  GC: %s  GY00: %u  M: %s  V: %s",
-      str_repr(this->detect_responses.G8.data(), this->detect_responses.G8.size()).c_str(),
-      str_repr(this->detect_responses.GC.data(), this->detect_responses.GC.size()).c_str(),
+      str_repr(this->detect_responses.G8).c_str(),
+      str_repr(this->detect_responses.GC).c_str(),
       this->detect_responses.GY00,
-      str_repr(this->detect_responses.M.data(), this->detect_responses.M.size()).c_str(),
-      str_repr(this->detect_responses.V.data(), this->detect_responses.V.size()).c_str());
+      str_repr(this->detect_responses.M).c_str(),
+      str_repr(this->detect_responses.V).c_str());
   }
   ESP_LOGD(TAG, "   Mode: %s  Action: %s",
           LOG_STR_ARG(climate::climate_mode_to_string(this->active.mode)),
           LOG_STR_ARG(climate::climate_action_to_string(this->get_climate_action())));
-  ESP_LOGD(TAG, "    Fan: %s (%d rpm)  Swing: %s",
-          daikin_fan_mode_to_string_ref(this->active.fan).c_str(), this->fan_rpm,
+  ESP_LOGD(TAG, "    Fan: %" PRI_SV " (%d rpm)  Swing: %s",
+          PRI_SV_ARGS(daikin_fan_mode_to_string_view(this->active.fan)), this->fan_rpm,
           (this->support_swing ? LOG_STR_ARG(climate::climate_swing_mode_to_string(this->active.swing)) : "unsupported"));
   ESP_LOGD(TAG, " Target: %.1f C (%.1f F)",
           this->active.setpoint.f_degc(), this->active.setpoint.f_degf());
