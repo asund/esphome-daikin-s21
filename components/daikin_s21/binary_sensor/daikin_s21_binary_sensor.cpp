@@ -10,30 +10,30 @@ void DaikinS21BinarySensor::setup() {
   this->disable_loop(); // wait for updates
 }
 
-void DaikinS21BinarySensor::update_handler(const uint8_t unit_state, const uint8_t system_state) {
+void DaikinS21BinarySensor::update_handler(const DaikinUnitState unit, const DaikinSystemState system) {
   if (this->powerful_sensor_ != nullptr) {
-    this->powerful_sensor_->publish_state(unit_state & 0x1);
+    this->powerful_sensor_->publish_state(unit.powerful());
   }
   if (this->defrost_sensor_ != nullptr) {
-    this->defrost_sensor_->publish_state(unit_state & 0x2);
+    this->defrost_sensor_->publish_state(unit.defrost());
   }
   if (this->active_sensor_ != nullptr) {
-    this->active_sensor_->publish_state(unit_state & 0x4);  // unit
+    this->active_sensor_->publish_state(unit.active());  // unit
   }
   if (this->online_sensor_ != nullptr) {
-    this->online_sensor_->publish_state(unit_state & 0x8);
+    this->online_sensor_->publish_state(unit.online());
   }
   if (this->valve_sensor_ != nullptr) {
-    this->valve_sensor_->publish_state(system_state & 0x04);  // system
+    this->valve_sensor_->publish_state(system.active());  // refrigerant valve
   }
   if (this->short_cycle_sensor_ != nullptr) {
-    this->short_cycle_sensor_->publish_state((system_state & 0x01) == 0x00);  // invert for Home Assistant locked/unlocked logic
+    this->short_cycle_sensor_->publish_state(!system.locked());  // invert for Home Assistant locked/unlocked logic
   }
   if (this->system_defrost_sensor_ != nullptr) {
-    this->system_defrost_sensor_->publish_state(system_state & 0x08);
+    this->system_defrost_sensor_->publish_state(system.defrost());
   }
     if (this->multizone_conflict_sensor_ != nullptr) {
-    this->multizone_conflict_sensor_->publish_state((system_state & 0x20) == 0x00); // invert for Home Assistant locked/unlocked logic
+    this->multizone_conflict_sensor_->publish_state(!system.multizone_conflict()); // invert for Home Assistant locked/unlocked logic
   }
 }
 

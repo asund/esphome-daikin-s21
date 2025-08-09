@@ -86,11 +86,36 @@ private:
   int16_t value{};
 };
 
+/**
+ * Unit state (RzB2) bitfield decoder
+ */
+struct DaikinUnitState {
+  constexpr DaikinUnitState(const uint8_t value = 0U) : raw(value) {}
+  constexpr bool powerful() const { return (this->raw & 0x1) != 0; }
+  constexpr bool defrost() const { return (this->raw & 0x2) != 0; }
+  constexpr bool active() const { return (this->raw & 0x4) != 0; }
+  constexpr bool online() const { return (this->raw & 0x8) != 0; }
+  uint8_t raw{};
+};
+
+/**
+ * System state (RzC3) bitfield decoder
+ */
+struct DaikinSystemState {
+  constexpr DaikinSystemState(const uint8_t value = 0U) : raw(value) {}
+  constexpr bool locked() const { return (this->raw & 0x01) != 0; }
+  constexpr bool active() const { return (this->raw & 0x04) != 0; }
+  constexpr bool defrost() const { return (this->raw & 0x08) != 0; }
+  constexpr bool multizone_conflict() const { return (this->raw & 0x20) != 0; }
+  uint8_t raw{};
+};
+
 struct DaikinSettings {
   climate::ClimateMode mode{climate::CLIMATE_MODE_OFF};
   DaikinC10 setpoint{23};
-  DaikinFanMode fan{DaikinFanMode::Auto};
   climate::ClimateSwingMode swing{climate::CLIMATE_SWING_OFF};
+  DaikinFanMode fan{DaikinFanMode::Auto};
+  climate::ClimatePreset preset{climate::CLIMATE_PRESET_NONE};
 
   constexpr bool operator==(const DaikinSettings &other) const = default;
 };
@@ -108,13 +133,15 @@ class DaikinS21 : public PollingComponent {
 
   // external command action
   void set_climate_settings(const DaikinSettings &settings);
-  const DaikinSettings& get_climate_settings() { return this->active; };
+  
+  void add_climate_callback(std::function<void(void)> &&callback);
+  void add_binary_sensor_callback(std::function<void(DaikinUnitState, DaikinSystemState)> &&callback);
 
+  // value accessors
   bool is_ready() { return this->ready.all(); }
+  const DaikinSettings& get_climate_settings() { return this->active; };
   climate::ClimateMode get_climate_mode() { return this->active.mode; }
-  climate::ClimateAction get_climate_action();
-  DaikinFanMode get_fan_mode() { return this->active.fan; }
-  climate::ClimateSwingMode get_swing_mode() { return this->active.swing; }
+  climate::ClimateAction get_climate_action() { return this->action_resolved; }
   auto get_setpoint() { return this->active.setpoint.f_degc(); }
   auto get_temp_inside() { return this->temp_inside.f_degc(); }
   auto get_temp_outside() { return this->temp_outside.f_degc(); }
@@ -124,25 +151,6 @@ class DaikinS21 : public PollingComponent {
   auto get_compressor_frequency() { return this->compressor_hz; }
   auto get_humidity() { return this->humidity; }
   auto get_demand() { return this->demand; }
-
-  void add_climate_callback(std::function<void(void)> &&callback);
-  void add_binary_sensor_callback(std::function<void(uint8_t, uint8_t)> &&callback);
-
-  // temporary stubs, hide once supported
-  enum Modifier : uint8_t {
-    ModifierQuiet,    // outdoor unit limit
-    ModifierEcono,    // limits demand for power consumption
-    ModifierPowerful, // maximum output (20 minute timeout), mutaully exclusive with quiet and econo
-    ModifierComfort,  // fan angle depends on heating/cooling action
-    ModifierStreamer, // electron emitter decontamination?
-    ModifierSensor,   // "intelligent eye" PIR occupancy setpoint offset
-    ModifierLED,      // the sensor LED is on
-    ModifierCount,    // just for bitset sizing
-  };
-  std::bitset<ModifierCount> modifiers{};
-
-  uint8_t unit_state{0};
-  uint8_t system_state{0};
 
  protected:
   DaikinSerial serial;
@@ -154,7 +162,7 @@ class DaikinS21 : public PollingComponent {
   void handle_nak();
 
   CallbackManager<void(void)> climate_callback_{};
-  CallbackManager<void(uint8_t, uint8_t)> binary_sensor_callback_{};
+  CallbackManager<void(DaikinUnitState, DaikinSystemState)> binary_sensor_callback_{};
 
   enum ReadyCommand : uint8_t {
     ReadyProtocolVersion,
@@ -176,17 +184,19 @@ class DaikinS21 : public PollingComponent {
   bool debug_protocol{false};
   std::unordered_map<std::string, std::vector<uint8_t>> val_cache{};
   std::vector<std::string_view> nak_queries{};
-  uint32_t cycle_time_start_ms{0};
-  uint32_t cycle_time_ms{0};
+  uint32_t cycle_time_start_ms{};
+  uint32_t cycle_time_ms{};
 
   // settings
   DaikinSettings active{};
   DaikinSettings pending{ .mode = climate::CLIMATE_MODE_AUTO }; // unsupported sentinel value, see set_climate_settings
   bool activate_climate{false};
   bool activate_swing_mode{false};
+  bool activate_preset{false};
 
   // current values
-  climate::ClimateAction climate_action = climate::CLIMATE_ACTION_OFF;
+  climate::ClimateAction action_reported = climate::CLIMATE_ACTION_OFF; // raw readout
+  climate::ClimateAction action_resolved = climate::CLIMATE_ACTION_OFF; // corrected at end of scan
   DaikinC10 temp_inside{};
   DaikinC10 temp_target{};
   DaikinC10 temp_outside{};
@@ -196,13 +206,26 @@ class DaikinS21 : public PollingComponent {
   uint8_t compressor_hz{};
   uint8_t humidity{50};
   uint8_t demand{};
+  DaikinUnitState unit_state{};
+  DaikinSystemState system_state{};
+  enum Modifier : uint8_t {
+    ModifierQuiet,    // outdoor unit fan/compressor limit
+    ModifierEcono,    // limits demand for power consumption
+    ModifierPowerful, // maximum output (20 minute timeout), mutaully exclusive with quiet and econo
+    ModifierComfort,  // fan angle depends on heating/cooling action
+    ModifierStreamer, // electron emitter decontamination?
+    ModifierSensor,   // "intelligent eye" PIR occupancy setpoint offset
+    ModifierLED,      // the sensor LED is on
+    ModifierCount,    // just for bitset sizing
+  };
+  std::bitset<ModifierCount> modifiers{};
 
   // protocol support
   bool determine_protocol_version();
   struct DetectResponses {
     std::array<uint8_t,4> G8{};
     std::array<uint8_t,4> GC{};
-    uint16_t GY00{0};
+    uint16_t GY00{};
     std::array<uint8_t,4> M{};
     std::array<uint8_t,4> V{};
   } detect_responses;
@@ -214,6 +237,9 @@ class DaikinS21 : public PollingComponent {
   bool support_swing{};
   bool support_horizontal_swing{};
   bool support_humidity{};
+
+  // helpers
+  climate::ClimateAction resolve_climate_action();
 };
 
 }  // namespace daikin_s21

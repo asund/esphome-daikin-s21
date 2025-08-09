@@ -19,7 +19,33 @@ void DaikinS21Climate::setup() {
   this->auto_setpoint_pref = global_preferences->make_preference<int16_t>(h + 1);
   this->cool_setpoint_pref = global_preferences->make_preference<int16_t>(h + 2);
   this->heat_setpoint_pref = global_preferences->make_preference<int16_t>(h + 3);
-  this->set_custom_fan_mode(commanded.fan); // ensure custom fan mode string is populated with a default
+  // populate default traits
+  this->traits_.set_supports_action(true);
+  this->traits_.set_supports_current_temperature(true);
+  this->traits_.set_visual_min_temperature(10.0F);
+  this->traits_.set_visual_max_temperature(32.0F);
+  this->traits_.set_visual_current_temperature_step(0.5F);
+  this->traits_.set_visual_target_temperature_step(1.0F);
+  this->traits_.set_supported_modes({
+      climate::CLIMATE_MODE_OFF,
+      climate::CLIMATE_MODE_HEAT_COOL,
+      climate::CLIMATE_MODE_COOL,
+      climate::CLIMATE_MODE_HEAT,
+      climate::CLIMATE_MODE_FAN_ONLY,
+      climate::CLIMATE_MODE_DRY,
+  });
+  std::array<std::string, std::size(supported_daikin_fan_modes)> supported_fan_mode_strings;
+  std::ranges::transform(supported_daikin_fan_modes, std::begin(supported_fan_mode_strings), [](const auto &arg){ return daikin_fan_mode_to_string_view(arg); } );
+  this->traits_.set_supported_custom_fan_modes({std::begin(supported_fan_mode_strings), std::end(supported_fan_mode_strings)});
+  this->traits_.set_supported_swing_modes({
+      climate::CLIMATE_SWING_OFF,
+      climate::CLIMATE_SWING_BOTH,
+      climate::CLIMATE_SWING_VERTICAL,
+      climate::CLIMATE_SWING_HORIZONTAL,
+  });
+  // ensure optionals are populated with defaults
+  this->set_custom_fan_mode(commanded.fan);
+  this->preset = commanded.preset;
   // enable event driven updates
   this->get_parent()->add_climate_callback(std::bind(&DaikinS21Climate::update_handler, this)); // enable update events from DaikinS21
   this->set_command_timeout(0);  // schedule an immediate update to capture the current state (change detection on update requires a "previous" state)
@@ -106,11 +132,12 @@ void DaikinS21Climate::update_handler() {
 
     // If the resulting commanded settings of the above are not being reported we should publish them
     if (this->commanded != reported) {
+      this->mode = reported.mode;
+      this->swing_mode = reported.swing;
       if (this->commanded.fan != reported.fan) {
         this->set_custom_fan_mode(reported.fan);   // avoid custom string operations until there's a change that requires publishing
       }
-      this->mode = reported.mode;
-      this->swing_mode = reported.swing;
+      this->preset = reported.preset;
       this->commanded = reported;
       do_publish = true;
     }
@@ -137,46 +164,40 @@ void DaikinS21Climate::dump_config() {
   this->dump_traits_(TAG);
 }
 
-climate::ClimateTraits DaikinS21Climate::traits() {
-  auto traits = climate::ClimateTraits();
-  // Base
-  traits.set_supports_action(true);
-  traits.set_supports_current_temperature(true);
-  traits.set_visual_min_temperature(10.0F);
-  traits.set_visual_max_temperature(32.0F);
-  traits.set_visual_current_temperature_step(0.5F);
-  traits.set_visual_target_temperature_step(1.0F);
-  traits.set_supported_modes({
-      climate::CLIMATE_MODE_OFF,
-      climate::CLIMATE_MODE_HEAT_COOL,
-      climate::CLIMATE_MODE_COOL,
-      climate::CLIMATE_MODE_HEAT,
-      climate::CLIMATE_MODE_FAN_ONLY,
-      climate::CLIMATE_MODE_DRY,
-  });
-  std::array<std::string, std::size(supported_daikin_fan_modes)> supported_fan_mode_strings;
-  std::ranges::transform(supported_daikin_fan_modes, std::begin(supported_fan_mode_strings), [](const auto &arg){ return daikin_fan_mode_to_string_view(arg); } );
-  traits.set_supported_custom_fan_modes({std::begin(supported_fan_mode_strings), std::end(supported_fan_mode_strings)});
-  traits.set_supported_swing_modes({
-      climate::CLIMATE_SWING_OFF,
-      climate::CLIMATE_SWING_BOTH,
-      climate::CLIMATE_SWING_VERTICAL,
-      climate::CLIMATE_SWING_HORIZONTAL,
-  });
-  // Overrides
-  if (this->supports_current_humidity_) {
-    traits.set_supports_current_humidity(this->supports_current_humidity_);
-  }
-  if (this->supported_modes_override_.has_value()) {
-    traits.set_supported_modes(this->supported_modes_override_.value());
-    traits.add_supported_mode(climate::CLIMATE_MODE_OFF);   // Always available
-    traits.add_supported_mode(climate::CLIMATE_MODE_HEAT_COOL);  // Always available
-  }
-  if (this->supported_presets_override_.has_value()) {
-    traits.set_supported_presets(this->supported_presets_override_.value());
-    traits.add_supported_preset(climate::CLIMATE_PRESET_NONE);
-  }
-  return traits;
+/**
+ * Override supported modes
+ *
+ * @note Modifies traits, call during setup only
+ * 
+ * @param modes modes to support
+ */
+void DaikinS21Climate::set_supported_modes_override(std::set<climate::ClimateMode> modes) {
+  this->traits_.set_supported_modes(modes);
+  this->traits_.add_supported_mode(climate::CLIMATE_MODE_OFF);   // Always available
+  this->traits_.add_supported_mode(climate::CLIMATE_MODE_HEAT_COOL);  // Always available
+}
+
+/**
+ * Override supported presets
+ *
+ * @note Modifies traits, call during setup only
+ * 
+ * @param presets presets to support
+ */
+void DaikinS21Climate::set_supported_presets_override(std::set<climate::ClimatePreset> presets) {
+  this->traits_.set_supported_presets(presets);
+  this->traits_.add_supported_preset(climate::CLIMATE_PRESET_NONE);
+}
+
+/**
+ * Configure to report humidity
+ *
+ * @note Modifies traits, call during setup only
+ * 
+ * @param supports_current_humidity true to report humidity, false to disable
+ */
+void DaikinS21Climate::set_supports_current_humidity(const bool supports_current_humidity) {
+  this->traits_.set_supports_current_humidity(supports_current_humidity);
 }
 
 void DaikinS21Climate::set_custom_fan_mode(const DaikinFanMode mode) {
@@ -338,8 +359,9 @@ void DaikinS21Climate::set_s21_climate() {
   // Set and command new settings
   this->commanded.mode = this->mode;
   this->commanded.setpoint = this->calc_s21_setpoint();
-  this->commanded.fan = string_to_daikin_fan_mode(this->custom_fan_mode.value());
   this->commanded.swing = this->swing_mode;
+  this->commanded.fan = string_to_daikin_fan_mode(this->custom_fan_mode.value());
+  this->commanded.preset = this->preset.value();
   this->get_parent()->set_climate_settings(this->commanded);
   this->set_command_timeout();
 
@@ -348,6 +370,7 @@ void DaikinS21Climate::set_s21_climate() {
   ESP_LOGI(TAG, "  Setpoint: %.1f (s21: %.1f)", this->target_temperature, this->commanded.setpoint.f_degc());
   ESP_LOGI(TAG, "  Fan: %" PRI_SV, PRI_SV_ARGS(daikin_fan_mode_to_string_view(this->commanded.fan)));
   ESP_LOGI(TAG, "  Swing: %s", LOG_STR_ARG(climate::climate_swing_mode_to_string(this->commanded.swing)));
+  ESP_LOGI(TAG, "  Preset: %s", LOG_STR_ARG(climate::climate_preset_to_string(this->commanded.preset)));
 
   this->save_setpoint(this->target_temperature);
 }

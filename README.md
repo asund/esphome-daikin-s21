@@ -19,6 +19,7 @@ Climate:
 - Independent climate action reporting. See what your unit is trying to do, e.g. heating while in HEAT_COOL.
 - Fan modes auto, silent and 1-5.
 - Swing modes horizontal, vertical, and both.
+- Untested support for Powerful and Econo presets ("Boost" and "Eco").
 - Optional humidity reporting.
 
 Sensor:
@@ -48,7 +49,7 @@ See the framework selection in the configuration example.
 
 * This code has only been tested on ESP32 pico and ESP32-S3.
 * Tested with 4MXL36TVJU outdoor unit and CTXS07LVJU, FTXS12LVJU, FTXS15LVJU indoor units.
-* Does not support powerful or econo modes.
+* Powerful and econo modes are untested (no hardware).
 * Does not support comfort or presence detection features on some models.
 * Does not interact with the indoor units schedules (do that with HA instead).
 * Currently targets Version 0 protocol support due to the equipment available to the author.
@@ -148,15 +149,18 @@ climate:
     #   target_temperature: 1
     #   current_temperature: 0.5
     # Settings from DaikinS21Climate:
-    supports_humidity: true # If your unit supports humidity, it can be reported in the climate component
-    # Optional HA sensor used to alter setpoint.
-    room_temperature_sensor: room_temp  # See homeassistant sensor below
-    setpoint_interval: 300s # Interval used to adjust the unit's setpoint if the room temperature sensor is specified
     supported_modes:  # off and heat_cool are always supported
       - cool
       - heat
       - dry
       - fan_only
+    supported_presets:  # none is always supported
+      - eco
+      - boost
+    supports_humidity: true # If your unit supports humidity, it can be reported in the climate component
+    # Optional HA sensor used to alter setpoint.
+    room_temperature_sensor: room_temp  # See homeassistant sensor below
+    setpoint_interval: 300s # Interval used to adjust the unit's setpoint if the room temperature sensor is specified
 
 # Optional additional sensors.
 sensor:

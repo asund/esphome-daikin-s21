@@ -21,20 +21,18 @@ class DaikinS21Climate : public climate::Climate,
   void command_timeout_handler();
   void update_handler();
 
+  void set_supported_modes_override(std::set<climate::ClimateMode> modes);
+  void set_supported_presets_override(std::set<climate::ClimatePreset> presets);
+  void set_supports_current_humidity(bool supports_current_humidity);
   void set_room_sensor(sensor::Sensor *sensor) { this->room_sensor_ = sensor; }
   void set_setpoint_interval(uint16_t seconds) { this->setpoint_interval_s = seconds; };
-  void set_supported_modes_override(std::set<climate::ClimateMode> modes) { this->supported_modes_override_ = std::move(modes); }
-  void set_supported_presets_override(std::set<climate::ClimatePreset> presets) { this->supported_presets_override_ = std::move(presets); }
-  void set_supports_current_humidity(bool supports_current_humidity) { this->supports_current_humidity_ = supports_current_humidity; }
 
  protected:
   static constexpr const char * command_timeout_name = "cmd";
   static constexpr uint32_t state_publication_timeout_ms{8 * 1000}; // experimentally determined with fudge factor
 
-  climate::ClimateTraits traits() override;
-  optional<std::set<climate::ClimateMode>> supported_modes_override_{};
-  optional<std::set<climate::ClimatePreset>> supported_presets_override_{};
-  bool supports_current_humidity_{false};
+  climate::ClimateTraits traits_{};
+  climate::ClimateTraits traits() override { return traits_; };
 
   sensor::Sensor *room_sensor_{};
   uint16_t setpoint_interval_s{};

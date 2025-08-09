@@ -419,31 +419,72 @@ void DaikinS21::tx_next() {
 
   // Apply any pending settings
   // Important to clear the activate flag here as another command can be queued while waiting for this one to complete
-  if (activate_climate) {
-    activate_climate = false;
-    tx_command = "D1";
-    payload[0] = (pending.mode == climate::CLIMATE_MODE_OFF) ? '0' : '1'; // power
-    payload[1] = climate_mode_to_daikin(pending.mode);
-    payload[2] = (static_cast<int16_t>(pending.setpoint) / 5) + 28;
-    payload[3] = static_cast<char>(pending.fan);
+  if (this->activate_climate) {
+    this->activate_climate = false;
+    this->tx_command = "D1";
+    payload[0] = (this->pending.mode == climate::CLIMATE_MODE_OFF) ? '0' : '1'; // power
+    payload[1] = climate_mode_to_daikin(this->pending.mode);
+    payload[2] = (static_cast<int16_t>(this->pending.setpoint) / 5) + 28;
+    payload[3] = static_cast<char>(this->pending.fan);
     this->serial.send_frame(tx_command, payload);
     return;
   }
 
   if (activate_swing_mode) {
     this->activate_swing_mode = false;
-    tx_command = "D5";
-    payload[0] = climate_swing_mode_to_daikin(pending.swing);
-    payload[1] = (pending.swing != climate::CLIMATE_SWING_OFF) ? '?' : '0';
+    this->tx_command = "D5";
+    payload[0] = climate_swing_mode_to_daikin(this->pending.swing);
+    payload[1] = (this->pending.swing != climate::CLIMATE_SWING_OFF) ? '?' : '0';
     payload[2] = '0';
     payload[3] = '0';
     this->serial.send_frame(tx_command, payload);
     return;
   }
+
+  if (activate_preset) {
+    // potentially a two stage operation -- first disabling the old, then enabling the new
+    climate::ClimatePreset preset;
+    bool enable;
+    if ((this->active.preset != this->pending.preset) && (this->active.preset != climate::CLIMATE_PRESET_NONE)) {
+      preset = this->active.preset;
+      enable = false;
+    } else {
+      
+      preset = this->pending.preset;
+      enable = true;
+    }
+
+    switch (preset) {
+    case climate::CLIMATE_PRESET_BOOST:  // powerful
+      this->tx_command = "D6";
+      payload[0] = enable ? '2' : '0';
+      payload[1] = '0';
+      payload[2] = '0';
+      payload[3] = '0';
+      break;
+    case climate::CLIMATE_PRESET_ECO: // econo
+      this->tx_command = "D7";
+      payload[0] = '0';
+      payload[1] = enable ? '2' : '0';
+      payload[2] = '0';
+      payload[3] = '0';
+      break;
+    case climate::CLIMATE_PRESET_NONE:
+    default:
+      break;
+    }
+
+    // we don't need to execute again if we have set the preset or just wanted to disable the existing
+    if (enable || (this->pending.preset == climate::CLIMATE_PRESET_NONE)) {
+      this->activate_preset = false;
+    }
+    this->serial.send_frame(tx_command, payload);
+    return;
+  }
   
   // Periodic polling queries
-  if (current_query != queries.end()) {
-    tx_command = *current_query;  // query scan underway, continue
+  if (this->current_query != this->queries.end()) {
+    this->tx_command = *current_query;  // query scan underway, continue
     this->serial.send_frame(tx_command);
     return;
   }
@@ -451,6 +492,15 @@ void DaikinS21::tx_next() {
   // Polling query scan complete
   refine_queries();
   if (this->ready.all()) {
+    // process results
+    this->action_resolved = resolve_climate_action();
+    if (this->modifiers[ModifierPowerful]) {
+      this->active.preset = climate::CLIMATE_PRESET_BOOST;
+    } else if (this->modifiers[ModifierEcono]) {
+      this->active.preset = climate::CLIMATE_PRESET_ECO;
+    } else {
+      this->active.preset = climate::CLIMATE_PRESET_NONE;
+    }
     // signal there's fresh data
     this->binary_sensor_callback_.call(this->unit_state, this->system_state);
     this->climate_callback_.call();
@@ -490,14 +540,11 @@ void DaikinS21::parse_ack() {
   switch (rcode[0]) {
     case 'D':  // D -> D (fake response, see above)
       switch (rcode[1]) {
-        case '1':
-          // climate setting applied
-          break;
-        case '5':
-          // swing settings applied
-          break;
-        default:
-          break;
+        case '1': break; // climate setting applied
+        case '5': break; // swing settings applied
+        case '6': break; // powerful setting applied
+        case '7': break; // econo setting applied
+        default: break;
       }
       return;
 
@@ -506,10 +553,10 @@ void DaikinS21::parse_ack() {
         case '1':  // F1 -> G1 Basic State
           if (payload[0] == '0') {
             this->active.mode = climate::CLIMATE_MODE_OFF;
-            this->climate_action = climate::CLIMATE_ACTION_OFF;
+            this->action_reported = climate::CLIMATE_ACTION_OFF;
           } else {
             this->active.mode = daikin_to_climate_mode(payload[1]);
-            this->climate_action = daikin_to_climate_action(payload[1]);
+            this->action_reported = daikin_to_climate_action(payload[1]);
           }
           this->active.setpoint = (payload[2] - 28) * 5;  // Celsius * 10
           // fan mode in payload[3], silent mode not reported so prefer RG
@@ -602,7 +649,8 @@ void DaikinS21::parse_ack() {
           return;
         case 'z':
           if ((rcode[2] == 'B') && (rcode[3] == '2')) { // FzB2 -> GzB2 Unit state
-            this->unit_state = ahex_u8_le(payload[0], payload[1]);  // todo only ahex_digit should be necessary
+            this->unit_state = ahex_digit(payload[0]);
+            this->modifiers[ModifierPowerful] = this->unit_state.powerful();  // if G6 is unsupported we can still read out powerful set by remote
           }
           else if ((rcode[2] == 'C') && (rcode[3] == '3')) { // FzC3 -> GzC3 System state
             this->system_state = ahex_u8_le(payload[0], payload[1]);
@@ -729,14 +777,12 @@ void DaikinS21::setup() {
       // Basic sensor support
       "F9", "RH", "RI", "RL", "Ra",
       // Standard:
-      "F1", "F2", "F5",
+      "F1", "F2", "F5", "F6", "F7",
       "RG", "RX",
       "Rb", "Rd",
       // State
       "RzB2",
       "RzC3",
-      // Untested (no support for me):
-      // "F6", "F7",
       // redundant:
       // "RB", "RC", "RF",
       // unused:
@@ -805,9 +851,10 @@ void DaikinS21::dump_state() {
       str_repr(this->detect_responses.M).c_str(),
       str_repr(this->detect_responses.V).c_str());
   }
-  ESP_LOGD(TAG, "   Mode: %s  Action: %s",
+  ESP_LOGD(TAG, "   Mode: %s  Action: %s  Preset: %s",
           LOG_STR_ARG(climate::climate_mode_to_string(this->active.mode)),
-          LOG_STR_ARG(climate::climate_action_to_string(this->get_climate_action())));
+          LOG_STR_ARG(climate::climate_action_to_string(this->get_climate_action())),
+          LOG_STR_ARG(climate::climate_preset_to_string(this->active.preset)));
   ESP_LOGD(TAG, "    Fan: %" PRI_SV " (%" PRIu16 " RPM)  Swing: %s",
           PRI_SV_ARGS(daikin_fan_mode_to_string_view(this->active.fan)), this->fan_rpm,
           (this->support_swing ? LOG_STR_ARG(climate::climate_swing_mode_to_string(this->active.swing)) : "unsupported"));
@@ -824,7 +871,7 @@ void DaikinS21::dump_state() {
   }
   ESP_LOGD(TAG, " Demand: %" PRIu8, this->get_demand());
   ESP_LOGD(TAG, " Cycle Time: %" PRIu32 "ms", this->cycle_time_ms);
-  ESP_LOGD(TAG, " UnitState: %" PRIX8 " SysState: %02" PRIX8, this->unit_state, this->system_state);
+  ESP_LOGD(TAG, " UnitState: %" PRIX8 " SysState: %02" PRIX8, this->unit_state.raw, this->system_state.raw);
   if (this->debug_protocol) {
     const auto comma_join = [](const auto& queries) {
       std::string str;
@@ -855,23 +902,26 @@ void DaikinS21::set_climate_settings(const DaikinSettings &settings) {
     // to the unsupported (by this project) CLIMATE_MODE_AUTO in order to detect
     // this one time condition here.
     if (pending.mode == climate::CLIMATE_MODE_AUTO) {
-      activate_swing_mode = true; // flush swing settings to the unit even if there's no apparent change
+      activate_swing_mode = true;
+      activate_preset = true;
     }
 
-    pending.mode = settings.mode;
-    pending.setpoint = settings.setpoint;
-    pending.fan = settings.fan;
     activate_climate = true;
   }
 
   if (pending.swing != settings.swing) {
-    pending.swing = settings.swing;
     activate_swing_mode = true;
   }
+
+  if (pending.preset != settings.preset) {
+    activate_preset = true;
+  }
+
+  pending = settings;
 }
 
-climate::ClimateAction DaikinS21::get_climate_action() {
-  switch (get_climate_mode()) {
+climate::ClimateAction DaikinS21::resolve_climate_action() {
+  switch (this->get_climate_mode()) {
     // modes where the unit is trying to reach a temperature
     case climate::CLIMATE_MODE_HEAT_COOL:
     case climate::CLIMATE_MODE_COOL:
@@ -891,14 +941,14 @@ climate::ClimateAction DaikinS21::get_climate_action() {
     default:
       break;
   }
-  return this->climate_action;
+  return this->action_reported;
 }
 
 void DaikinS21::add_climate_callback(std::function<void(void)> &&callback) {
   this->climate_callback_.add(std::move(callback));
 }
 
-void DaikinS21::add_binary_sensor_callback(std::function<void(uint8_t, uint8_t)> &&callback) {
+void DaikinS21::add_binary_sensor_callback(std::function<void(DaikinUnitState, DaikinSystemState)> &&callback) {
   this->binary_sensor_callback_.add(std::move(callback));
 }
 
