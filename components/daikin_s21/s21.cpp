@@ -31,7 +31,7 @@ uint8_t climate_mode_to_daikin(const climate::ClimateMode mode) {
     case climate::CLIMATE_MODE_FAN_ONLY:
       return '6';
     case climate::CLIMATE_MODE_DRY:
-      return '2';    
+      return '2';
   }
 }
 
@@ -49,7 +49,7 @@ climate::ClimateMode daikin_to_climate_mode(const uint8_t mode) {
     case '4': // heat
       return climate::CLIMATE_MODE_HEAT;
     case '6': // fan_only
-      return climate::CLIMATE_MODE_FAN_ONLY;      
+      return climate::CLIMATE_MODE_FAN_ONLY;
   }
 }
 
@@ -67,7 +67,7 @@ climate::ClimateAction daikin_to_climate_action(const uint8_t action) {
     case '7': // heat_cool heating
       return climate::CLIMATE_ACTION_HEATING;
     case '6': // fan_only
-      return climate::CLIMATE_ACTION_FAN;      
+      return climate::CLIMATE_ACTION_FAN;
   }
 }
 
@@ -234,7 +234,7 @@ DaikinSerial::Result DaikinSerial::handle_rx(const uint8_t byte) {
         }
       }
       break;
-      
+
     default:
       break;
   }
@@ -318,7 +318,7 @@ DaikinSerial::Result DaikinSerial::send_frame(std::string_view cmd, const std::s
     if (payload.empty()) {
       ESP_LOGD(TAG, "Tx: %" PRI_SV, PRI_SV_ARGS(cmd));
     } else {
-      ESP_LOGD(TAG, "Tx: %" PRI_SV " %s %s", 
+      ESP_LOGD(TAG, "Tx: %" PRI_SV " %s %s",
                PRI_SV_ARGS(cmd),
                str_repr(payload).c_str(),
                hex_repr(payload).c_str());
@@ -440,14 +440,14 @@ void DaikinS21::tx_next() {
     this->serial.send_frame(tx_command, payload);
     return;
   }
-  
+
   // Periodic polling queries
   if (current_query != queries.end()) {
     tx_command = *current_query;  // query scan underway, continue
     this->serial.send_frame(tx_command);
     return;
   }
-  
+
   // Polling query scan complete
   refine_queries();
   if (this->ready.all()) {
@@ -455,14 +455,16 @@ void DaikinS21::tx_next() {
     this->binary_sensor_callback_.call(this->unit_state, this->system_state);
     this->climate_callback_.call();
   }
-  
+
   // Start fresh polling query scan (only after current scan is complete)
   this->current_query = queries.begin();
   this->tx_command = *current_query;
   uint32_t now = millis();
   this->cycle_time_ms = now - this->cycle_time_start_ms;
   this->cycle_time_start_ms = now;
-  this->serial.send_frame(tx_command);
+  // Disable loop not send frame.  Next time we are asked to update we will start back at the beginning.
+  this->disable_loop();
+  this->running_cycle = false;
 }
 
 static DaikinC10 temp_bytes_to_c10(std::span<const uint8_t> bytes) { return bytes_to_num(bytes); }
@@ -484,6 +486,7 @@ void DaikinS21::parse_ack() {
     rcode = { serial.response.begin(), tx_command.size() };
     payload = { serial.response.begin() + rcode.size(), serial.response.end() };
     // query response reveived, move to the next one
+
     current_query++;
   }
 
@@ -541,7 +544,9 @@ void DaikinS21::parse_ack() {
         case '9':  // F9 -> G9 -- Temperature and humidity, better granularity in RH, Ra and Re
           this->temp_inside = temp_f9_byte_to_c10(payload[0]);  // 1 degree
           this->temp_outside = temp_f9_byte_to_c10(payload[1]); // 1 degree, danijelt reports 0xFF when unsupported
-          this->humidity = payload[2] - '0';  // 5%, danijelt reports 0xFF when unsupported
+          if ((payload[2] - '0') <= 100) {  // Don't want a humidity of 207% if this is 0xFF...
+            this->humidity = payload[2] - '0';  // 5%, danijelt reports 0xFF when unsupported
+          }
           return;
         case 'C':  // FC -> GC -- Model code (hex, not reversed here)
           std::copy_n(std::begin(payload), std::min(payload.size(), this->detect_responses.GC.size()), std::begin(this->detect_responses.GC));
@@ -680,7 +685,7 @@ void DaikinS21::handle_nak() {
  * Determine the protocol version according to Faikin documentation.
  *
  * @note This is mostly untested, I own only one Daikin system.
- * 
+ *
  * @return true protocl version was detected
  * @return false protocol version wasn't detected
  */
@@ -693,7 +698,8 @@ bool DaikinS21::determine_protocol_version() {
     this->protocol_version = {0,0};
     return true;
   }
-  if (std::ranges::equal(this->detect_responses.G8, G8_version2or3) && (is_query_active("FY00") == false)) {
+  if ((std::ranges::equal(this->detect_responses.G8, G8_version2or3) || std::ranges::equal(this->detect_responses.G8, G8_version31plus))
+       && (is_query_active("FY00") == false)) {
     this->protocol_version = {2,0};  // NAK rules out 3.0
     return true;
   }
@@ -717,6 +723,7 @@ bool DaikinS21::determine_protocol_version() {
     default:
       break;
   }
+  ESP_LOGE(TAG, "Unable to detect a protocol version, will not function: %s, %d", str_repr(this->detect_responses.G8).c_str(), this->detect_responses.GY00);
   return false; // not detected yet or unsupported
 }
 
@@ -754,6 +761,10 @@ void DaikinS21::setup() {
   };
   // clang-format on
   current_query = queries.begin();
+  // Wait for the first update to run a cycle.
+  // Introduces a small delay but also allows early logs to be captured.
+  this->running_cycle = false;
+  this->disable_loop();
 }
 
 void DaikinS21::loop() {
@@ -773,6 +784,7 @@ void DaikinS21::loop() {
       break;
 
     case Result::Error:
+      ESP_LOGE(TAG, "Serial ERROR for %" PRI_SV, PRI_SV_ARGS(tx_command));
       current_query = queries.end();
       activate_climate = false;
       activate_swing_mode = false;
@@ -790,6 +802,17 @@ void DaikinS21::loop() {
 void DaikinS21::update() {
   if (this->debug_protocol) {
     this->dump_state();
+  }
+  this->run_cycle();
+}
+
+// Capture the cycle start time for debugging and enable the loop to run a cycle.
+// If a cycle is already running then do nothing.
+void DaikinS21::run_cycle() {
+  if (!this->running_cycle) {
+    this->cycle_time_start_ms = millis();
+    this->running_cycle = true;
+    this->enable_loop();
   }
 }
 
@@ -862,11 +885,13 @@ void DaikinS21::set_climate_settings(const DaikinSettings &settings) {
     pending.setpoint = settings.setpoint;
     pending.fan = settings.fan;
     activate_climate = true;
+    this->run_cycle();
   }
 
   if (pending.swing != settings.swing) {
     pending.swing = settings.swing;
     activate_swing_mode = true;
+    this->run_cycle();
   }
 }
 
