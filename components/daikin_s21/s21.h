@@ -32,14 +32,14 @@ public:
     Timeout,
     Busy,
   };
-  
+
   DaikinSerial() {};
   DaikinSerial(uart::UARTComponent *tx, uart::UARTComponent *rx);
-  
+
   Result service();
   Result send_frame(std::string_view cmd, std::span<const uint8_t> payload = {});
   void flush_input();
-  
+
   std::vector<uint8_t> response{};
   bool debug{false};
 
@@ -81,7 +81,7 @@ struct DaikinC10 {
   constexpr float f_degf() const { return celsius_to_fahrenheit(static_cast<float>(*this)); }
 
   constexpr bool operator==(const DaikinC10 &other) const = default;
-  
+
 private:
   int16_t value{};
 };
@@ -102,6 +102,7 @@ class DaikinS21 : public PollingComponent {
   void update() override;
   void dump_config() override;
 
+  void run_cycle();
   void set_uarts(uart::UARTComponent *tx, uart::UARTComponent *rx) { this->serial = {tx, rx}; }
   void set_debug_comms(bool set) { this->serial.debug = set; }
   void set_debug_protocol(bool set) { this->debug_protocol = set; }
@@ -171,7 +172,7 @@ class DaikinS21 : public PollingComponent {
   std::vector<std::string_view> queries{};
   std::vector<std::string_view>::iterator current_query{};
   std::string_view tx_command{};  // used when matching responses - backing value must have persistent lifetime across serial state machine runs
-  
+
   // debugging support
   bool debug_protocol{false};
   std::unordered_map<std::string, std::vector<uint8_t>> val_cache{};
@@ -214,6 +215,7 @@ class DaikinS21 : public PollingComponent {
   bool support_swing{};
   bool support_horizontal_swing{};
   bool support_humidity{};
+  bool running_cycle{};
 };
 
 }  // namespace daikin_s21
