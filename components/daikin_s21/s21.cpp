@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cinttypes>
 #include <numeric>
+#include "esphome/core/application.h"
 #include "s21.h"
 
 using namespace esphome;
@@ -108,17 +109,12 @@ int16_t bytes_to_num(std::span<const uint8_t> bytes) {
   return val;
 }
 
-DaikinSerial::DaikinSerial(uart::UARTComponent *tx, uart::UARTComponent *rx) {
-  this->tx_uart = tx;
-  this->rx_uart = rx;
-
-  for (auto *uart : {this->tx_uart, this->rx_uart}) {
-    uart->set_baud_rate(2400);
-    uart->set_stop_bits(2);
-    uart->set_data_bits(8);
-    uart->set_parity(uart::UART_CONFIG_PARITY_EVEN);
-    uart->load_settings();
-  }
+DaikinSerial::DaikinSerial(uart::UARTComponent &uart) : uart(uart) {
+  this->uart.set_baud_rate(2400);
+  this->uart.set_stop_bits(2);
+  this->uart.set_data_bits(8);
+  this->uart.set_parity(uart::UART_CONFIG_PARITY_EVEN);
+  this->uart.load_settings();
 }
 
 void DaikinS21::dump_config() {
@@ -255,6 +251,14 @@ DaikinSerial::Result DaikinSerial::service() {
   switch (this->comm_state) {
     case CommState::AckResponseDelay:
       delay_period_ms = 45; // official remote delay time before ACKing a response
+      {
+        // Reduce the delay period by the number of character times waiting for the scheduler
+        // to call loop() since the final ETX was received. This is very minor and can go away
+        // once TODO this is timer event driven.
+        constexpr uint32_t char_time = 1000 / (2400 / (1+8+2+1));
+        const int chars_per_loop = App.get_loop_interval() / char_time;
+        delay_period_ms -= std::max(chars_per_loop - this->rx_bytes_last_call, 0) * char_time;
+      }
       break;
     case CommState::NextTxDelay:
       delay_period_ms = 35; // official remote delay time between commands
@@ -266,12 +270,12 @@ DaikinSerial::Result DaikinSerial::service() {
       delay_period_ms = 250;  // character timeout when expecting a response from the unit
       break;
   }
-  bool timeout = (now - last_event_time_ms) > delay_period_ms;
+  const bool timeout = (now - this->last_event_time_ms) > delay_period_ms;
 
   switch (this->comm_state) {
     case CommState::AckResponseDelay:
       if (timeout) {
-        this->tx_uart->write_byte(ACK);
+        this->uart.write_byte(ACK);
         this->last_event_time_ms = now;
         this->comm_state = CommState::NextTxDelay;
       }
@@ -292,11 +296,13 @@ DaikinSerial::Result DaikinSerial::service() {
         result = Result::Timeout;
         break;
       }
-      while ((result == Result::Busy) && this->rx_uart->available()) {  // read all available bytes
+      this->rx_bytes_last_call = 0;
+      while ((result == Result::Busy) && this->uart.available()) {  // read all available bytes
         last_event_time_ms = now;
         uint8_t byte;
-        this->rx_uart->read_byte(&byte);
+        this->uart.read_byte(&byte);
         result = this->handle_rx(byte);
+        this->rx_bytes_last_call++;
       }
       break;
   }
@@ -330,18 +336,18 @@ DaikinSerial::Result DaikinSerial::send_frame(std::string_view cmd, const std::s
   this->flush_input();
 
   // transmit
-  this->tx_uart->write_byte(STX);
-  this->tx_uart->write_array(reinterpret_cast<const uint8_t *>(cmd.data()), cmd.size());
+  this->uart.write_byte(STX);
+  this->uart.write_array(reinterpret_cast<const uint8_t *>(cmd.data()), cmd.size());
   uint8_t checksum = std::reduce(cmd.begin(), cmd.end(), 0U);
   if (payload.empty() == false) {
-    this->tx_uart->write_array(payload.data(), payload.size());
+    this->uart.write_array(payload.data(), payload.size());
     checksum = std::reduce(payload.begin(), payload.end(), checksum);
   }
   if (checksum == STX) {
     checksum = ENQ;  // mid-message STX characters are escaped
   }
-  this->tx_uart->write_byte(checksum);
-  this->tx_uart->write_byte(ETX);
+  this->uart.write_byte(checksum);
+  this->uart.write_byte(ETX);
 
   // wait for result
   this->last_event_time_ms = millis();
@@ -351,9 +357,9 @@ DaikinSerial::Result DaikinSerial::send_frame(std::string_view cmd, const std::s
 }
 
 void DaikinSerial::flush_input() {  // would be a nice ESPHome API improvement
-  while (this->rx_uart->available()) {
+  while (this->uart.available()) {
     uint8_t byte;
-    this->rx_uart->read_byte(&byte);
+    this->uart.read_byte(&byte);
   }
 }
 

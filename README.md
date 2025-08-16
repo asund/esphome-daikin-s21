@@ -3,7 +3,7 @@
 ESPHome component to control Daikin indoor mini-split units with s21 ports.
 
 Many thanks to the work by [revk][1] on the fantastic [Faikin][2] project, which
-was the primary inspiration and guide for building this ESPHome component. In 
+was the primary inspiration and guide for building this ESPHome component. In
 addition, the very active and resourceful community that project has fostered
 that has decoded much of the protocol.
 
@@ -77,7 +77,7 @@ plug pins are at standard 2.5mm pin header widths.
 joshbenner uses the board designed by [revk][1] available [here][3]. Note that
 revk's design includes a FET that inverts the logic levels on the ESP's RX pin,
 which required using two separate UART devices to get around an ESPHome limit
-on having pins inverted differently.
+on having pins inverted differently using the Arduino framework.
 
 ### PCB Option 2
 
@@ -108,8 +108,9 @@ encounter issues and help me learn more about the output of different models.
 * Let me know how useful the binary sensor values are and which just shadow other
 sensor values.
 * If you have a revk module with an inverting RX pin, let me know if using a single
-UART configuration and inverting the RX line with ESPHome's pin schema works. If so,
-I can remove this custom code and simplify configuration and the internal code.
+UART configuration and inverting the RX line with ESPHome's pin schema works with
+ESP-IDF and (when it's working again) the Arduino framework. i.e. Not using the
+split_uart component. If so, I can remove this custom code and simplify configuration.
 
 See existing issues or open a new one with your findings. Thanks.
 
@@ -128,7 +129,7 @@ logger:
 
 external_components:
   - source: github://asund/esphome-daikin-s21@main
-    components: [ daikin_s21 ]
+    components: [ daikin_s21, split_uart ]
 
 uart:
   - id: s21_uart
@@ -136,10 +137,10 @@ uart:
     rx_pin: GPIO3
     baud_rate: 2400
 
-# The base UART communication hub.
+# The parent UART communication hub platform.
 daikin_s21:
-  tx_uart: s21_uart
-  rx_uart: s21_uart
+  uart_id: s21_uart
+  # update_interval: 15s  # supports periodic polling instead of more responsive free run
 
 climate:
   - name: My Daikin
@@ -181,7 +182,7 @@ sensor:
       name: Humidity
     demand:
       name: Demand  # 0-15 demand units, use filter to map to %
-      filters:  
+      filters:
         - multiply: !lambda return 100.0F / 15.0F;
   - platform: homeassistant
     id: room_temp
@@ -226,12 +227,16 @@ uart:
     parity: EVEN
     stop_bits: 2
 
-daikin_s21:
+split_uart:
+  id: split_uart_1
   tx_uart: s21_tx
   rx_uart: s21_rx
+
+daikin_s21:
+  uart_id: split_uart_1
 ```
 
-Here's an example of a single UART using direct wiring:
+Here's an example of a single UART using direct wiring (you can leave out the split_uart component import as well):
 
 ```yaml
 uart:
@@ -243,8 +248,7 @@ uart:
         open_drain: true  # daikin pulls up to 5V internally
     rx_pin: GPIO44
     baud_rate: 2400
-  
+
 daikin_s21:
-  tx_uart: s21_uart
-  rx_uart: s21_uart
+  uart_id: s21_uart
 ```

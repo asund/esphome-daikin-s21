@@ -33,8 +33,7 @@ public:
     Busy,
   };
 
-  DaikinSerial() {};
-  DaikinSerial(uart::UARTComponent *tx, uart::UARTComponent *rx);
+  DaikinSerial(uart::UARTComponent &uart);
 
   Result service();
   Result send_frame(std::string_view cmd, std::span<const uint8_t> payload = {});
@@ -57,9 +56,9 @@ private:
     ErrorDelay,
   };
 
-  uart::UARTComponent *tx_uart{};
-  uart::UARTComponent *rx_uart{};
+  uart::UARTComponent &uart;
   CommState comm_state{};
+  uint8_t rx_bytes_last_call{};
   uint32_t last_event_time_ms{};
 };
 
@@ -122,12 +121,13 @@ struct DaikinSettings {
 
 class DaikinS21 : public PollingComponent {
  public:
+  DaikinS21(uart::UARTComponent *uart) : serial(*uart) {} // required in config, non-null
+
   void setup() override;
   void loop() override;
   void update() override;
   void dump_config() override;
 
-  void set_uarts(uart::UARTComponent *tx, uart::UARTComponent *rx) { this->serial = {tx, rx}; }
   void set_debug_comms(bool set) { this->serial.debug = set; }
   void set_debug_protocol(bool set) { this->debug_protocol = set; }
 
