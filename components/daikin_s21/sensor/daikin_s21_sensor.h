@@ -3,7 +3,7 @@
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/core/component.h"
 #include "esphome/core/helpers.h"
-#include "../s21.h"
+#include "../daikin_s21_types.h"
 
 namespace esphome::daikin_s21 {
 
@@ -15,6 +15,9 @@ class DaikinS21Sensor : public PollingComponent,
 
   void set_temp_inside_sensor(sensor::Sensor *sensor) {
     this->temp_inside_sensor_ = sensor;
+  }
+  void set_temp_target_sensor(sensor::Sensor *sensor) {
+    this->temp_target_sensor_ = sensor;
   }
   void set_temp_outside_sensor(sensor::Sensor *sensor) {
     this->temp_outside_sensor_ = sensor;
@@ -46,6 +49,7 @@ class DaikinS21Sensor : public PollingComponent,
 
  protected:
   sensor::Sensor *temp_inside_sensor_{};
+  sensor::Sensor *temp_target_sensor_{};
   sensor::Sensor *temp_outside_sensor_{};
   sensor::Sensor *temp_coil_sensor_{};
   sensor::Sensor *fan_speed_sensor_{};

@@ -1,12 +1,8 @@
 #pragma once
 
 #include <bitset>
-#include <compare>
-#include <functional>
-#include <limits>
 #include <optional>
 #include <span>
-#include <string>
 #include <string_view>
 #include <vector>
 #include "esphome/components/climate/climate.h"
@@ -15,79 +11,9 @@
 #include "daikin_s21_fan_modes.h"
 #include "daikin_s21_queries.h"
 #include "daikin_s21_serial.h"
+#include "daikin_s21_types.h"
 
 namespace esphome::daikin_s21 {
-
-class ProtocolVersion {
- public:
-  uint8_t major{};
-  uint8_t minor{};
-
-  auto operator<=>(const ProtocolVersion&) const = default;
-};
-
-inline constexpr ProtocolVersion ProtocolUndetected{0xFF, 0xFF};
-inline constexpr ProtocolVersion ProtocolUnknown{0,0xFF};  // treat as a protocol 0
-
-/**
- * Class representing a temperature in degrees C scaled by 10, the most granular internal temperature measurement format
- */
-class DaikinC10 {
- public:
-  constexpr DaikinC10() = default;
-
-  template <typename T, typename std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
-  constexpr DaikinC10(const T valf) : value((static_cast<int16_t>(valf * 10 * 2) + 1) / 2) {} // round to nearest 0.1C
-
-  template <typename T, typename std::enable_if_t<std::is_integral_v<T>, bool> = true>
-  constexpr DaikinC10(const T vali) : value(vali) {}
-
-  explicit constexpr operator float() const { return value / 10.0F; }
-  explicit constexpr operator int16_t() const { return value; }
-  constexpr float f_degc() const { return static_cast<float>(*this); }
-  constexpr float f_degf() const { return celsius_to_fahrenheit(static_cast<float>(*this)); }
-
-  constexpr bool operator==(const DaikinC10 &other) const = default;
-
- private:
-  int16_t value{};
-};
-
-/**
- * Unit state (RzB2) bitfield decoder
- */
-class DaikinUnitState {
- public:
-  constexpr DaikinUnitState(const uint8_t value = 0U) : raw(value) {}
-  constexpr bool powerful() const { return (this->raw & 0x1) != 0; }
-  constexpr bool defrost() const { return (this->raw & 0x2) != 0; }
-  constexpr bool active() const { return (this->raw & 0x4) != 0; }
-  constexpr bool online() const { return (this->raw & 0x8) != 0; }
-  uint8_t raw{};
-};
-
-/**
- * System state (RzC3) bitfield decoder
- */
-class DaikinSystemState {
- public:
-  constexpr DaikinSystemState(const uint8_t value = 0U) : raw(value) {}
-  constexpr bool locked() const { return (this->raw & 0x01) != 0; }
-  constexpr bool active() const { return (this->raw & 0x04) != 0; }
-  constexpr bool defrost() const { return (this->raw & 0x08) != 0; }
-  constexpr bool multizone_conflict() const { return (this->raw & 0x20) != 0; }
-  uint8_t raw{};
-};
-
-struct DaikinClimateSettings {
-  climate::ClimateMode mode{climate::CLIMATE_MODE_OFF};
-  DaikinC10 setpoint{23};
-  climate::ClimateSwingMode swing{climate::CLIMATE_SWING_OFF};
-  DaikinFanMode fan{DaikinFanMode::Auto};
-  climate::ClimatePreset preset{climate::CLIMATE_PRESET_NONE};
-
-  constexpr bool operator==(const DaikinClimateSettings &other) const = default;
-};
 
 class DaikinS21 : public PollingComponent {
  public:
@@ -108,12 +34,13 @@ class DaikinS21 : public PollingComponent {
   // value accessors
   bool is_ready() { return this->ready.all(); }
   const DaikinClimateSettings& get_climate_settings() { return this->current.climate; };
-  climate::ClimateMode get_climate_mode() { return this->current.climate.mode; }
-  climate::ClimateAction get_climate_action() { return this->current.action; }
-  auto get_setpoint() { return this->current.climate.setpoint.f_degc(); }
-  auto get_temp_inside() { return this->temp_inside.f_degc(); }
-  auto get_temp_outside() { return this->temp_outside.f_degc(); }
-  auto get_temp_coil() { return this->temp_coil.f_degc(); }
+  auto get_climate_mode() { return this->current.climate.mode; }
+  auto get_climate_action() { return this->current.action; }
+  auto get_setpoint() { return this->current.climate.setpoint; }
+  auto get_temp_inside() { return this->temp_inside; }
+  auto get_temp_target() { return this->temp_target; }
+  auto get_temp_outside() { return this->temp_outside; }
+  auto get_temp_coil() { return this->temp_coil; }
   auto get_fan_rpm_setpoint() { return this->current.fan_rpm_setpoint; }
   auto get_fan_rpm() { return this->current.fan_rpm; }
   auto get_swing_vertical_angle_setpoint() { return this->current.swing_vertical_angle_setpoint; }
@@ -125,6 +52,7 @@ class DaikinS21 : public PollingComponent {
   auto get_demand() { return this->demand; }
   auto get_unit_state() { return this->current.unit_state; }
   auto get_system_state() { return this->current.system_state; }
+  bool is_active() { return this->current.active; }
 
   // callbacks for serial events
   void handle_serial_result(DaikinSerial::Result result, std::span<uint8_t> response = {});
@@ -207,9 +135,10 @@ class DaikinS21 : public PollingComponent {
     int16_t swing_vertical_angle{};
     uint16_t ir_counter{};
     uint16_t power_consumption{};
-    DaikinUnitState unit_state{0x4};  // not always supported, default to active for action reporting
+    DaikinUnitState unit_state{};
     DaikinSystemState system_state{};
     // modifiers
+    bool active{true};  // actively using the compressor, pulled from unit_state when present. default to true for action reporting when missing.
     bool quiet{};       // outdoor unit fan/compressor limit
     bool econo{};       // limits demand for power consumption
     bool powerful{};    // maximum output (20 minute timeout), mutaully exclusive with quiet and econo
@@ -240,6 +169,7 @@ class DaikinS21 : public PollingComponent {
   ProtocolVersion protocol_version{ProtocolUndetected};
   struct {
     // for alternate readout
+    bool fan_mode_query{};
     bool inside_temperature_query{};
     bool outside_temperature_query{};
     bool humidity_query{};

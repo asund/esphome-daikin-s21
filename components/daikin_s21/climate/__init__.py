@@ -7,6 +7,10 @@ import esphome.config_validation as cv
 from esphome.components import climate, sensor
 from esphome.components.climate import ClimateMode, ClimatePreset
 from esphome.const import (
+    CONF_HUMIDITY_SENSOR,
+    CONF_MAX_TEMPERATURE,
+    CONF_MIN_TEMPERATURE,
+    CONF_SENSOR,
     CONF_SUPPORTED_MODES,
     CONF_SUPPORTED_PRESETS,
 )
@@ -17,7 +21,7 @@ from .. import (
 )
 
 DaikinS21Climate = daikin_s21_ns.class_(
-    "DaikinS21Climate", climate.Climate, cg.Component
+    "DaikinS21Climate", climate.Climate, cg.PollingComponent
 )
 
 SUPPORTED_CLIMATE_MODES_OPTIONS = {
@@ -34,22 +38,25 @@ SUPPORTED_CLIMATE_PRESETS_OPTIONS = {
     "BOOST": ClimatePreset.CLIMATE_PRESET_BOOST,
 }
 
-CONF_ROOM_TEMPERATURE_SENSOR = "room_temperature_sensor"
-CONF_SUPPORTS_HUMIDITY = "supports_humidity"
-CONF_SETPOINT_INTERVAL = "setpoint_interval"
+CONF_MAX_HEAT_TEMPERATURE = "max_heat_temperature"
+CONF_MIN_COOL_TEMPERATURE = "min_cool_temperature"
 
 CONFIG_SCHEMA = cv.All(
     climate.climate_schema(DaikinS21Climate)
     .extend(
         {
-            cv.Optional(CONF_ROOM_TEMPERATURE_SENSOR): cv.use_id(sensor.Sensor),
-            cv.Optional(CONF_SETPOINT_INTERVAL, default="300s"): cv.positive_time_period_seconds,
+            cv.Optional(CONF_SENSOR): cv.use_id(sensor.Sensor),
+            cv.Optional(CONF_HUMIDITY_SENSOR): cv.use_id(sensor.Sensor),
             cv.Optional(CONF_SUPPORTED_MODES): cv.ensure_list(cv.enum(SUPPORTED_CLIMATE_MODES_OPTIONS, upper=True)),
             cv.Optional(CONF_SUPPORTED_PRESETS): cv.ensure_list(cv.enum(SUPPORTED_CLIMATE_PRESETS_OPTIONS, upper=True)),
-            cv.Optional(CONF_SUPPORTS_HUMIDITY): cv.boolean,
+            cv.Optional(CONF_MAX_TEMPERATURE, default="32"): cv.temperature,
+            cv.Optional(CONF_MAX_HEAT_TEMPERATURE, default="30"): cv.temperature,
+            cv.Optional(CONF_MIN_COOL_TEMPERATURE, default="18"): cv.temperature,
+            cv.Optional(CONF_MIN_TEMPERATURE, default="10"): cv.temperature,
         }
     )
     .extend(S21_PARENT_SCHEMA)
+    .extend(cv.polling_component_schema("0s"))
 )
 
 async def to_code(config):
@@ -57,11 +64,13 @@ async def to_code(config):
     await cg.register_component(var, config)
     await cg.register_parented(var, config[CONF_S21_ID])
 
-    if CONF_ROOM_TEMPERATURE_SENSOR in config:
-        sens = await cg.get_variable(config[CONF_ROOM_TEMPERATURE_SENSOR])
-        cg.add(var.set_room_sensor(sens))
-        if CONF_SETPOINT_INTERVAL in config:
-            cg.add(var.set_setpoint_interval(config[CONF_SETPOINT_INTERVAL]))
+    if CONF_SENSOR in config:
+        sens = await cg.get_variable(config[CONF_SENSOR])
+        cg.add(var.set_temperature_reference_sensor(sens))
+
+    if CONF_HUMIDITY_SENSOR in config:
+        sens = await cg.get_variable(config[CONF_HUMIDITY_SENSOR])
+        cg.add(var.set_humidity_reference_sensor(sens))
 
     if CONF_SUPPORTED_MODES in config:
         cg.add(var.set_supported_modes_override(config[CONF_SUPPORTED_MODES]))
@@ -69,5 +78,14 @@ async def to_code(config):
     if CONF_SUPPORTED_PRESETS in config:
         cg.add(var.set_supported_presets_override(config[CONF_SUPPORTED_PRESETS]))
 
-    if CONF_SUPPORTS_HUMIDITY in config:
-        cg.add(var.set_supports_current_humidity(config[CONF_SUPPORTS_HUMIDITY]))
+    if CONF_MAX_TEMPERATURE in config:
+        cg.add(var.set_max_temperature(config[CONF_MAX_TEMPERATURE]))
+
+    if CONF_MAX_HEAT_TEMPERATURE in config:
+        cg.add(var.set_max_heat_temperature(config[CONF_MAX_HEAT_TEMPERATURE]))
+
+    if CONF_MIN_COOL_TEMPERATURE in config:
+        cg.add(var.set_min_cool_temperature(config[CONF_MIN_COOL_TEMPERATURE]))
+
+    if CONF_MIN_TEMPERATURE in config:
+        cg.add(var.set_min_temperature(config[CONF_MIN_TEMPERATURE]))

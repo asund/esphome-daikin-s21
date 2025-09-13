@@ -3,7 +3,7 @@
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/core/component.h"
 #include "esphome/core/helpers.h"
-#include "../s21.h"
+#include "../daikin_s21_types.h"
 
 namespace esphome::daikin_s21 {
 

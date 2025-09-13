@@ -1,4 +1,5 @@
 #include "daikin_s21_binary_sensor.h"
+#include "../s21.h"
 
 namespace esphome::daikin_s21 {
 
@@ -20,7 +21,7 @@ void DaikinS21BinarySensor::loop() {
     this->defrost_sensor_->publish_state(unit.defrost());
   }
   if (this->active_sensor_ != nullptr) {
-    this->active_sensor_->publish_state(unit.active());  // unit
+    this->active_sensor_->publish_state(this->get_parent()->is_active());  // unit
   }
   if (this->online_sensor_ != nullptr) {
     this->online_sensor_->publish_state(unit.online());

@@ -6,25 +6,29 @@
 #include "esphome/core/helpers.h"
 #include "esphome/core/preferences.h"
 #include "../daikin_s21_fan_modes.h"
-#include "../s21.h"
+#include "../daikin_s21_types.h"
 
 namespace esphome::daikin_s21 {
 
 class DaikinS21Climate : public climate::Climate,
-                         public Component,
+                         public PollingComponent,
                          public Parented<DaikinS21> {
  public:
   void setup() override;
   void loop() override;
+  void update() override;
   void dump_config() override;
   void control(const climate::ClimateCall &call) override;
   void update_handler();
 
   void set_supported_modes_override(std::set<climate::ClimateMode> modes);
   void set_supported_presets_override(std::set<climate::ClimatePreset> presets);
-  void set_supports_current_humidity(bool supports_current_humidity);
-  void set_room_sensor(sensor::Sensor *sensor) { this->room_sensor_ = sensor; }
-  void set_setpoint_interval(uint16_t seconds) { this->setpoint_interval_s = seconds; };
+  void set_temperature_reference_sensor(sensor::Sensor *sensor) { this->temperature_sensor_ = sensor; }
+  void set_humidity_reference_sensor(sensor::Sensor *sensor);
+  void set_max_temperature(DaikinC10 temperature) { this->max_temperature = temperature; };
+  void set_max_heat_temperature(DaikinC10 temperature) { this->max_heat_temperature = temperature; };
+  void set_min_cool_temperature(DaikinC10 temperature) { this->min_cool_temperature = temperature; };
+  void set_min_temperature(DaikinC10 temperature) { this->min_temperature = temperature; };
 
  protected:
   static constexpr const char * command_timeout_name = "cmd";
@@ -33,11 +37,15 @@ class DaikinS21Climate : public climate::Climate,
   climate::ClimateTraits traits_{};
   climate::ClimateTraits traits() override { return traits_; };
 
-  sensor::Sensor *room_sensor_{};
-  uint16_t setpoint_interval_s{};
-  uint32_t last_setpoint_check_ms{millis()};
+  sensor::Sensor *temperature_sensor_{};
+  sensor::Sensor *humidity_sensor_{};
+  DaikinC10 max_temperature{};
+  DaikinC10 max_heat_temperature{};
+  DaikinC10 min_cool_temperature{};
+  DaikinC10 min_temperature{};
 
   bool command_active{};  // ESPHome could use a is_timeout_active()...
+  bool check_setpoint{};
   DaikinClimateSettings commanded{};
 
   ESPPreferenceObject auto_setpoint_pref;
@@ -45,18 +53,14 @@ class DaikinS21Climate : public climate::Climate,
   ESPPreferenceObject heat_setpoint_pref;
 
   void set_custom_fan_mode(DaikinFanMode mode);
-  bool use_room_sensor();
-  bool room_sensor_unit_is_valid();
-  float room_sensor_degc();
-  float get_effective_current_temperature();
-  float get_room_temp_offset();
-  float calc_s21_setpoint();
-  float s21_setpoint_variance();
-  void save_setpoint(float value, ESPPreferenceObject &pref);
-  void save_setpoint(float value);
-  optional<float> load_setpoint(ESPPreferenceObject &pref);
-  optional<float> load_setpoint();
-  bool should_check_setpoint();
+  bool temperature_sensor_unit_is_valid();
+  bool use_temperature_sensor();
+  DaikinC10 temperature_sensor_degc();
+  DaikinC10 get_current_temperature();
+  DaikinC10 calc_s21_setpoint();
+  void save_setpoint(DaikinC10 value);
+  DaikinC10 load_setpoint();
+  float get_current_humidity() const;
   void set_s21_climate();
   void command_timeout_handler();
 };

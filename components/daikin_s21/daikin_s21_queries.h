@@ -6,6 +6,7 @@
 #include <string_view>
 #include <span>
 #include "daikin_s21_serial.h"
+#include "daikin_s21_types.h"
 
 namespace esphome::daikin_s21 {
 
@@ -115,8 +116,6 @@ namespace StateCommand {
   inline constexpr std::string_view DJ{"DJ"};
   inline constexpr std::string_view LouvreAngleSetpoint{"DR"};
 }
-
-class DaikinS21;
 
 using PayloadBuffer = std::array<uint8_t, DaikinSerial::STANDARD_PAYLOAD_SIZE>;
 using ExtendedPayloadBuffer = std::array<uint8_t, DaikinSerial::EXTENDED_PAYLOAD_SIZE>;

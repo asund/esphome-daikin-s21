@@ -35,6 +35,7 @@ DaikinS21Sensor = daikin_s21_ns.class_(
 )
 
 CONF_INSIDE_TEMP = "inside_temperature"
+CONF_TARGET_TEMP = "target_temperature"
 CONF_OUTSIDE_TEMP = "outside_temperature"
 CONF_COIL_TEMP = "coil_temperature"
 CONF_FAN_SPEED = "fan_speed"
@@ -49,6 +50,12 @@ CONFIG_SCHEMA = (
         {
             cv.GenerateID(): cv.declare_id(DaikinS21Sensor),
             cv.Optional(CONF_INSIDE_TEMP): sensor.sensor_schema(
+                unit_of_measurement=UNIT_CELSIUS,
+                accuracy_decimals=1,
+                device_class=DEVICE_CLASS_TEMPERATURE,
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_TARGET_TEMP): sensor.sensor_schema(
                 unit_of_measurement=UNIT_CELSIUS,
                 accuracy_decimals=1,
                 device_class=DEVICE_CLASS_TEMPERATURE,
@@ -123,6 +130,7 @@ async def to_code(config):
 
     sensors = (
         (CONF_INSIDE_TEMP, var.set_temp_inside_sensor),
+        (CONF_TARGET_TEMP, var.set_temp_target_sensor),
         (CONF_OUTSIDE_TEMP, var.set_temp_outside_sensor),
         (CONF_COIL_TEMP, var.set_temp_coil_sensor),
         (CONF_FAN_SPEED, var.set_fan_speed_sensor),

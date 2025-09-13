@@ -1,9 +1,10 @@
-#include <cinttypes>
+#include <cmath>
 #include "esphome/core/defines.h"
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 #include "daikin_s21_climate.h"
 #include "../daikin_s21_fan_modes.h"
+#include "../s21.h"
 #include "../utils.h"
 
 using namespace esphome;
@@ -12,7 +13,11 @@ namespace esphome::daikin_s21 {
 
 static const char *const TAG = "daikin_s21.climate";
 
-constexpr float SETPOINT_STEP = 0.5F; // ESPHome thermostat calculations -- unit's internal support and visual step may differ
+constexpr bool is_setpoint_mode(const climate::ClimateMode mode) {
+  return (mode == climate::CLIMATE_MODE_HEAT_COOL) ||
+         (mode == climate::CLIMATE_MODE_COOL) ||
+         (mode == climate::CLIMATE_MODE_HEAT);
+}
 
 void DaikinS21Climate::setup() {
   uint32_t h = this->get_object_id_hash();
@@ -22,10 +27,26 @@ void DaikinS21Climate::setup() {
   // populate default traits
   this->traits_.set_supports_action(true);
   this->traits_.set_supports_current_temperature(true);
-  this->traits_.set_visual_min_temperature(10.0F);
-  this->traits_.set_visual_max_temperature(32.0F);
-  this->traits_.set_visual_current_temperature_step(0.5F);
-  this->traits_.set_visual_target_temperature_step(1.0F);
+  if (this->visual_min_temperature_override_.has_value()) {
+    this->traits_.set_visual_min_temperature(this->visual_min_temperature_override_.value());
+  } else {
+    this->traits_.set_visual_min_temperature(this->min_temperature.f_degc());
+  }
+  if (this->visual_max_temperature_override_.has_value()) {
+    this->traits_.set_visual_max_temperature(this->visual_max_temperature_override_.value());
+  } else {
+    this->traits_.set_visual_max_temperature(this->max_temperature.f_degc());
+  }
+  if (this->visual_target_temperature_step_override_.has_value()) {
+    this->traits_.set_visual_target_temperature_step(this->visual_target_temperature_step_override_.value());
+  } else {
+    this->traits_.set_visual_target_temperature_step(SETPOINT_STEP.f_degc());
+  }
+  if (this->visual_current_temperature_step_override_.has_value()) {
+    this->traits_.set_visual_current_temperature_step(this->visual_current_temperature_step_override_.value());
+  } else {
+    this->traits_.set_visual_current_temperature_step(TEMPERATURE_STEP.f_degc());
+  }
   this->traits_.set_supported_modes({
       climate::CLIMATE_MODE_OFF,
       climate::CLIMATE_MODE_HEAT_COOL,
@@ -46,13 +67,15 @@ void DaikinS21Climate::setup() {
   // ensure optionals are populated with defaults
   this->set_custom_fan_mode(commanded.fan);
   this->preset = commanded.preset;
+  // initialize setpoint, will be loaded from preferences or unit shortly
+  this->target_temperature = NAN;
   // enable event driven updates
   this->get_parent()->climate_callback = std::bind(&DaikinS21Climate::update_handler, this); // enable update events from DaikinS21
   // allow loop() to execute once to capture the current state (change detection on update requires a "previous" state)
 }
 
 /**
- * ESPHome component loop
+ * ESPHome Component loop
  *
  * Deferred work from update_handler()
  *
@@ -72,72 +95,99 @@ void DaikinS21Climate::loop() {
   if (this->command_active == false) {
     // Allowed to publish, determine if we should
     bool do_publish = false;
+    bool update_unit_setpoint = false;
 
     // Detect and integrate new sensor values into component state
+    const float current_temperature = this->get_current_temperature().f_degc();
+    const float current_humidity = this->get_current_humidity();
     if ((this->action != this->get_parent()->get_climate_action()) ||
-        (this->current_temperature != this->get_effective_current_temperature()) ||
-        (this->current_humidity != this->get_parent()->get_humidity())) {
+        (this->current_temperature != current_temperature) ||
+        (std::isfinite(current_humidity) && (this->current_humidity != current_humidity))) {
       this->action = this->get_parent()->get_climate_action();
-      this->current_temperature = this->get_effective_current_temperature();
-      this->current_humidity = this->get_parent()->get_humidity();
+      this->current_temperature = current_temperature;
+      this->current_humidity = current_humidity;
       do_publish = true;
     }
 
-    // Detect and integrate new settings values into component state
-    if (this->should_check_setpoint()) {
-      this->last_setpoint_check_ms = millis();
+    // update component state
+    this->mode = reported.mode;
+    this->swing_mode = reported.swing;
+    if (this->commanded.fan != reported.fan) {
+      this->set_custom_fan_mode(reported.fan);   // avoid custom string operations until there's a change that requires publishing
+    }
+    this->preset = reported.preset;
 
-      if (this->use_room_sensor()) {
-        ESP_LOGD(TAG, "Room temp from external sensor: %.1f %s (%.1f °C)",
-                this->room_sensor_->get_state(),
-                this->room_sensor_->get_unit_of_measurement().c_str(),
-                this->room_sensor_degc());
-        ESP_LOGD(TAG, "  Offset: %.1f", this->get_room_temp_offset());
-      }
-
+    // update component setpoint
+    if (is_setpoint_mode(reported.mode)) {
       // Target temperature is stored by climate class, and is used to represent
       // the user's desired temperature. This is distinct from the HVAC unit's
       // setpoint because we may be using an external sensor. So we only update
       // the target temperature here if it appears uninitialized.
-      float unexpected_diff = abs(this->commanded.setpoint.f_degc() - reported.setpoint.f_degc());
-      if (this->target_temperature == 0.0F || isnanf(this->target_temperature)) {
+      if (std::isnan(this->target_temperature)) {
         // Use stored setpoint for mode, or fall back to use s21's setpoint.
-        this->target_temperature = this->load_setpoint().value_or(reported.setpoint.f_degc());
-        this->set_s21_climate();
-      } else if (unexpected_diff >= SETPOINT_STEP) {
+        const auto setpoint = this->load_setpoint();
+        this->target_temperature = ((setpoint != TEMPERATURE_INVALID) ? setpoint : reported.setpoint).f_degc();
+        do_publish = true;
+        update_unit_setpoint = true;
+      } else if (this->commanded.setpoint != reported.setpoint) {
         // User probably set temp via IR remote -- so try to honor their wish by
         // matching controller's target value to what they sent via remote.
-        ESP_LOGI(TAG, "Setpoint changed outside controller, updating target temp (expected %.1f, found %.1f)",
+        // This keeps the external temperature sensor in the loop.
+        ESP_LOGI(TAG, "User setpoint changed, updating target temp (was %.1f, now %.1f)",
             this->commanded.setpoint.f_degc(), reported.setpoint.f_degc());
         this->target_temperature = reported.setpoint.f_degc();
-        this->set_s21_climate();
-      } else if (this->s21_setpoint_variance() >= SETPOINT_STEP) {
-        // Room temperature offset has probably changed, so we need to adjust
-        // the s21 setpoint based on the new difference.
-        this->set_s21_climate();
-        ESP_LOGI(TAG, "Setpoint updated to %.1f", this->commanded.setpoint.f_degc());
+        update_unit_setpoint = true;
+      } else if (this->check_setpoint) {
+        // Periodic adjustment of the Daikin setpoint to reflect changes
+        // to the component's reference temperature.
+        this->check_setpoint = false;
+        if (DaikinC10::diff(reported.setpoint, this->calc_s21_setpoint()) >= SETPOINT_STEP) { // in setpoint mode, calculated won't be invalid
+          if (this->use_temperature_sensor()) {
+            ESP_LOGD(TAG, "Temperature from external sensor: %.1f %s (%.1f °C)  Offset: %.1f",
+                this->temperature_sensor_->get_state(),
+                this->temperature_sensor_->get_unit_of_measurement_ref().c_str(),
+                current_temperature,
+                this->get_parent()->get_temp_inside() - this->temperature_sensor_degc());
+          }
+          ESP_LOGI(TAG, "Reference offset changed, updating setpoint");
+          update_unit_setpoint = true;
+        }
+      }
+    } else {
+      // Not a setpoint mode, clear it if set and publish
+      if (std::isfinite(this->target_temperature)) {
+        this->target_temperature = NAN;
+        do_publish = true;
       }
     }
 
-    // If the resulting commanded settings of the above are not being reported we should publish them
+    // If the reported state differs from the last commanded value, update component state and publish an update
     if (this->commanded != reported) {
-      this->mode = reported.mode;
-      this->swing_mode = reported.swing;
-      if (this->commanded.fan != reported.fan) {
-        this->set_custom_fan_mode(reported.fan);   // avoid custom string operations until there's a change that requires publishing
-      }
-      this->preset = reported.preset;
       this->commanded = reported;
       do_publish = true;
     }
 
-    // Only publish when state changed
+    // Publish when state changed
     if (do_publish) {
       this->publish_state();
+    }
+    // Command unit when setpoint changed
+    if (update_unit_setpoint) {
+      this->set_s21_climate();
     }
   }
 
   this->disable_loop(); // wait for updates
+}
+
+/**
+ * ESPHome PollingComponent loop
+ *
+ * Flag to check the setpoint on the next update from the unit
+ * when applicable in the current climate mode.
+ */
+void DaikinS21Climate::update() {
+  this->check_setpoint = true;
 }
 
 /**
@@ -162,16 +212,25 @@ void DaikinS21Climate::update_handler() {
 
 void DaikinS21Climate::dump_config() {
   ESP_LOGCONFIG(TAG, "DaikinS21Climate:");
-  if (this->room_sensor_ != nullptr) {
-    if (!this->room_sensor_unit_is_valid()) {
-      ESP_LOGCONFIG(TAG, "  ROOM SENSOR: INVALID UNIT '%s' (must be °C or °F)",
-                    this->room_sensor_->get_unit_of_measurement().c_str());
+  if (this->temperature_sensor_ != nullptr) {
+    if (this->temperature_sensor_unit_is_valid() == false) {
+      ESP_LOGCONFIG(TAG, "  TEMPERATURE SENSOR: INVALID UNIT '%s' (must be °C or °F)",
+                    this->temperature_sensor_->get_unit_of_measurement_ref().c_str());
     } else {
-      ESP_LOGCONFIG(TAG, "  Room sensor: %s",
-                    this->room_sensor_->get_name().c_str());
-      ESP_LOGCONFIG(TAG, "  Setpoint interval: %" PRIu16 "s", this->setpoint_interval_s);
+      ESP_LOGCONFIG(TAG, "  Temperature sensor: %s",
+                    this->temperature_sensor_->get_name().c_str());
     }
   }
+  if (this->humidity_sensor_ != nullptr) {
+    if ((this->humidity_sensor_->get_unit_of_measurement_ref() != "%")) {
+      ESP_LOGCONFIG(TAG, "  HUMIDITY SENSOR: INVALID UNIT '%s' (must be %)",
+                    this->humidity_sensor_->get_unit_of_measurement_ref().c_str());
+    } else {
+      ESP_LOGCONFIG(TAG, "  Humidity sensor: %s",
+                    this->humidity_sensor_->get_name().c_str());
+    }
+  }
+  ESP_LOGCONFIG(TAG, "  Setpoint interval: %" PRIu32 "s", this->get_update_interval() / 1000);
   this->dump_traits_(TAG);
 }
 
@@ -179,8 +238,6 @@ void DaikinS21Climate::dump_config() {
  * Override supported modes
  *
  * @note Modifies traits, call during setup only
- *
- * @param modes modes to support
  */
 void DaikinS21Climate::set_supported_modes_override(std::set<climate::ClimateMode> modes) {
   this->traits_.set_supported_modes(modes);
@@ -192,8 +249,6 @@ void DaikinS21Climate::set_supported_modes_override(std::set<climate::ClimateMod
  * Override supported presets
  *
  * @note Modifies traits, call during setup only
- *
- * @param presets presets to support
  */
 void DaikinS21Climate::set_supported_presets_override(std::set<climate::ClimatePreset> presets) {
   this->traits_.set_supported_presets(presets);
@@ -201,14 +256,13 @@ void DaikinS21Climate::set_supported_presets_override(std::set<climate::ClimateP
 }
 
 /**
- * Configure to report humidity
+ * Set the humidity sensor used to report the climate humidity.
  *
  * @note Modifies traits, call during setup only
- *
- * @param supports_current_humidity true to report humidity, false to disable
  */
-void DaikinS21Climate::set_supports_current_humidity(const bool supports_current_humidity) {
-  this->traits_.set_supports_current_humidity(supports_current_humidity);
+void DaikinS21Climate::set_humidity_reference_sensor(sensor::Sensor * const sensor) {
+  this->traits_.set_supports_current_humidity(true);
+  this->humidity_sensor_ = sensor;
 }
 
 void DaikinS21Climate::set_custom_fan_mode(const DaikinFanMode mode) {
@@ -216,76 +270,88 @@ void DaikinS21Climate::set_custom_fan_mode(const DaikinFanMode mode) {
   this->custom_fan_mode = static_cast<std::string>(daikin_fan_mode_to_string_view(mode));
 }
 
-bool DaikinS21Climate::use_room_sensor() {
-  return this->room_sensor_unit_is_valid() && this->room_sensor_->has_state() &&
-         !isnanf(this->room_sensor_->get_state());
-}
-
-bool DaikinS21Climate::room_sensor_unit_is_valid() {
-  if (this->room_sensor_ != nullptr) {
-    auto u = this->room_sensor_->get_unit_of_measurement();
+bool DaikinS21Climate::temperature_sensor_unit_is_valid() {
+  if (this->temperature_sensor_ != nullptr) {
+    auto u = this->temperature_sensor_->get_unit_of_measurement_ref();
     return u == "°C" || u == "°F";
   }
   return false;
 }
 
-float DaikinS21Climate::room_sensor_degc() {
-  float temp = this->room_sensor_->get_state();
-  if (this->room_sensor_->get_unit_of_measurement() == "°F") {
+bool DaikinS21Climate::use_temperature_sensor() {
+  return this->temperature_sensor_unit_is_valid() &&
+         this->temperature_sensor_->has_state() &&
+         std::isfinite(this->temperature_sensor_->get_state());
+}
+
+DaikinC10 DaikinS21Climate::temperature_sensor_degc() {
+  float temp = this->temperature_sensor_->get_state();
+  if (this->temperature_sensor_->get_unit_of_measurement_ref() == "°F") {
     temp = fahrenheit_to_celsius(temp);
   }
   return temp;
 }
 
-float DaikinS21Climate::get_effective_current_temperature() {
-  if (this->use_room_sensor()) {
-    return this->room_sensor_degc();
+/**
+ * Get the current temperature, either from the external reference or the Daikin unit.
+ */
+DaikinC10 DaikinS21Climate::get_current_temperature() {
+  if (this->use_temperature_sensor()) {
+    return this->temperature_sensor_degc();
   }
   return this->get_parent()->get_temp_inside();
 }
 
-float DaikinS21Climate::get_room_temp_offset() {
-  if (!this->use_room_sensor()) {
-    return 0.0F;
+/**
+ * Determine the S21 setpoint value based on the current temperature and target temperature.
+ *
+ * Applies an offset from the external reference sensor if present.
+ */
+DaikinC10 DaikinS21Climate::calc_s21_setpoint() {
+  // First ensure we're in a setpoint mode
+  if (is_setpoint_mode(this->mode) == false) {
+    return TEMPERATURE_INVALID;
   }
-  float room_val = this->room_sensor_degc();
-  float s21_val = this->get_parent()->get_temp_inside();
-  return s21_val - room_val;
+
+  const auto current_temperature = this->get_current_temperature();
+
+  // offset the ideal setpoint by the difference between the unit and reference sensor (0 if the same sensor)
+  auto s21_setpoint = static_cast<DaikinC10>(this->target_temperature) + (this->get_parent()->get_temp_inside() - current_temperature);
+
+  // Round to Daikin's internal setpoint resolution
+  // When the ideal setpoint is between steps force it in the direction of change by controlling rounding. Over time it should oscillate over the ideal setpoint.
+  if (s21_setpoint < current_temperature) {
+    // commanding the unit lower, round down
+  } else if (s21_setpoint > current_temperature) {
+    // commanding the unit higher, round up by adding almost a full step
+    s21_setpoint = s21_setpoint + (SETPOINT_STEP - 1);
+  } else {
+    // no difference, round to nearest
+    s21_setpoint = ((s21_setpoint * 2) + SETPOINT_STEP) / 2;  //add a half step (scaled for full precision)
+  }
+  s21_setpoint = (s21_setpoint / SETPOINT_STEP) * SETPOINT_STEP;  // complete round by truncating fractional component of step
+
+  // Ensure it's valid for the unit's current mode.
+  // Daikin will clamp internally with a slightly out of range value, but it's faster for the UI to do it here without waiting for comms
+  // Also, when a large external temperature offset is used, the value can be so far out of range it will be NAK'd
+  return std::clamp(s21_setpoint,
+      (this->mode == climate::CLIMATE_MODE_HEAT) ? this->min_temperature : this->min_cool_temperature,
+      (this->mode == climate::CLIMATE_MODE_COOL) ? this->max_temperature : this->max_heat_temperature);
 }
 
-float nearest_step(float temp) {
-  return std::round(temp / SETPOINT_STEP) * SETPOINT_STEP;
-}
-
-// What setpoint should be sent to s21, acconting for external room sensor.
-float DaikinS21Climate::calc_s21_setpoint() {
-  float offset_target = this->target_temperature + this->get_room_temp_offset();
-  return nearest_step(offset_target);
-}
-
-// How far from desired setpoint is the current S21 setpoint?
-float DaikinS21Climate::s21_setpoint_variance() {
-  return abs(this->get_parent()->get_setpoint() - this->calc_s21_setpoint());
-}
-
-void DaikinS21Climate::save_setpoint(float value, ESPPreferenceObject &pref) {
-  int16_t stored_val = static_cast<int16_t>(value * 10.0F);
-  pref.save(&stored_val);
-}
-
-void DaikinS21Climate::save_setpoint(float value) {
-  optional<float> prev = this->load_setpoint();
+void DaikinS21Climate::save_setpoint(const DaikinC10 value) {
   // Only save if value is different from what's already saved.
-  if (abs(value - prev.value_or(0.0F)) >= SETPOINT_STEP) {
+  if (value != this->load_setpoint()) {
+    const int16_t save_val = static_cast<int16_t>(value);
     switch (this->mode) {
       case climate::CLIMATE_MODE_HEAT_COOL:
-        this->save_setpoint(value, this->auto_setpoint_pref);
+        this->auto_setpoint_pref.save(&save_val);
         break;
       case climate::CLIMATE_MODE_COOL:
-        this->save_setpoint(value, this->cool_setpoint_pref);
+        this->cool_setpoint_pref.save(&save_val);
         break;
       case climate::CLIMATE_MODE_HEAT:
-        this->save_setpoint(value, this->heat_setpoint_pref);
+        this->heat_setpoint_pref.save(&save_val);
         break;
       default:
         break;
@@ -293,60 +359,43 @@ void DaikinS21Climate::save_setpoint(float value) {
   }
 }
 
-optional<float> DaikinS21Climate::load_setpoint(ESPPreferenceObject &pref) {
-  int16_t stored_val = 0;
-  if (!pref.load(&stored_val)) {
-    return {};
-  }
-  return static_cast<float>(stored_val) / 10.0F;
-}
-
-optional<float> DaikinS21Climate::load_setpoint() {
-  optional<float> loaded;
+DaikinC10 DaikinS21Climate::load_setpoint() {
+  int16_t load_val{};
   switch (this->mode) {
     case climate::CLIMATE_MODE_HEAT_COOL:
-      loaded = this->load_setpoint(this->auto_setpoint_pref);
+      (void)this->auto_setpoint_pref.load(&load_val);
       break;
     case climate::CLIMATE_MODE_COOL:
-      loaded = this->load_setpoint(this->cool_setpoint_pref);
+      (void)this->cool_setpoint_pref.load(&load_val);
       break;
     case climate::CLIMATE_MODE_HEAT:
-      loaded = this->load_setpoint(this->heat_setpoint_pref);
+      (void)this->heat_setpoint_pref.load(&load_val);
       break;
     default:
-      break;
+      return TEMPERATURE_INVALID;
   }
-  return loaded;
-}
-
-bool DaikinS21Climate::should_check_setpoint() {
-  bool mode_uses_setpoint = (this->mode == climate::CLIMATE_MODE_HEAT_COOL) ||
-                            (this->mode == climate::CLIMATE_MODE_COOL) ||
-                            (this->mode == climate::CLIMATE_MODE_HEAT);
-  bool time_elapsed = (millis() - this->last_setpoint_check_ms) > (this->setpoint_interval_s * 1000);
-  return mode_uses_setpoint && time_elapsed;
+  return load_val;
 }
 
 /**
- * Inherited ESPHome climate control call handler.
+ * ESPHome climate control call handler.
  *
  * Populates internal state with contained arguments then applies to the unit.
- *
- * @param call the call to process
  */
 void DaikinS21Climate::control(const climate::ClimateCall &call) {
   if (call.get_mode().has_value()) {
     this->mode = call.get_mode().value();
-    if (!call.get_target_temperature().has_value()) {
-      // If call does not include target, then try to use saved target.
-      optional<float> sp = this->load_setpoint();
-      if (sp.has_value()) {
-        this->target_temperature = nearest_step(sp.value());
+    // If call does not include target, then try to use saved target.
+    if (call.get_target_temperature().has_value() == false) {
+      const auto sp = this->load_setpoint();
+      // Also clear setpoint if not in a setpoint mode
+      if ((is_setpoint_mode(this->mode) == false) || (sp != TEMPERATURE_INVALID)) {
+        this->target_temperature = sp.f_degc();
       }
     }
   }
   if (call.get_target_temperature().has_value()) {
-    this->target_temperature = nearest_step(call.get_target_temperature().value());
+    this->target_temperature = call.get_target_temperature().value();
   }
   if (call.get_swing_mode().has_value()) {
     this->swing_mode = call.get_swing_mode().value();
@@ -359,6 +408,18 @@ void DaikinS21Climate::control(const climate::ClimateCall &call) {
   }
   this->set_s21_climate();
   this->publish_state();
+}
+
+/**
+ * Get the current humidity value from the optional sensor
+ */
+float DaikinS21Climate::get_current_humidity() const {
+  if ((this->humidity_sensor_ != nullptr) &&
+      (this->humidity_sensor_->get_unit_of_measurement_ref() == "%")) {
+    return this->humidity_sensor_->get_state(); // NAN state is fine
+  } else {
+    return NAN;
+  }
 }
 
 /**
@@ -381,7 +442,9 @@ void DaikinS21Climate::set_s21_climate() {
   // in Home Assistant as stale state is published over the commanded state
   // followed by the active state.
   this->command_active = true;
-  this->set_timeout(command_timeout_name, DaikinS21Climate::state_publication_timeout_ms, std::bind(&DaikinS21Climate::command_timeout_handler, this));
+  this->set_timeout(command_timeout_name,
+                    DaikinS21Climate::state_publication_timeout_ms + this->get_parent()->get_update_interval(), // extend the timeour if S21 is polling to wait for slower updates
+                    std::bind(&DaikinS21Climate::command_timeout_handler, this));
 
   ESP_LOGI(TAG, "Controlling S21 climate:");
   ESP_LOGI(TAG, "  Mode: %s", LOG_STR_ARG(climate::climate_mode_to_string(this->commanded.mode)));
@@ -390,7 +453,7 @@ void DaikinS21Climate::set_s21_climate() {
   ESP_LOGI(TAG, "  Swing: %s", LOG_STR_ARG(climate::climate_swing_mode_to_string(this->commanded.swing)));
   ESP_LOGI(TAG, "  Preset: %s", LOG_STR_ARG(climate::climate_preset_to_string(this->commanded.preset)));
 
-  this->save_setpoint(this->target_temperature);
+  this->save_setpoint(this->target_temperature);  // todo much slower interval?
 }
 
 } // namespace esphome::daikin_s21

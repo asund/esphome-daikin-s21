@@ -6,10 +6,9 @@
 #include "esphome/components/uart/uart.h"
 #include "esphome/core/component.h"
 #include "esphome/core/helpers.h"
+#include "daikin_s21_types.h"
 
 namespace esphome::daikin_s21 {
-
-class DaikinS21;
 
 class DaikinSerial : public Component,
                      public Parented<DaikinS21> {

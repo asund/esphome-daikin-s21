@@ -320,8 +320,8 @@ void DaikinS21::refine_queries() {
         {EnvironmentQuery::CompressorFrequency, &DaikinS21::handle_env_compressor_frequency},
         // {EnvironmentQuery::IndoorHumidity, &DaikinS21::handle_env_indoor_humidity},  // added in optional feature detection
         // {EnvironmentQuery::CompressorOnOff}, // redundant
-        {EnvironmentQuery::UnitState, &DaikinS21::handle_env_unit_state},
-        {EnvironmentQuery::SystemState, &DaikinS21::handle_env_system_state},
+        {EnvironmentQuery::UnitState, &DaikinS21::handle_env_unit_state}, // not always supported
+        {EnvironmentQuery::SystemState, &DaikinS21::handle_env_system_state}, // not always supported
         // {EnvironmentQuery::Rz52, &DaikinS21::handle_nop},  // unknown, "40"for me
         // {EnvironmentQuery::Rz72, &DaikinS21::handle_nop},  // unknown, "23" for me
       });
@@ -385,6 +385,7 @@ void DaikinS21::refine_queries() {
 
     // Some units might not support more granular sensor queries
     if (this->ready[ReadyOptionalFeatures] && (this->ready[ReadySensorReadout] == false)) {
+      const auto fan_mode = this->get_query_result(EnvironmentQuery::FanMode);
       const auto inside = this->get_query_result(EnvironmentQuery::InsideTemperature);
       const auto outside = this->get_query_result(EnvironmentQuery::OutsideTemperature);
       auto humidity = this->get_query_result(EnvironmentQuery::IndoorHumidity);
@@ -392,14 +393,15 @@ void DaikinS21::refine_queries() {
         humidity.ack = true;  // pretend we support humidity query as to not enable alternate readout
       }
       // done if all queries have been resolved
-      this->ready[ReadySensorReadout] = (inside && outside && humidity);
+      this->ready[ReadySensorReadout] = (fan_mode && inside && outside && humidity);
       // handle results
       if (this->ready[ReadySensorReadout]) {
         ESP_LOGD(TAG, "Sensor readout selected");
-        // enable fallback query if any sensor query failed
+        this->support.fan_mode_query = fan_mode.ack;
         this->support.inside_temperature_query = inside.ack;
         this->support.outside_temperature_query = outside.ack;
         this->support.humidity_query = humidity.ack;
+        // enable coarse fallback query if any sensor query failed
         if (inside.nak || outside.nak || humidity.nak) {
           this->queries.emplace_back(StateQuery::InsideOutsideTemperatures, &DaikinS21::handle_state_inside_outside_temperature);
         }
@@ -501,7 +503,7 @@ void DaikinS21::handle_serial_idle() {
     // resolve action
     if (this->current.unit_state.defrost() && (this->current.action_reported == climate::CLIMATE_ACTION_HEATING)) {
       this->current.action = climate::CLIMATE_ACTION_COOLING; // report cooling during defrost
-    } else if (this->current.unit_state.active() || (this->current.action_reported == climate::CLIMATE_ACTION_FAN)) {
+    } else if (this->current.active || (this->current.action_reported == climate::CLIMATE_ACTION_FAN)) {
       this->current.action = this->current.action_reported; // trust the unit when active or in fan only
     } else {
       this->current.action = climate::CLIMATE_ACTION_IDLE;
@@ -543,7 +545,10 @@ void DaikinS21::handle_state_basic(std::span<uint8_t> &payload) {
     this->current.action_reported = daikin_to_climate_action(payload[1]);
   }
   this->current.climate.setpoint = (payload[2] - 28) * 5;  // Celsius * 10
-  // fan mode in payload[3], silent mode not reported so prefer RG
+  // silent fan mode not reported here so prefer RG if present
+  if (this->support.fan_mode_query == false) {
+    this->current.climate.fan = static_cast<daikin_s21::DaikinFanMode>(payload[3]);
+  }
   this->ready.set(ReadyBasic);
 }
 
@@ -665,6 +670,7 @@ void DaikinS21::handle_env_indoor_humidity(std::span<uint8_t> &payload) {
 
 void DaikinS21::handle_env_unit_state(std::span<uint8_t> &payload) {
   this->current.unit_state = ahex_digit(payload[0]);
+  this->current.active = this->current.unit_state.active(); // used to refine climate action
   this->current.powerful = this->current.unit_state.powerful();  // if G6 is unsupported we can still read out powerful set by remote
 }
 
@@ -706,7 +712,6 @@ bool DaikinS21::determine_protocol_version() {
     } else {
       this->protocol_version = ProtocolUnknown;
     }
-    // todo protocol 1
   } else if (old_proto && new_proto.ack) {
     const uint16_t raw_version = bytes_to_num(new_proto.value);
     this->protocol_version = {static_cast<uint8_t>(raw_version / 100), static_cast<uint8_t>(raw_version % 100)};
@@ -896,17 +901,14 @@ void DaikinS21::dump_state() {
           LOG_STR_ARG(climate::climate_preset_to_string(this->current.climate.preset)));
   if (this->support.fan || this->support.swing) {
     ESP_LOGD(TAG, "    Fan: %" PRI_SV " (%" PRIu16 " RPM)  Swing: %s",
-            PRI_SV_ARGS(daikin_fan_mode_to_string_view(this->current.climate.fan)), this->current.fan_rpm,
-            (this->support.swing ? LOG_STR_ARG(climate::climate_swing_mode_to_string(this->current.climate.swing)) : "N/A"));
+            PRI_SV_ARGS(daikin_fan_mode_to_string_view(this->current.climate.fan)),
+            this->current.fan_rpm,
+            this->support.swing ? LOG_STR_ARG(climate::climate_swing_mode_to_string(this->current.climate.swing)) : "N/A");
   }
-  ESP_LOGD(TAG, " Target: %.1f C (%.1f F)",
-          this->current.climate.setpoint.f_degc(), this->current.climate.setpoint.f_degf());
-  ESP_LOGD(TAG, " Inside: %.1f C (%.1f F)",
-          this->temp_inside.f_degc(), this->temp_inside.f_degf());
-  ESP_LOGD(TAG, "Outside: %.1f C (%.1f F)",
-          this->temp_outside.f_degc(), this->temp_outside.f_degf());
-  ESP_LOGD(TAG, "   Coil: %.1f C (%.1f F)",
-          this->temp_coil.f_degc(), this->temp_coil.f_degf());
+  ESP_LOGD(TAG, " Target: %.1f C  Inside: %.1f C  Coil: %.1f C",
+          this->current.climate.setpoint.f_degc(),
+          this->temp_inside.f_degc(),
+          this->temp_coil.f_degc());
   if (this->support.humidity) {
     ESP_LOGD(TAG, "  Humid: %" PRIu8 "%%", this->get_humidity());
   }
