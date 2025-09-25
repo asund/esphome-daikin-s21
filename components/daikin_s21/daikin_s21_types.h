@@ -108,7 +108,7 @@ struct DaikinClimateSettings {
 using DaikinModel = uint16_t;
 inline constexpr DaikinModel ModelUnknown{0xFFFF};
 
-// V0 outdoor units?
+// V0 model families?
 inline constexpr DaikinModel ModelRXB35C2V1B{0x2806}; // indoor FTXB25C2V1B
 inline constexpr DaikinModel Model4MXL36TVJU{0x35E3}; // indoor CTXS07LVJU, FTXS12LVJU, FTXS15LVJU
 inline constexpr DaikinModel ModelRXC24AXVJU{0x4431}; // indoor FTXC24AXVJU

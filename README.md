@@ -21,7 +21,7 @@ A big thanks to:
 * Setpoint temperature.
 * Selectable climate modes OFF, HEAT_COOL, COOL, HEAT, FAN_ONLY and DRY.
 * Climate action reporting. See what your unit is trying to do, e.g.
-  heating while in HEAT_COOL.
+  heating or cooling while in HEAT_COOL.
 * Fan modes auto, silent and 1-5.
 * Swing modes horizontal, vertical, and both.
 * Untested support for Powerful and Econo presets ("Boost" and "Eco").
@@ -264,7 +264,8 @@ climate:
     #     target_temperature: 1
     #     current_temperature: 0.5
     # Settings from DaikinS21Climate:
-    supported_modes:  # off and heat_cool are always supported
+    supported_modes:  # off is always supported
+      - heat_cool
       - cool
       - heat
       - dry
@@ -278,11 +279,12 @@ climate:
     # humidity_sensor: room_humidity  # External, see homeassistant sensor below
     # or leave unconfigured if unsupported to omit reporting
     # update_interval: 60s # Interval used to adjust the unit's setpoint using finer grained control
-    # Daikin supported temperature range setpoints. Defaults should be fine unless your unit differs (see your manual):
-    # max_temperature: 32 # maximum setpoint when cool
-    # max_heat_temperature: 30  # maximum setpoint when heat or heat_cool
+    # Daikin internal supported temperature range setpoints, used to prevent sending out of range values to the unit.
+    # Defaults should be fine unless your unit differs (see your manual):
+    # max_cool_temperature: 32 # maximum setpoint when cool
     # min_cool_temperature: 18  # minimum setpoint when cool or heat_cool
-    # min_temperature: 10 # minimum setpoint when heat
+    # max_heat_temperature: 30  # maximum setpoint when heat or heat_cool
+    # min_heat_temperature: 10 # minimum setpoint when heat
 
 # Optional additional sensors.
 sensor:

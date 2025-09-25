@@ -30,12 +30,12 @@ void DaikinS21Climate::setup() {
   if (this->visual_min_temperature_override_.has_value()) {
     this->traits_.set_visual_min_temperature(this->visual_min_temperature_override_.value());
   } else {
-    this->traits_.set_visual_min_temperature(this->min_temperature.f_degc());
+    this->traits_.set_visual_min_temperature(this->min_heat_temperature.f_degc());
   }
   if (this->visual_max_temperature_override_.has_value()) {
     this->traits_.set_visual_max_temperature(this->visual_max_temperature_override_.value());
   } else {
-    this->traits_.set_visual_max_temperature(this->max_temperature.f_degc());
+    this->traits_.set_visual_max_temperature(this->max_cool_temperature.f_degc());
   }
   if (this->visual_target_temperature_step_override_.has_value()) {
     this->traits_.set_visual_target_temperature_step(this->visual_target_temperature_step_override_.value());
@@ -47,14 +47,17 @@ void DaikinS21Climate::setup() {
   } else {
     this->traits_.set_visual_current_temperature_step(TEMPERATURE_STEP.f_degc());
   }
-  this->traits_.set_supported_modes({
-      climate::CLIMATE_MODE_OFF,
-      climate::CLIMATE_MODE_HEAT_COOL,
-      climate::CLIMATE_MODE_COOL,
-      climate::CLIMATE_MODE_HEAT,
-      climate::CLIMATE_MODE_FAN_ONLY,
-      climate::CLIMATE_MODE_DRY,
-  });
+  if (this->traits_.get_supported_modes().empty()) {
+    // populate default modes if not already overridden by user config
+    this->traits_.set_supported_modes({
+        climate::CLIMATE_MODE_OFF,
+        climate::CLIMATE_MODE_HEAT_COOL,
+        climate::CLIMATE_MODE_COOL,
+        climate::CLIMATE_MODE_HEAT,
+        climate::CLIMATE_MODE_FAN_ONLY,
+        climate::CLIMATE_MODE_DRY,
+    });
+  }
   std::array<std::string, std::size(supported_daikin_fan_modes)> supported_fan_mode_strings;
   std::ranges::transform(supported_daikin_fan_modes, supported_fan_mode_strings.begin(), [](const auto &arg){ return daikin_fan_mode_to_string_view(arg); } );
   this->traits_.set_supported_custom_fan_modes({supported_fan_mode_strings.begin(), supported_fan_mode_strings.end()});
@@ -242,7 +245,6 @@ void DaikinS21Climate::dump_config() {
 void DaikinS21Climate::set_supported_modes_override(std::set<climate::ClimateMode> modes) {
   this->traits_.set_supported_modes(modes);
   this->traits_.add_supported_mode(climate::CLIMATE_MODE_OFF);   // Always available
-  this->traits_.add_supported_mode(climate::CLIMATE_MODE_HEAT_COOL);  // Always available
 }
 
 /**
@@ -335,8 +337,8 @@ DaikinC10 DaikinS21Climate::calc_s21_setpoint() {
   // Daikin will clamp internally with a slightly out of range value, but it's faster for the UI to do it here without waiting for comms
   // Also, when a large external temperature offset is used, the value can be so far out of range it will be NAK'd
   return std::clamp(s21_setpoint,
-      (this->mode == climate::CLIMATE_MODE_HEAT) ? this->min_temperature : this->min_cool_temperature,
-      (this->mode == climate::CLIMATE_MODE_COOL) ? this->max_temperature : this->max_heat_temperature);
+      (this->mode == climate::CLIMATE_MODE_HEAT) ? this->min_heat_temperature : this->min_cool_temperature,
+      (this->mode == climate::CLIMATE_MODE_COOL) ? this->max_cool_temperature : this->max_heat_temperature);
 }
 
 void DaikinS21Climate::save_setpoint(const DaikinC10 value) {

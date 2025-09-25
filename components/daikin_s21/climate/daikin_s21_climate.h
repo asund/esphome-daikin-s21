@@ -25,10 +25,10 @@ class DaikinS21Climate : public climate::Climate,
   void set_supported_presets_override(std::set<climate::ClimatePreset> presets);
   void set_temperature_reference_sensor(sensor::Sensor *sensor) { this->temperature_sensor_ = sensor; }
   void set_humidity_reference_sensor(sensor::Sensor *sensor);
-  void set_max_temperature(DaikinC10 temperature) { this->max_temperature = temperature; };
-  void set_max_heat_temperature(DaikinC10 temperature) { this->max_heat_temperature = temperature; };
+  void set_max_cool_temperature(DaikinC10 temperature) { this->max_cool_temperature = temperature; };
   void set_min_cool_temperature(DaikinC10 temperature) { this->min_cool_temperature = temperature; };
-  void set_min_temperature(DaikinC10 temperature) { this->min_temperature = temperature; };
+  void set_max_heat_temperature(DaikinC10 temperature) { this->max_heat_temperature = temperature; };
+  void set_min_heat_temperature(DaikinC10 temperature) { this->min_heat_temperature = temperature; };
 
  protected:
   static constexpr const char * command_timeout_name = "cmd";
@@ -39,10 +39,10 @@ class DaikinS21Climate : public climate::Climate,
 
   sensor::Sensor *temperature_sensor_{};
   sensor::Sensor *humidity_sensor_{};
-  DaikinC10 max_temperature{};
-  DaikinC10 max_heat_temperature{};
+  DaikinC10 max_cool_temperature{};
   DaikinC10 min_cool_temperature{};
-  DaikinC10 min_temperature{};
+  DaikinC10 max_heat_temperature{};
+  DaikinC10 min_heat_temperature{};
 
   bool command_active{};  // ESPHome could use a is_timeout_active()...
   bool check_setpoint{};

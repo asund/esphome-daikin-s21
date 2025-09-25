@@ -8,8 +8,6 @@ from esphome.components import climate, sensor
 from esphome.components.climate import ClimateMode, ClimatePreset
 from esphome.const import (
     CONF_HUMIDITY_SENSOR,
-    CONF_MAX_TEMPERATURE,
-    CONF_MIN_TEMPERATURE,
     CONF_SENSOR,
     CONF_SUPPORTED_MODES,
     CONF_SUPPORTED_PRESETS,
@@ -26,7 +24,7 @@ DaikinS21Climate = daikin_s21_ns.class_(
 
 SUPPORTED_CLIMATE_MODES_OPTIONS = {
     "OFF": ClimateMode.CLIMATE_MODE_OFF,  # always available
-    "HEAT_COOL": ClimateMode.CLIMATE_MODE_HEAT_COOL,  # always available
+    "HEAT_COOL": ClimateMode.CLIMATE_MODE_HEAT_COOL,
     "COOL": ClimateMode.CLIMATE_MODE_COOL,
     "HEAT": ClimateMode.CLIMATE_MODE_HEAT,
     "FAN_ONLY": ClimateMode.CLIMATE_MODE_FAN_ONLY,
@@ -38,8 +36,11 @@ SUPPORTED_CLIMATE_PRESETS_OPTIONS = {
     "BOOST": ClimatePreset.CLIMATE_PRESET_BOOST,
 }
 
-CONF_MAX_HEAT_TEMPERATURE = "max_heat_temperature"
+CONF_MAX_COOL_TEMPERATURE = "max_cool_temperature"
 CONF_MIN_COOL_TEMPERATURE = "min_cool_temperature"
+CONF_MAX_HEAT_TEMPERATURE = "max_heat_temperature"
+CONF_MIN_HEAT_TEMPERATURE = "min_heat_temperature"
+
 
 CONFIG_SCHEMA = cv.All(
     climate.climate_schema(DaikinS21Climate)
@@ -49,10 +50,10 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_HUMIDITY_SENSOR): cv.use_id(sensor.Sensor),
             cv.Optional(CONF_SUPPORTED_MODES): cv.ensure_list(cv.enum(SUPPORTED_CLIMATE_MODES_OPTIONS, upper=True)),
             cv.Optional(CONF_SUPPORTED_PRESETS): cv.ensure_list(cv.enum(SUPPORTED_CLIMATE_PRESETS_OPTIONS, upper=True)),
-            cv.Optional(CONF_MAX_TEMPERATURE, default="32"): cv.temperature,
-            cv.Optional(CONF_MAX_HEAT_TEMPERATURE, default="30"): cv.temperature,
+            cv.Optional(CONF_MAX_COOL_TEMPERATURE, default="32"): cv.temperature,
             cv.Optional(CONF_MIN_COOL_TEMPERATURE, default="18"): cv.temperature,
-            cv.Optional(CONF_MIN_TEMPERATURE, default="10"): cv.temperature,
+            cv.Optional(CONF_MAX_HEAT_TEMPERATURE, default="30"): cv.temperature,
+            cv.Optional(CONF_MIN_HEAT_TEMPERATURE, default="10"): cv.temperature,
         }
     )
     .extend(S21_PARENT_SCHEMA)
@@ -78,14 +79,14 @@ async def to_code(config):
     if CONF_SUPPORTED_PRESETS in config:
         cg.add(var.set_supported_presets_override(config[CONF_SUPPORTED_PRESETS]))
 
-    if CONF_MAX_TEMPERATURE in config:
-        cg.add(var.set_max_temperature(config[CONF_MAX_TEMPERATURE]))
-
-    if CONF_MAX_HEAT_TEMPERATURE in config:
-        cg.add(var.set_max_heat_temperature(config[CONF_MAX_HEAT_TEMPERATURE]))
+    if CONF_MAX_COOL_TEMPERATURE in config:
+        cg.add(var.set_max_cool_temperature(config[CONF_MAX_COOL_TEMPERATURE]))
 
     if CONF_MIN_COOL_TEMPERATURE in config:
         cg.add(var.set_min_cool_temperature(config[CONF_MIN_COOL_TEMPERATURE]))
 
-    if CONF_MIN_TEMPERATURE in config:
-        cg.add(var.set_min_temperature(config[CONF_MIN_TEMPERATURE]))
+    if CONF_MAX_HEAT_TEMPERATURE in config:
+        cg.add(var.set_max_heat_temperature(config[CONF_MAX_HEAT_TEMPERATURE]))
+
+    if CONF_MIN_HEAT_TEMPERATURE in config:
+        cg.add(var.set_min_heat_temperature(config[CONF_MIN_HEAT_TEMPERATURE]))
