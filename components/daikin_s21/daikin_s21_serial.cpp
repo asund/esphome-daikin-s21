@@ -134,7 +134,7 @@ void DaikinSerial::send_frame(const std::string_view cmd, const std::span<const 
     this->get_parent()->handle_serial_result(Result::Error);
     // prevent spam by marking the component as busy
     // called from DaikinS21 context when idle, trigger it again after a cooldown without touching DaikinSerial's loop state
-    this->set_timeout(DaikinSerial::timer_name, DaikinSerial::error_delay_period_ms, std::bind(&DaikinS21::handle_serial_idle, this->get_parent()));
+    this->set_timeout(DaikinSerial::timer_name, DaikinSerial::error_delay_period_ms, [this](){ this->get_parent()->handle_serial_idle(); });
     return;
   }
 
@@ -185,17 +185,17 @@ void DaikinSerial::set_ack_timeout(const int bytes_received) {
   delay_period_ms -= std::max(max_bytes_per_loop - bytes_received, 0) * char_time;
 
   this->disable_loop();
-  this->set_timeout(DaikinSerial::timer_name, delay_period_ms, std::bind(&DaikinSerial::ack_timeout_handler, this));
+  this->set_timeout(DaikinSerial::timer_name, delay_period_ms, [this](){ this->ack_timeout_handler(); });
 }
 
 void DaikinSerial::ack_timeout_handler() {
   this->uart.write_byte(ACK);
-  this->set_timeout(DaikinSerial::timer_name, DaikinSerial::next_tx_delay_period_ms, std::bind(&DaikinSerial::busy_timeout_handler, this));
+  this->set_timeout(DaikinSerial::timer_name, DaikinSerial::next_tx_delay_period_ms, [this](){ this->busy_timeout_handler(); });
 }
 
 void DaikinSerial::set_busy_timeout(const uint32_t delay_ms) {
   this->disable_loop();
-  this->set_timeout(DaikinSerial::timer_name, delay_ms, std::bind(&DaikinSerial::busy_timeout_handler, this));
+  this->set_timeout(DaikinSerial::timer_name, delay_ms, [this](){ this->busy_timeout_handler(); });
 }
 
 void DaikinSerial::busy_timeout_handler() {
@@ -203,7 +203,7 @@ void DaikinSerial::busy_timeout_handler() {
 }
 
 void DaikinSerial::set_rx_timeout() {
-  this->set_timeout(DaikinSerial::timer_name, DaikinSerial::rx_timout_period_ms, std::bind(&DaikinSerial::rx_timeout_handler, this));
+  this->set_timeout(DaikinSerial::timer_name, DaikinSerial::rx_timout_period_ms, [this](){ this->rx_timeout_handler(); });
 }
 
 void DaikinSerial::rx_timeout_handler() {

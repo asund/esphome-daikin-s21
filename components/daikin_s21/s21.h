@@ -28,6 +28,8 @@ class DaikinS21 : public PollingComponent {
   // external command action
   void set_climate_settings(const DaikinClimateSettings &settings);
 
+  std::vector<std::string_view> debug_queries{};
+
   // callbacks called when a query cycle is complete
   CallbackManager<void(void)> update_callbacks{};
 
@@ -53,6 +55,7 @@ class DaikinS21 : public PollingComponent {
   auto get_unit_state() { return this->current.unit_state; }
   auto get_system_state() { return this->current.system_state; }
   bool is_active() { return this->current.active; }
+  DaikinQueryResult get_query_result(std::string_view query_str) const;
 
   // callbacks for serial events
   void handle_serial_result(DaikinSerial::Result result, std::span<uint8_t> response = {});
@@ -77,7 +80,6 @@ class DaikinS21 : public PollingComponent {
   bool is_free_run() const { return this->get_update_interval() == 0; }
   void trigger_cycle();
   void start_cycle();
-  DaikinQueryResult get_query_result(std::string_view query_str) const;
   void prune_query(std::string_view query_str);
   void refine_queries();
   void send_command(std::string_view command, std::span<const uint8_t> payload);

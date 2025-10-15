@@ -19,7 +19,6 @@ class DaikinS21Climate : public climate::Climate,
   void update() override;
   void dump_config() override;
   void control(const climate::ClimateCall &call) override;
-  void update_handler();
 
   void set_supported_modes(std::set<climate::ClimateMode> modes);
   void set_supported_presets(std::set<climate::ClimatePreset> presets);

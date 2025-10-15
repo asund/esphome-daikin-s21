@@ -62,14 +62,14 @@ void DaikinS21Climate::setup() {
   // initialize setpoint, will be loaded from preferences or unit shortly
   this->target_temperature = NAN;
   // enable event driven updates
-  this->get_parent()->update_callbacks.add(std::bind(&DaikinS21Climate::update_handler, this)); // enable update events from DaikinS21
+  this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); }); // enable update events from DaikinS21
   // allow loop() to execute once to capture the current state (change detection on update requires a "previous" state)
 }
 
 /**
  * ESPHome Component loop
  *
- * Deferred work from update_handler()
+ * Deferred work when an update occurs.
  *
  * Update climate state if a previous command isn't in progress.
  * Publish any state changes to Home Assistant.
@@ -193,15 +193,6 @@ void DaikinS21Climate::update() {
 void DaikinS21Climate::command_timeout_handler() {
   this->command_active = false;
   this->loop();
-}
-
-/**
- * Update handler
- *
- * Called by DaikinS21 on every complete system state update.
- */
-void DaikinS21Climate::update_handler() {
-  this->enable_loop_soon_any_context(); // defer publish to next loop()
 }
 
 void DaikinS21Climate::dump_config() {
@@ -435,7 +426,7 @@ void DaikinS21Climate::set_s21_climate() {
   this->command_active = true;
   this->set_timeout(command_timeout_name,
                     DaikinS21Climate::state_publication_timeout_ms + this->get_parent()->get_update_interval(), // extend the timeour if S21 is polling to wait for slower updates
-                    std::bind(&DaikinS21Climate::command_timeout_handler, this));
+                    [this](){ this->command_timeout_handler(); });
 
   ESP_LOGI(TAG, "Controlling S21 climate:");
   ESP_LOGI(TAG, "  Mode: %s", LOG_STR_ARG(climate::climate_mode_to_string(this->commanded.mode)));

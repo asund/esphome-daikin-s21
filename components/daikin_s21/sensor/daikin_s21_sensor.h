@@ -15,7 +15,6 @@ class DaikinS21Sensor : public PollingComponent,
   void update() override;
   void dump_config() override;
 
-  void update_handler();
   void publish_sensors();
 
   void set_temp_inside_sensor(sensor::Sensor *sensor) {
