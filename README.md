@@ -90,6 +90,17 @@ Not all units support these.
 * System Defrost (shadows defrost?)
 * Multizone settings conflict
 
+### Text Sensor
+
+If you've read the Faikin wiki you'll see many more queries available than
+what this project supports. I've added a text_sensor component to read these
+raw values out for debugging and protocol decoding use, without having to add
+a dedicated sensor. Normally you wouldn't need to use this, but if a value
+looks interesting you can see the value change over time in Home Assistant.
+I'd prefer if we use this just to confirm a query works and then add proper
+support, rather than trying to interpret the string. Open an issue with details
+if you want a sensor added.
+
 ## Limitations
 
 **NOTE:** Currently there's a serious issue when using the Arduino framework.
@@ -367,6 +378,12 @@ binary_sensor:
     multizone_conflict:
       name: Multizone Conflict
       device_id: daikin_outdoor
+
+# raw case-sensitive query monitoring for debugging
+# text_sensor:
+#   - platform: daikin_s21
+#     queries:
+#       - RK
 ```
 
 Here is an example of how daikin_s21 can be used with inverted UART pins

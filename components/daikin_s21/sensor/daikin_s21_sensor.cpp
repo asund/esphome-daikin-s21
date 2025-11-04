@@ -7,7 +7,7 @@ static const char *const TAG = "daikin_s21.sensor";
 
 void DaikinS21Sensor::setup() {
   if (this->is_free_run()) {
-    this->get_parent()->update_callbacks.add(std::bind(&DaikinS21Sensor::update_handler, this));
+    this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); });  // enable update events from DaikinS21
   }
   this->disable_loop(); // wait for updates
 }
@@ -15,7 +15,7 @@ void DaikinS21Sensor::setup() {
 /**
  * ESPHome Component loop
  *
- * Deferred work from update_handler()
+ * Deferred work when an update occurs.
  *
  * Publish the sensors and wait for further updates.
  */
@@ -33,15 +33,6 @@ void DaikinS21Sensor::update() {
   if (this->get_parent()->is_ready()) {
     this->publish_sensors();
   }
-}
-
-/**
- * Update handler
- *
- * Called by DaikinS21 on every complete system state update.
- */
-void DaikinS21Sensor::update_handler() {
-  this->enable_loop_soon_any_context();  // defer publish to next loop()
 }
 
 /**

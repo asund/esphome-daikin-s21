@@ -6,10 +6,17 @@ namespace esphome::daikin_s21 {
 static const char *const TAG = "daikin_s21.binary_sensor";
 
 void DaikinS21BinarySensor::setup() {
-  this->get_parent()->update_callbacks.add(std::bind(&DaikinS21BinarySensor::update_handler, this)); // enable update events from DaikinS21
+  this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); }); // enable update events from DaikinS21
   this->disable_loop(); // wait for updates
 }
 
+/**
+ * ESPHome Component loop
+ *
+ * Deferred work when an update occurs.
+ *
+ * Publish the sensors and wait for further updates.
+ */
 void DaikinS21BinarySensor::loop() {
   const DaikinUnitState unit = this->get_parent()->get_unit_state();
   const DaikinSystemState system = this->get_parent()->get_system_state();
@@ -40,10 +47,6 @@ void DaikinS21BinarySensor::loop() {
   }
 
   this->disable_loop(); // wait for further updates
-}
-
-void DaikinS21BinarySensor::update_handler() {
-  this->enable_loop_soon_any_context();  // defer publish to next loop()
 }
 
 void DaikinS21BinarySensor::dump_config() {

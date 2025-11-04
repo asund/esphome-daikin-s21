@@ -161,13 +161,21 @@ class DaikinQueryState : public DaikinQueryValue {
 
 class DaikinQueryResult {
  public:
-  std::span<const uint8_t> value{};
-  bool ack{};
-  bool nak{};
-
   operator bool() const {
     return this->ack || this->nak;
   }
+
+  bool operator==(const DaikinQueryResult &other) const {
+    return std::ranges::equal(this->value, other.value) && (this->ack == other.ack) && (this->nak == other.nak);
+  }
+
+  std::span<const uint8_t> value{};
+  bool ack{};
+  bool nak{};
 };
+
+/* Sentinel value for a never scheduled query, let handler code treat it as nak'd. */
+inline constexpr uint8_t QueryNotScheduledString[] = {'N','/','A'};
+inline constexpr DaikinQueryResult QueryNotScheduled{QueryNotScheduledString, false, true};
 
 } // namespace esphome::daikin_s21

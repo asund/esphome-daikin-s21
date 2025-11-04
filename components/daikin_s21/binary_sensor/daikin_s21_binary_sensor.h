@@ -13,7 +13,6 @@ class DaikinS21BinarySensor : public Component,
   void setup() override;
   void loop() override;
   void dump_config() override;
-  void update_handler();
 
   void set_powerful_sensor(binary_sensor::BinarySensor *sensor) {
     this->powerful_sensor_ = sensor;

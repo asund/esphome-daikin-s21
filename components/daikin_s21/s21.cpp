@@ -248,8 +248,7 @@ DaikinQueryResult DaikinS21::get_query_result(std::string_view query_str) const 
     return { iter_active->value(), iter_active->acked, false };
   }
   // never scheduled, let handler code treat it as nak'd
-  static constexpr uint8_t na_str[] = {'N','/','A'};
-  return { na_str, false, true };
+  return QueryNotScheduled;
 }
 
 /**
@@ -481,6 +480,18 @@ void DaikinS21::refine_queries() {
     this->ready[ReadyActiveSource] = (this->support.active_source != ActiveSource::Unknown);
     if (this->ready[ReadyActiveSource]) {
       ESP_LOGD(TAG, "Active source is %s", active_source_to_string(this->support.active_source));
+    }
+  }
+
+  // Finally, schedule any user specified debug queries
+  // Done last so as to not duplicate automatically added queries
+  if (this->ready.all()) {
+    for (const auto debug_query : this->debug_queries) {
+      const auto existing = get_query_result(debug_query);
+      if (existing == QueryNotScheduled) {
+        ESP_LOGD(TAG, "Adding query %" PRI_SV, PRI_SV_ARGS(debug_query));
+        this->queries.emplace_back(debug_query, &DaikinS21::handle_nop);
+      }
     }
   }
 }

@@ -14,7 +14,7 @@ class DaikinSerial : public Component,
                      public Parented<DaikinS21> {
  public:
   static constexpr std::size_t MAX_COMMAND_SIZE{6};
-  static constexpr std::size_t STANDARD_PAYLOAD_SIZE{4};
+  static constexpr std::size_t STANDARD_PAYLOAD_SIZE{5};
   static constexpr std::size_t EXTENDED_PAYLOAD_SIZE{14}; // for MiscQuery::SoftwareVersion
   static constexpr std::size_t MAX_RESPONSE_SIZE{MAX_COMMAND_SIZE + EXTENDED_PAYLOAD_SIZE + 1U};  // +1 for checksum
 
