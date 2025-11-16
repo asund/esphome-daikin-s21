@@ -28,6 +28,30 @@ class DaikinS21 : public PollingComponent {
   // external command action
   void set_climate_settings(const DaikinClimateSettings &settings);
 
+  enum ReadoutRequest {
+    // binary sensor
+    ReadoutUnitStateBits,
+    ReadoutSystemStateBits,
+    // climate
+    ReadoutPresets,
+    // sensor
+    ReadoutTemperatureTarget,
+    ReadoutTemperatureOutside,
+    ReadoutTemperatureCoil,
+    ReadoutFanSpeed,
+    ReadoutSwingAngle,
+    ReadoutCompressorFrequency,
+    ReadoutHumidity,
+    ReadoutDemand,
+    ReadoutIRCounter,
+    ReadoutPowerConsumption,
+    // just for bitset sizing
+    ReadoutCount,
+  };
+  void request_readout(const ReadoutRequest request) {
+    this->readout_requests.set(request);
+  }
+
   std::vector<std::string_view> debug_queries{};
 
   // callbacks called when a query cycle is complete
@@ -35,7 +59,7 @@ class DaikinS21 : public PollingComponent {
 
   // value accessors
   bool is_ready() { return this->ready.all(); }
-  const DaikinClimateSettings& get_climate_settings() { return this->current.climate; };
+  const DaikinClimateSettings& get_climate_settings() { return this->current.climate; }
   auto get_climate_mode() { return this->current.climate.mode; }
   auto get_climate_action() { return this->current.action; }
   auto get_temp_setpoint() { return this->current.climate.setpoint; }
@@ -72,6 +96,7 @@ class DaikinS21 : public PollingComponent {
     ReadySensorReadout,
     ReadyModelDetection,
     ReadyActiveSource,
+    ReadyPowerfulSource,
     ReadyCount, // just for bitset sizing
   };
   std::bitset<ReadyCount> ready{};
@@ -86,6 +111,7 @@ class DaikinS21 : public PollingComponent {
   bool comms_detected() const { return this->protocol_version != ProtocolUndetected; }
   bool cycle_triggered{};
   bool cycle_active{};
+  std::bitset<ReadoutCount> readout_requests{};
   std::vector<DaikinQueryState> queries{};
   std::size_t query_index{};
   auto current_query() { return this->queries.begin() + this->query_index; }

@@ -137,9 +137,7 @@ void DaikinS21Climate::loop() {
         this->check_setpoint = false;
         if (DaikinC10::diff(reported.setpoint, this->calc_s21_setpoint()) >= SETPOINT_STEP) { // in setpoint mode, calculated won't be invalid
           if (this->use_temperature_sensor()) {
-            ESP_LOGD(TAG, "Temperature from external sensor: %.1f %s (%.1f °C)  Offset: %.1f",
-                this->temperature_sensor_->get_state(),
-                this->temperature_sensor_->get_unit_of_measurement_ref().c_str(),
+            ESP_LOGD(TAG, "Temperature from external sensor: %.1f Offset: %.1f",
                 current_temperature,
                 this->get_parent()->get_temp_inside() - this->temperature_sensor_degc());
           }
@@ -235,6 +233,7 @@ void DaikinS21Climate::set_supported_modes(std::set<climate::ClimateMode> modes)
  */
 void DaikinS21Climate::set_supported_presets(std::set<climate::ClimatePreset> presets) {
   this->traits_.set_supported_presets(presets);
+  this->get_parent()->request_readout(DaikinS21::ReadoutPresets);
 }
 
 /**
@@ -322,7 +321,7 @@ DaikinC10 DaikinS21Climate::calc_s21_setpoint() {
 }
 
 void DaikinS21Climate::save_setpoint(const DaikinC10 value) {
-  // Only save if value is different from what's already saved.
+  // Only save if value is different from what's already saved. Some platforms don't support this internally.
   if (value != this->load_setpoint()) {
     const int16_t save_val = static_cast<int16_t>(value);
     switch (this->mode) {

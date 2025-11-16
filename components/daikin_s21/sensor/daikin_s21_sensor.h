@@ -4,6 +4,7 @@
 #include "esphome/core/component.h"
 #include "esphome/core/helpers.h"
 #include "../daikin_s21_types.h"
+#include "../s21.h"
 
 namespace esphome::daikin_s21 {
 
@@ -22,33 +23,43 @@ class DaikinS21Sensor : public PollingComponent,
   }
   void set_temp_target_sensor(sensor::Sensor *sensor) {
     this->temp_target_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutTemperatureTarget);
   }
   void set_temp_outside_sensor(sensor::Sensor *sensor) {
     this->temp_outside_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutTemperatureOutside);
   }
   void set_temp_coil_sensor(sensor::Sensor *sensor) {
     this->temp_coil_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutTemperatureCoil);
   }
   void set_fan_speed_sensor(sensor::Sensor *sensor) {
     this->fan_speed_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutFanSpeed);
   }
   void set_swing_vertical_angle_sensor(sensor::Sensor *sensor) {
     this->swing_vertical_angle_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutSwingAngle);
   }
   void set_compressor_frequency_sensor(sensor::Sensor *sensor) {
     this->compressor_frequency_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutCompressorFrequency);
   }
   void set_humidity_sensor(sensor::Sensor *sensor) {
     this->humidity_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutHumidity);
   }
   void set_demand_sensor(sensor::Sensor *sensor) {
     this->demand_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutDemand);
   }
   void set_ir_counter_sensor(sensor::Sensor *sensor) {
     this->ir_counter_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutIRCounter);
   }
   void set_power_consumption_sensor(sensor::Sensor *sensor) {
     this->power_consumption_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutPowerConsumption);
   }
 
  protected:

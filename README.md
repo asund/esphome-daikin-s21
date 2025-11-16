@@ -5,7 +5,7 @@ protocol available over S21 and related ports.
 
 A big thanks to:
 * [revk](https://github.com/revk) for work on the fantastic
-  [Faikin](https://github.com/revk/ESP32-Faikin) project, which was the primary
+  [Faikout](https://github.com/revk/ESP32-Faikout) (née Faikin) project, which was the primary
   inspiration and guide for building this ESPHome component. In addition, the
   very active and resourceful community that project has fostered that has
   decoded much of the protocol.
@@ -92,7 +92,7 @@ Not all units support these.
 
 ### Text Sensor
 
-If you've read the Faikin wiki you'll see many more queries available than
+If you've read the Faikout wiki you'll see many more queries available than
 what this project supports. I've added a text_sensor component to read these
 raw values out for debugging and protocol decoding use, without having to add
 a dedicated sensor. Normally you wouldn't need to use this, but if a value
@@ -124,7 +124,7 @@ this writing, independent UART pin inversion control also wasn't possible.
 
 ## Hardware
 
-Please see the Faikin [wiring](https://github.com/revk/ESP32-Faikin/wiki/Wiring)
+Please see the Faikout [wiring](https://github.com/revk/ESP32-Faikout/wiki/Wiring)
 page for detailed documentation including pinouts, alternate connectors with
 images. The below is just a quick reference overview.
 
@@ -177,7 +177,7 @@ Contacts: JST `SXA-001T-P0.6`
 
 ### PCB Option 1
 
-joshbenner uses the board designed by revk available [here](https://github.com/revk/ESP32-Faikin/tree/main/PCB/Faikin).
+joshbenner uses the board designed by revk available [here](https://github.com/revk/ESP32-Faikout/tree/main/PCB/Faikout).
 Note that revk's design includes a FET that inverts the logic levels on the
 ESP's RX pin, and on newer revisions the TX pin as well. When interfacing
 through a FET the RX line should be configured with a pullup. This handling
@@ -206,7 +206,7 @@ ways:
   other sensor values.
 
 Please consider documenting characteristics of your unit in the appropriate
-place in the Faikin wiki. I don't want to make an inferior copy of this
+place in the Faikout wiki. I don't want to make an inferior copy of this
 information if possible. Please don't report issues with this component to them
 as we don't share a codebase. Some of the readout values here are not
 byteswapped if we don't otherwise use them so unknown static fields may appear
@@ -246,6 +246,9 @@ esp32:
 
 logger:
   baud_rate: 0  # Disable UART logger if using UART0 (pins 1,3)
+
+preferences:
+  flash_write_interval: 72h
 
 external_components:
   - source: github://asund/esphome-daikin-s21@main
@@ -387,7 +390,7 @@ binary_sensor:
 ```
 
 Here is an example of how daikin_s21 can be used with inverted UART pins
-and an RX pullup (newer Faikin PCB rev):
+and an RX pullup (newer Faikout PCB rev):
 
 ```yaml
 uart:
