@@ -18,6 +18,8 @@ from .. import (
     S21_PARENT_SCHEMA,
 )
 
+AUTO_LOAD = ["sensor"]
+
 DaikinS21Climate = daikin_s21_ns.class_(
     "DaikinS21Climate", climate.Climate, cg.PollingComponent
 )
@@ -41,7 +43,6 @@ CONF_MAX_COOL_TEMPERATURE = "max_cool_temperature"
 CONF_MIN_COOL_TEMPERATURE = "min_cool_temperature"
 CONF_MAX_HEAT_TEMPERATURE = "max_heat_temperature"
 CONF_MIN_HEAT_TEMPERATURE = "min_heat_temperature"
-
 
 CONFIG_SCHEMA = (
     climate.climate_schema(DaikinS21Climate)
