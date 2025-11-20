@@ -1032,7 +1032,7 @@ void DaikinS21::dump_state() {
       this->get_demand());
   if (this->support.fan || this->support.swing) {
     ESP_LOGD(TAG, "Fan: %s (%" PRIu16 " RPM)  Swing: %s",
-        daikin_fan_mode_to_cstr(this->current.climate.fan),
+        LOG_STR_ARG(daikin_fan_mode_to_cstr(this->current.climate.fan)),
         this->current.fan_rpm,
         this->support.swing ? LOG_STR_ARG(climate::climate_swing_mode_to_string(this->current.climate.swing)) : "N/A");
   }
