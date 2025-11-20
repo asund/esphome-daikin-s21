@@ -9,16 +9,68 @@ static const char *const TAG = "daikin_s21.queries";
 
 /**
  * Copy the last result into the query instance and records the length.
- *
- * Redirects software version to the static buffer.
  */
-void DaikinQueryValue::set_value(const std::span<const uint8_t> payload) {
-  const auto buffer = this->command == MiscQuery::SoftwareVersion ? std::span<uint8_t>(DaikinQueryValue::software_version) : std::span<uint8_t>(this->value_buffer);
-  if (payload.size() <= buffer.size()) {
-    std::ranges::copy(payload, buffer.begin());
-    this->value_length = payload.size();
+void DaikinQuery::set_value(std::span<const uint8_t> payload) {
+  // decide where to store value
+  uint8_t * dest{};
+  if (payload.size() <= this->buffer.internal.size()) {
+    // small enough, use internal buffer
+    dest = this->buffer.internal.data();
+    // clean up existing buffer
+    if (this->internal() == false) {
+      std::free(this->buffer.external);
+    }
+  } else if (payload.size() <= this->size) {
+    // fits, reuse existing allocation
+    dest = this->buffer.external;
   } else {
-    ESP_LOGI(TAG, "result too long to cache %" PRI_SV ": %s", PRI_SV_ARGS(this->command), hex_repr(payload).c_str());
+    // larger, allocate external
+    dest = static_cast<uint8_t *>(std::malloc(payload.size()));
+    // clean up existing buffer
+    if (this->internal() == false) {
+      std::free(this->buffer.external);
+    }
+    if (dest == nullptr) {
+      ESP_LOGI(TAG, "result buffer failed to allocate %" PRI_SV ": %s", PRI_SV_ARGS(this->command), hex_repr(payload).c_str());
+      payload = payload.subspan(0, this->buffer.internal.size());
+      dest = this->buffer.internal.data();
+    } else {
+      this->buffer.external = dest;
+    }
+  }
+  std::ranges::copy(payload, dest);
+  this->size = payload.size();
+}
+
+void DaikinQuery::clear() {
+  this->enabled = false;
+  this->set_value(unscheduled_value);
+  this->naks = 0;
+  this->acked = false;
+}
+
+/**
+ * Handles an ACK response
+ */
+void DaikinQuery::ack(const std::span<const uint8_t> payload) {
+  this->acked = true;
+  this->naks = 0;
+  if (this->is_static) {
+    this->enabled = false;  // got the query result and know it won't change, disable
+  }
+  this->set_value(payload);
+}
+
+/**
+ * Handles a NAK response
+ */
+void DaikinQuery::nak() {
+  this->naks++;
+  if (this->failed()) {
+    // query failed, disable
+    ESP_LOGW(TAG, "disabling %" PRI_SV " as unsupported", PRI_SV_ARGS(this->command));
+    this->enabled = false;
+    this->set_value(nak_value);
   }
 }
 

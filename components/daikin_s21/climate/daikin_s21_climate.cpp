@@ -74,7 +74,7 @@ void DaikinS21Climate::setup() {
  * Publish any state changes to Home Assistant.
  */
 void DaikinS21Climate::loop() {
-  const auto& reported = this->get_parent()->get_climate_settings();
+  const auto &reported = this->get_parent()->get_climate_settings();
 
   // If an active command took effect, cancel the timeout and lift the publication ban
   if (this->command_active && (this->commanded == reported)) {
@@ -431,7 +431,7 @@ void DaikinS21Climate::set_s21_climate() {
   ESP_LOGI(TAG, "  Swing: %s", LOG_STR_ARG(climate::climate_swing_mode_to_string(this->commanded.swing)));
   ESP_LOGI(TAG, "  Preset: %s", LOG_STR_ARG(climate::climate_preset_to_string(this->commanded.preset)));
 
-  this->save_setpoint(this->target_temperature);  // todo much slower interval?
+  this->save_setpoint(this->target_temperature);
 }
 
 } // namespace esphome::daikin_s21

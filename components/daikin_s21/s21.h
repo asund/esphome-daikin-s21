@@ -1,7 +1,7 @@
 #pragma once
 
 #include <bitset>
-#include <optional>
+#include <ranges>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -17,7 +17,7 @@ namespace esphome::daikin_s21 {
 
 class DaikinS21 : public PollingComponent {
  public:
-  DaikinS21(DaikinSerial * const serial) : serial(*serial) {} // required in config, non-null
+  DaikinS21(DaikinSerial * const serial);
 
   void setup() override;
   void loop() override;
@@ -52,7 +52,7 @@ class DaikinS21 : public PollingComponent {
     this->readout_requests.set(request);
   }
 
-  std::vector<std::string_view> debug_queries{};
+  void add_debug_query(std::string_view query_str);
 
   // callbacks called when a query cycle is complete
   CallbackManager<void(void)> update_callbacks{};
@@ -79,7 +79,7 @@ class DaikinS21 : public PollingComponent {
   auto get_unit_state() { return this->current.unit_state; }
   auto get_system_state() { return this->current.system_state; }
   bool is_active() { return this->current.active; }
-  DaikinQueryResult get_query_result(std::string_view query_str) const;
+  std::span<const uint8_t> get_query_result(std::string_view query_str);
 
   // callbacks for serial events
   void handle_serial_result(DaikinSerial::Result result, std::span<uint8_t> response = {});
@@ -88,10 +88,13 @@ class DaikinS21 : public PollingComponent {
  protected:
   DaikinSerial &serial;
 
+  // communication state
   void dump_state();
-
+  bool is_free_run() const { return this->get_update_interval() == 0; }
+  void trigger_cycle();
+  void start_cycle();
   enum ReadyCommand : uint8_t {
-    ReadyBasic,
+    ReadyProtocolDetection,
     ReadyOptionalFeatures,
     ReadySensorReadout,
     ReadyModelDetection,
@@ -100,24 +103,23 @@ class DaikinS21 : public PollingComponent {
     ReadyCount, // just for bitset sizing
   };
   std::bitset<ReadyCount> ready{};
-
-  // communication state
-  bool is_free_run() const { return this->get_update_interval() == 0; }
-  void trigger_cycle();
-  void start_cycle();
-  void prune_query(std::string_view query_str);
-  void refine_queries();
+  void ready_state_machine();
+  void check_ready_protocol_detection();
+  void check_ready_optional_features();
+  void check_ready_sensor_readout();
+  void check_ready_model_detection();
+  void check_ready_active_source();
+  void check_ready_powerful_source();
   void send_command(std::string_view command, std::span<const uint8_t> payload);
-  bool comms_detected() const { return this->protocol_version != ProtocolUndetected; }
   bool cycle_triggered{};
   bool cycle_active{};
   std::bitset<ReadoutCount> readout_requests{};
-  std::vector<DaikinQueryState> queries{};
-  std::size_t query_index{};
-  auto current_query() { return this->queries.begin() + this->query_index; }
-  std::vector<std::string_view> failed_queries{};
-  std::vector<DaikinQueryValue> static_queries{};
   std::string_view current_command{};
+  std::vector<DaikinQuery> queries{}; // pool of possible queries, can't be touched during a query cycle
+  decltype(queries)::iterator active_query{queries.begin()};  // current active query, valid for lifetime of query cycle
+  void reset_queries();
+  DaikinQuery& get_query(std::string_view query_str);
+  void enable_query(std::string_view query_str);
 
   // query handlers
   void handle_nop(std::span<uint8_t> &payload) {}
@@ -198,7 +200,6 @@ class DaikinS21 : public PollingComponent {
   uint8_t demand{};
 
   // protocol support
-  bool determine_protocol_version();
   ProtocolVersion protocol_version{ProtocolUndetected};
   DaikinModel modelV0{ModelUnknown};
   DaikinModel modelV2{ModelUnknown};
