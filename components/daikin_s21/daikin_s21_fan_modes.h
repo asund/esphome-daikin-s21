@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <ranges>
 #include <string_view>
+#include <utility>
 
 namespace esphome::daikin_s21 {
 
@@ -15,43 +17,30 @@ enum class DaikinFanMode : uint8_t {
   Speed5 = '7',
 };
 
-static constexpr DaikinFanMode supported_daikin_fan_modes[] = {
-  DaikinFanMode::Auto,
-  DaikinFanMode::Silent,
-  DaikinFanMode::Speed1,
-  DaikinFanMode::Speed2,
-  DaikinFanMode::Speed3,
-  DaikinFanMode::Speed4,
-  DaikinFanMode::Speed5,
+static constexpr std::pair<DaikinFanMode, const char *> supported_daikin_fan_modes[] = {
+  {DaikinFanMode::Auto, "Automatic"},
+  {DaikinFanMode::Silent, "Silent"},
+  {DaikinFanMode::Speed1, "1"},
+  {DaikinFanMode::Speed2, "2"},
+  {DaikinFanMode::Speed3, "3"},
+  {DaikinFanMode::Speed4, "4"},
+  {DaikinFanMode::Speed5, "5"},
 };
 
-constexpr std::string_view daikin_fan_mode_to_string_view(const DaikinFanMode mode) {
-  switch (mode) {
-    case DaikinFanMode::Silent:
-      return "Silent";
-    case DaikinFanMode::Speed1:
-      return "1";
-    case DaikinFanMode::Speed2:
-      return "2";
-    case DaikinFanMode::Speed3:
-      return "3";
-    case DaikinFanMode::Speed4:
-      return "4";
-    case DaikinFanMode::Speed5:
-      return "5";
-    case DaikinFanMode::Auto:
-    default:
-      return "Automatic";
+constexpr const char * daikin_fan_mode_to_cstr(const DaikinFanMode mode) {
+  const auto iter = std::ranges::find(supported_daikin_fan_modes, mode, [](const auto &elem){ return elem.first; });
+  if (iter != std::ranges::end(supported_daikin_fan_modes)) {
+    return iter->second;
   }
+  return supported_daikin_fan_modes[0].second;
 }
 
 constexpr DaikinFanMode string_to_daikin_fan_mode(const std::string_view mode) {
-  for (const auto supported_mode : supported_daikin_fan_modes) {
-    if (daikin_fan_mode_to_string_view(supported_mode) == mode) {
-      return supported_mode;
-    }
+  const auto iter = std::ranges::find(supported_daikin_fan_modes, mode, [](const auto &elem){ return elem.second; });
+  if (iter != std::ranges::end(supported_daikin_fan_modes)) {
+    return iter->first;
   }
-  return DaikinFanMode::Auto;
+  return supported_daikin_fan_modes[0].first;
 }
 
 } // namespace esphome::daikin_s21

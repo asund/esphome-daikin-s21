@@ -235,7 +235,7 @@ match Daikin's internal granularity.
 
 ```yaml
 esphome:
-  min_version: "2025.8"
+  min_version: "2025.11"
   devices:
     - id: daikin_outdoor
       name: "Daikin Compressor"
