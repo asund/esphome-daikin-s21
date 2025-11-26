@@ -8,9 +8,10 @@ namespace esphome::daikin_s21 {
 static const char *const TAG = "daikin_s21.text_sensor";
 
 void DaikinS21TextSensor::setup() {
+  for (const auto &sensor : this->sensors) {
+    this->get_parent()->add_debug_query(sensor->get_name().c_str());  // register queries
+  }
   this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); }); // enable update events from DaikinS21
-  const auto query_strings = std::views::transform(this->sensors, [](const auto sensor){ return sensor->get_name().c_str(); });
-  this->get_parent()->debug_queries = {query_strings.begin(), query_strings.end()}; // register queries
   this->disable_loop(); // wait for updates
 }
 
@@ -24,8 +25,7 @@ void DaikinS21TextSensor::setup() {
 void DaikinS21TextSensor::loop() {
   // update all sensors
   for (auto * const sensor : this->sensors) {
-    auto result = this->get_parent()->get_query_result(sensor->get_name().c_str());
-    std::string current_state = str_repr(result.value);
+    std::string current_state = str_repr(this->get_parent()->get_query_result(sensor->get_name().c_str()));
     if (sensor->state != current_state) {
       sensor->publish_state(current_state);
     }

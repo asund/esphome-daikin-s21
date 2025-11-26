@@ -121,61 +121,65 @@ namespace StateCommand {
 using PayloadBuffer = std::array<uint8_t, DaikinSerial::STANDARD_PAYLOAD_SIZE>;
 using ExtendedPayloadBuffer = std::array<uint8_t, DaikinSerial::EXTENDED_PAYLOAD_SIZE>;
 
-class DaikinQueryValue {
+/**
+ * Class for holding periodic query state.
+ *
+ * @note Don't move or copy once enabled as for simplicity's sake the special member functions are omitted.
+ */
+class DaikinQuery {
+  using handler_fn = void (DaikinS21::*)(std::span<uint8_t>&);
+  static inline constexpr uint8_t unscheduled_value[] = {'N','/','A'};
+  static inline constexpr uint8_t nak_value[] = {'N','A','K'};
+
  public:
-  static inline constexpr uint8_t software_version_length = 8;
-
-  DaikinQueryValue() {}
-  DaikinQueryValue(const std::string_view command) : command(command) {}
-
-  std::string_view command{};
-
-  std::span<const uint8_t> value() const {
-    return {this->command == MiscQuery::SoftwareVersion ? DaikinQueryValue::software_version.begin() : this->value_buffer.begin(), value_length};
+  constexpr DaikinQuery(const std::string_view command = "", const handler_fn handler = nullptr, const bool is_static = false)
+    : command(command), handler(handler), is_static(is_static), size(std::size(unscheduled_value))
+  {
+    static_assert(std::size(unscheduled_value) <= sizeof(this->buffer.internal));
+    std::ranges::copy(unscheduled_value, this->buffer.internal.begin());
   }
 
-  void set_value(std::span<const uint8_t> payload);
+  // filter binary predicates
+  static constexpr bool IsEnabled(const DaikinQuery &query) { return query.enabled; }
+  static constexpr bool IsAckedStatic(const DaikinQuery &query) { return query.success() && query.is_static; }
+  static constexpr bool IsFailed(const DaikinQuery &query) { return query.failed(); }
+  static constexpr bool IsDebug(const DaikinQuery &query) { return query.is_debug; }
 
   // command fetching projection for std::ranges use
-  static constexpr std::string_view GetCommand(const DaikinQueryValue &query) { return query.command; }
+  static constexpr std::string_view GetCommand(const DaikinQuery &query) { return query.command; }
 
- protected:
-  inline static std::array<uint8_t, software_version_length> software_version;  // static buffer for useful portion of longer software version string
-  PayloadBuffer value_buffer;  // last received value
-  uint8_t value_length{};
-};
+  // access helpers
+  constexpr bool internal() const { return this->size <= sizeof(this->buffer.internal); }
+  constexpr const uint8_t* data() const { return internal() ? buffer.internal.data() : buffer.external; }
+  constexpr std::span<const uint8_t> value() const { return { this->data(), size }; }
+  constexpr uint8_t operator[](const std::size_t idx) const { return this->value()[idx]; }
+  constexpr bool success() const { return this->acked; }
+  constexpr bool failed() const { return this->naks >= 3; }
+  constexpr bool ready() const { return this->success() || this->failed() || (this->enabled == false); }
 
-class DaikinQueryState : public DaikinQueryValue {
-  using handler_fn = void (DaikinS21::*)(std::span<uint8_t>&);
+  // actions
+  void clear();
+  void ack(std::span<const uint8_t> payload);
+  void nak();
 
- public:
-  DaikinQueryState() {}
-  DaikinQueryState(const std::string_view command, const handler_fn handler = nullptr, const bool is_static = false)
-      : DaikinQueryValue(command), handler(handler), is_static(is_static) {}
-
+  // state
+  std::string_view command{};
   handler_fn handler{};
-  bool is_static{}; // result never changes
-  bool acked{};
-  uint8_t naks{};
-};
 
-class DaikinQueryResult {
+ private:
+  void set_value(std::span<const uint8_t> payload);
+
+  union {
+    PayloadBuffer internal;
+    uint8_t* external;
+  } buffer{};  // last received value
+  uint8_t size{};
+  uint8_t is_static :1{}; // result never changes
+  uint8_t acked :1{};
+  uint8_t naks :2{};
  public:
-  operator bool() const {
-    return this->ack || this->nak;
-  }
-
-  bool operator==(const DaikinQueryResult &other) const {
-    return std::ranges::equal(this->value, other.value) && (this->ack == other.ack) && (this->nak == other.nak);
-  }
-
-  std::span<const uint8_t> value{};
-  bool ack{};
-  bool nak{};
+  uint8_t enabled :1{};
+  uint8_t is_debug :1{};
 };
-
-/* Sentinel value for a never scheduled query, let handler code treat it as nak'd. */
-inline constexpr uint8_t QueryNotScheduledString[] = {'N','/','A'};
-inline constexpr DaikinQueryResult QueryNotScheduled{QueryNotScheduledString, false, true};
 
 } // namespace esphome::daikin_s21

@@ -111,24 +111,74 @@ const char * active_source_to_string(const ActiveSource source) {
  * Convert reversed ASCII number to an integer
  *
  * @param bytes ASCII bytes of format <ones><tens><hundreds[><neg/pos>,<thousands>]
+ * @param base base used for conversion
  * @return int16_t integer representation of string
  */
-int16_t bytes_to_num(std::span<const uint8_t> bytes) {
+int16_t bytes_to_num(std::span<const uint8_t> bytes, const int base = 10) {
   std::array<char, 4+1> buffer{};
   std::ranges::reverse_copy(bytes, buffer.begin());
-  return std::atoi(buffer.data());
+  return std::strtoul(buffer.data(), nullptr, base);
+}
+
+DaikinS21::DaikinS21(DaikinSerial * const serial)
+  : serial(*serial) { // serial required in config, non-null
+  // populate supported queries
+  // this is done in the constructor so debug queries are only ever added to this list
+  this->queries = {
+    {StateQuery::Basic, &DaikinS21::handle_state_basic},
+    {StateQuery::OptionalFeatures, &DaikinS21::handle_nop, true},
+    // {StateQuery::OnOffTimer},  // unused, use home assistant for scheduling
+    // {StateQuery::ErrorStatus}, // not handled yet
+    {StateQuery::SwingOrHumidity, &DaikinS21::handle_state_swing_or_humidity},
+    {StateQuery::SpecialModes, &DaikinS21::handle_state_special_modes},
+    {StateQuery::DemandAndEcono, &DaikinS21::handle_state_demand_and_econo},
+    {StateQuery::OldProtocol, &DaikinS21::handle_nop, true},  // protocol version detect
+    {StateQuery::InsideOutsideTemperatures, &DaikinS21::handle_state_inside_outside_temperature},
+    // {StateQuery::FB, &DaikinS21::handle_nop}, // unknown
+    {StateQuery::ModelCode, &DaikinS21::handle_state_model_code_v2, true},
+    {StateQuery::IRCounter, &DaikinS21::handle_state_ir_counter},
+    {StateQuery::V2OptionalFeatures, &DaikinS21::handle_nop, true},
+    {StateQuery::PowerConsumption, &DaikinS21::handle_state_power_consumption},
+    // {StateQuery::ITELC, &DaikinS21::handle_nop},  // unknown, daikin intelligent touch controller?
+    // {StateQuery::FP, &DaikinS21::handle_nop}, // unknown
+    // {StateQuery::FQ, &DaikinS21::handle_nop}, // unknown
+    // {StateQuery::FS, &DaikinS21::handle_nop}, // unknown
+    {StateQuery::FT, &DaikinS21::handle_nop, true}, // unknown, outdoor unit capacity?
+    // {StateQuery::FV, &DaikinS21::handle_nop}, // unknown
+    {StateQuery::NewProtocol, &DaikinS21::handle_nop, true},  // protocol version detect
+    // {EnvironmentQuery::PowerOnOff, &DaikinS21::handle_env_power_on_off}, // redundant
+    // {EnvironmentQuery::IndoorUnitMode, &DaikinS21::handle_env_indoor_unit_mode}, // redundant
+    // {EnvironmentQuery::TemperatureSetpoint, &DaikinS21::handle_env_temperature_setpoint},  // redundant
+    // {EnvironmentQuery::OnTimerSetting}, // unused, unsupported
+    // {EnvironmentQuery::OffTimerSetting},  // unused, unsupported
+    // {EnvironmentQuery::SwingMode, &DaikinS21::handle_env_swing_mode},  // redundant
+    {EnvironmentQuery::FanMode, &DaikinS21::handle_env_fan_mode},
+    {EnvironmentQuery::InsideTemperature, &DaikinS21::handle_env_inside_temperature},
+    {EnvironmentQuery::LiquidTemperature, &DaikinS21::handle_env_liquid_temperature},
+    // {EnvironmentQuery::FanSpeedSetpoint, &DaikinS21::handle_env_fan_speed_setpoint},  // not supported yet, can translate DaikinFanMode to RPM
+    {EnvironmentQuery::FanSpeed, &DaikinS21::handle_env_fan_speed},
+    // {EnvironmentQuery::LouvreAngleSetpoint, &DaikinS21::handle_env_vertical_swing_angle_setpoint},  // not supported yet
+    {EnvironmentQuery::VerticalSwingAngle, &DaikinS21::handle_env_vertical_swing_angle},
+    // {EnvironmentQuery::RW, &DaikinS21::handle_nop},  // unknown, "00" for me
+    {EnvironmentQuery::TargetTemperature, &DaikinS21::handle_env_target_temperature},
+    {EnvironmentQuery::OutsideTemperature, &DaikinS21::handle_env_outside_temperature},
+    {EnvironmentQuery::IndoorFrequencyCommandSignal, &DaikinS21::handle_env_indoor_frequency_command_signal},
+    {EnvironmentQuery::CompressorFrequency, &DaikinS21::handle_env_compressor_frequency},
+    {EnvironmentQuery::IndoorHumidity, &DaikinS21::handle_env_indoor_humidity},
+    {EnvironmentQuery::CompressorOnOff, &DaikinS21::handle_env_compressor_on_off},
+    // {EnvironmentQuery::CompressorOnOff}, // redundant
+    {EnvironmentQuery::UnitState, &DaikinS21::handle_env_unit_state},
+    {EnvironmentQuery::SystemState, &DaikinS21::handle_env_system_state},
+    // {EnvironmentQuery::Rz52, &DaikinS21::handle_nop},  // unknown, "40"for me
+    // {EnvironmentQuery::Rz72, &DaikinS21::handle_nop},  // unknown, "23" for me
+    {MiscQuery::Model, &DaikinS21::handle_misc_model_v0, true}, // some sort of model? always "3E53" for me, regardless of head unit -- outdoor unit?
+    {MiscQuery::Version, &DaikinS21::handle_nop, true}, // purportedly another version, always "00C0" for me
+    {MiscQuery::SoftwareVersion, &DaikinS21::handle_misc_software_version, true},
+  };
 }
 
 void DaikinS21::setup() {
-  // populate initial messages to poll
-  this->queries = {
-      // Protocol version detect
-      {StateQuery::OldProtocol, &DaikinS21::handle_nop, true},
-      {StateQuery::NewProtocol, &DaikinS21::handle_nop, true},
-  };
-  this->failed_queries = {};
-  this->static_queries = {};
-  this->protocol_version = ProtocolUndetected;
+  this->reset_queries();
   this->ready.reset();
   this->start_poller(); // for reinit
   this->disable_loop();
@@ -162,6 +212,7 @@ void DaikinS21::update() {
 void DaikinS21::dump_config() {
   ESP_LOGCONFIG(TAG, "DaikinS21:");
   ESP_LOGCONFIG(TAG, "  Update interval: %" PRIu32, this->get_update_interval());
+  // todo basic detect output
 }
 
 void DaikinS21::set_climate_settings(const DaikinClimateSettings &settings) {
@@ -170,8 +221,8 @@ void DaikinS21::set_climate_settings(const DaikinClimateSettings &settings) {
       (this->pending.climate.fan != settings.fan)) {
 
     // If this is the first time settings are being applied, we need to force
-    // all of them to be applied to the unit so our state will be in sync with
-    // the unit and thus rely on this change detection to work in the future.
+    // all of them to be applied to the unit so our state will be in sync and
+    // thus rely on this change detection to work in the future.
     // The pending settings mode has been initialized in the object constructor
     // to the unsupported (by this project) CLIMATE_MODE_AUTO in order to detect
     // this one time condition here.
@@ -198,6 +249,31 @@ void DaikinS21::set_climate_settings(const DaikinClimateSettings &settings) {
 }
 
 /**
+ * Add debug query to the list, flagging them as such
+ *
+ * @note important to only call during setup phase so as not to invalidate the query iterator
+ */
+void DaikinS21::add_debug_query(std::string_view query_str) {
+  const auto iter = std::ranges::find(this->queries, query_str, DaikinQuery::GetCommand);
+  if (iter == this->queries.end()) {
+    auto &query = this->queries.emplace_back(query_str, &DaikinS21::handle_nop);
+    query.is_debug = true;  // add unkown query
+  } else {
+    iter->is_debug = true;  // could exist but not enabled during init
+  }
+}
+
+/**
+ * Get the result value of a query for external access
+ *
+ * @param query_str the query value to fetch
+ * @return std::span<const uint8_t> the response to that query
+ */
+std::span<const uint8_t> DaikinS21::get_query_result(std::string_view query_str) {
+  return this->get_query(query_str).value();
+}
+
+/**
  * Trigger a query cycle
  *
  * If not active, kick off a cycle.
@@ -218,318 +294,338 @@ void DaikinS21::start_cycle() {
   this->cycle_active = true;
   this->cycle_triggered = this->is_free_run();
   this->cycle_time_start_ms = millis();
-  this->query_index = 0;
-  this->serial.send_frame(this->current_query()->command);
+  this->active_query = std::ranges::find_if(this->queries, DaikinQuery::IsEnabled);
+  this->serial.send_frame(this->active_query->command);
+}
+
+/**
+ * Initialize the state of the query pool
+ */
+void DaikinS21::reset_queries() {
+  for (auto &query : this->queries) {
+    query.clear();
+    // enable initial protocol detection queries
+    if ((query.command == StateQuery::OldProtocol) || (query.command == StateQuery::NewProtocol)) {
+      query.enabled = true;
+    }
+  }
 }
 
 /**
  * Get the result of a query.
  */
-DaikinQueryResult DaikinS21::get_query_result(std::string_view query_str) const {
-  // static and therefore ack'd once
-  const auto iter_static = std::ranges::find(this->static_queries, query_str, DaikinQueryState::GetCommand);
-  if (iter_static != this->static_queries.end()) {
-    return { iter_static->value(), true, false };
+DaikinQuery& DaikinS21::get_query(std::string_view query_str) {
+  const auto iter = std::ranges::find(this->queries, query_str, DaikinQuery::GetCommand);
+  if (iter != this->queries.end()) {
+    return *iter;
   }
-  // failed and therefore nak'd
-  const auto iter_nak = std::ranges::find(this->failed_queries, query_str);
-  if (iter_nak != this->failed_queries.end()) {
-    static constexpr uint8_t nak_str[] = {'N','A','K'};
-    return { nak_str, false, true };
-  }
-  // active and ack'd
-  const auto iter_active = std::ranges::find(this->queries, query_str, DaikinQueryState::GetCommand);
-  if (iter_active != this->queries.end()) {
-    return { iter_active->value(), iter_active->acked, false };
-  }
-  // never scheduled, let handler code treat it as nak'd
-  return QueryNotScheduled;
+  // This isn't necessary but will prevent a segfault if I add a bug
+  ESP_LOGW(TAG, "Query not found %" PRI_SV, PRI_SV_ARGS(query_str));
+  static DaikinQuery dummy{};
+  return dummy; // prevent crash in caller when an unknown query requested
 }
 
-/**
- * Remove a query from the active pool.
- */
-void DaikinS21::prune_query(std::string_view query_str) {
-  const auto query = std::ranges::find(this->queries, query_str, DaikinQueryState::GetCommand);
-  if (query != this->queries.end()) {
-    // adjust index if deleting
-    const auto erased_index = std::distance(this->queries.begin(), query);
-    this->queries.erase(query);
-    if (queries.empty()) {
-      this->query_index = 0;
-    } else if (this->query_index > erased_index) {
-      this->query_index--;
-    }
-  }
+void DaikinS21::enable_query(std::string_view query_str) {
+  this->get_query(query_str).enabled = true;
 }
 
 /**
  * Refine the pool of polling queries, adding or removing them as we learn about the unit.
  */
-void DaikinS21::refine_queries() {
-  if (this->comms_detected() == false) {
-    if (this->determine_protocol_version() == false) {
-      return; // wait for detection
-    }
-
-    ESP_LOGD(TAG, "Protocol version %" PRIu8 ".%" PRIu8 " detected", this->protocol_version.major, this->protocol_version.minor);
-    // >= Protocol0
-    this->queries.insert(this->queries.end(), {
-      {StateQuery::Basic, &DaikinS21::handle_state_basic},
-      {StateQuery::OptionalFeatures, &DaikinS21::handle_nop, true},
-      // {StateQuery::OnOffTimer},  // unused, use home assistant for scheduling
-      // {StateQuery::ErrorStatus}, // not handled yet
-      {StateQuery::SwingOrHumidity, &DaikinS21::handle_state_swing_or_humidity},
-      // {StateQuery::OldProtocol, &DaikinS21::handle_nop, true}, // already added in initial detection
-      // {StateQuery::InsideOutsideTemperatures, &DaikinS21::handle_state_inside_outside_temperature}, // added if granular sensors fail
-    });
-    if (this->protocol_version <= ProtocolVersion(2)) {
-      this->queries.insert(this->queries.end(), {
-        {EnvironmentQuery::CompressorOnOff, &DaikinS21::handle_env_compressor_on_off},
-        {MiscQuery::Model, &DaikinS21::handle_misc_model_v0, true}, // some sort of model? always "3E53" for me, regardless of head unit -- outdoor unit?
-        {MiscQuery::Version, &DaikinS21::handle_nop, true}, // purportedly another version, always "00C0" for me
-      });
-    }
-    if (this->protocol_version >= ProtocolVersion(2)) {
-      this->queries.insert(this->queries.end(), {
-        // {StateQuery::FB, &DaikinS21::handle_nop}, // unknown
-        {StateQuery::ModelCode, &DaikinS21::handle_state_model_code_v2, true},
-        {StateQuery::V2OptionalFeatures, &DaikinS21::handle_nop, true},
-        // {StateQuery::ITELC, &DaikinS21::handle_nop},  // unknown, daikin intelligent touch controller?
-        // {StateQuery::FP, &DaikinS21::handle_nop}, // unknown
-        // {StateQuery::FQ, &DaikinS21::handle_nop}, // unknown
-        // {StateQuery::FS, &DaikinS21::handle_nop}, // unknown
-        {StateQuery::FT, &DaikinS21::handle_nop, true}, // unknown, outdoor unit capacity?
-        // {StateQuery::FV, &DaikinS21::handle_nop}, // unknown
-        // {StateQuery::NewProtocol, &DaikinS21::handle_nop, true},  // already added in initial detection
-        {MiscQuery::SoftwareVersion, &DaikinS21::handle_misc_software_version, true},
-      });
-      if (this->readout_requests[ReadoutPresets]) {
-        this->queries.insert(this->queries.end(), {
-          {StateQuery::SpecialModes, &DaikinS21::handle_state_special_modes},
-          {StateQuery::DemandAndEcono, &DaikinS21::handle_state_demand_and_econo},
-        });
-      }
-      if (this->readout_requests[ReadoutIRCounter]) {
-        this->queries.emplace_back(StateQuery::IRCounter, &DaikinS21::handle_state_ir_counter);
-      }
-      if (this->readout_requests[ReadoutPowerConsumption]) {
-        this->queries.emplace_back(StateQuery::PowerConsumption, &DaikinS21::handle_state_power_consumption);
-      }
-    }
-    // todo >= ProtocolVersion(3,0)
-    // common sensors
-    this->queries.insert(this->queries.end(), {
-      // {EnvironmentQuery::PowerOnOff, &DaikinS21::handle_env_power_on_off}, // redundant
-      // {EnvironmentQuery::IndoorUnitMode, &DaikinS21::handle_env_indoor_unit_mode}, // redundant
-      // {EnvironmentQuery::TemperatureSetpoint, &DaikinS21::handle_env_temperature_setpoint},  // redundant
-      // {EnvironmentQuery::OnTimerSetting}, // unused, unsupported
-      // {EnvironmentQuery::OffTimerSetting},  // unused, unsupported
-      // {EnvironmentQuery::SwingMode, &DaikinS21::handle_env_swing_mode},  // redundant
-      // {EnvironmentQuery::FanMode, &DaikinS21::handle_env_fan_mode},  // added in optional feature detection
-      {EnvironmentQuery::InsideTemperature, &DaikinS21::handle_env_inside_temperature},
-      // {EnvironmentQuery::FanSpeedSetpoint, &DaikinS21::handle_env_fan_speed_setpoint},  // not supported yet, can translate DaikinFanMode to RPM
-      // {EnvironmentQuery::FanSpeed, &DaikinS21::handle_env_fan_speed}, // added in optional feature detection
-      // {EnvironmentQuery::LouvreAngleSetpoint, &DaikinS21::handle_env_vertical_swing_angle_setpoint},  // not supported yet
-      // {EnvironmentQuery::VerticalSwingAngle, &DaikinS21::handle_env_vertical_swing_angle}, // added in optional feature detection
-      // {EnvironmentQuery::RW, &DaikinS21::handle_nop},  // unknown, "00" for me
-      // {EnvironmentQuery::IndoorHumidity, &DaikinS21::handle_env_indoor_humidity},  // added in optional feature detection
-      // {EnvironmentQuery::CompressorOnOff}, // redundant
-      // {EnvironmentQuery::UnitState, &DaikinS21::handle_env_unit_state}, // added in model detection
-      // {EnvironmentQuery::SystemState, &DaikinS21::handle_env_system_state}, // added in model detection
-      // {EnvironmentQuery::Rz52, &DaikinS21::handle_nop},  // unknown, "40"for me
-      // {EnvironmentQuery::Rz72, &DaikinS21::handle_nop},  // unknown, "23" for me
-    });
-    if (this->readout_requests[ReadoutTemperatureCoil]) {
-      this->queries.emplace_back(EnvironmentQuery::LiquidTemperature, &DaikinS21::handle_env_liquid_temperature);
-    }
-    if (this->readout_requests[ReadoutTemperatureTarget]) {
-      this->queries.emplace_back(EnvironmentQuery::TargetTemperature, &DaikinS21::handle_env_target_temperature);
-    }
-    if (this->readout_requests[ReadoutTemperatureOutside]) {
-      this->queries.emplace_back(EnvironmentQuery::OutsideTemperature, &DaikinS21::handle_env_outside_temperature);
-    }
-    if (this->readout_requests[ReadoutDemand]) {
-      this->queries.emplace_back(EnvironmentQuery::IndoorFrequencyCommandSignal, &DaikinS21::handle_env_indoor_frequency_command_signal);
-    }
-    if (this->readout_requests[ReadoutCompressorFrequency]) {
-      this->queries.emplace_back(EnvironmentQuery::CompressorFrequency, &DaikinS21::handle_env_compressor_frequency);
-    }
+void DaikinS21::ready_state_machine() {
+  if (this->ready[ReadyProtocolDetection] == false) {
+    this->check_ready_protocol_detection();
   }
 
-  // Protocol detected and initial queries scheduled
-  if (this->ready.all()) {
-    return; // nothing to refine
-  }
+  if (this->ready[ReadyProtocolDetection]) {
+    if (this->ready[ReadyOptionalFeatures] == false) {
+      this->check_ready_optional_features();
+    }
 
-  // Detect and handle optional features
-  if (this->ready[ReadyOptionalFeatures] == false) {
-    const auto features = this->get_query_result(StateQuery::OptionalFeatures);
-    const auto v2_features = this->get_query_result(StateQuery::V2OptionalFeatures);
-    // done if all queries have been resolved
-    this->ready[ReadyOptionalFeatures] = (features && v2_features);
-    // handle results
     if (this->ready[ReadyOptionalFeatures]) {
-      // v2 GK info gates base G2 support if present
-      if (v2_features.nak || (v2_features.ack && (v2_features.value[2] & 0b00000100))) {
-        // swing
-        this->support.swing = (features.ack && (features.value[0] & 0b0100));
-        if (this->support.swing) {
-          this->support.horizontal_swing = (features.ack && (features.value[0] & 0b1000));
-          if (this->readout_requests[ReadoutSwingAngle]) {
-            this->queries.emplace_back(EnvironmentQuery::VerticalSwingAngle, &DaikinS21::handle_env_vertical_swing_angle);
-          }
-        }
-        // fan
-        this->support.fan = true;
-        this->queries.emplace_back(EnvironmentQuery::FanMode, &DaikinS21::handle_env_fan_mode);
-        if (this->readout_requests[ReadoutFanSpeed]) {
-          this->queries.emplace_back(EnvironmentQuery::FanSpeed, &DaikinS21::handle_env_fan_speed);
-        }
+      // Enable alternate sensor readout if primary queries are unsupported
+      if (this->ready[ReadySensorReadout] == false) {
+        this->check_ready_sensor_readout();
       }
-
-      // humidity
-      if (v2_features.nak || (v2_features.ack && (v2_features.value[2] & 0b00000010))) {
-        this->support.humidity = (features.ack && (features.value[0] & 0b0010));
-        if (this->support.humidity) {
-          // unknown if this is a dehumidify mode or humidity sensor. potentially hides the sensor if it's just the mode. my unit supports neither over S21 interface.
-          if (this->readout_requests[ReadoutHumidity]) {
-            this->queries.emplace_back(EnvironmentQuery::IndoorHumidity, &DaikinS21::handle_env_indoor_humidity);
-          }
-        }
-      }
-
-      // standalone, info only
-      if (features.ack) {
-        this->support.model_info =    (features.value[1] & 0b1000) ? 'N': 'C';
-      }
-      if (v2_features.ack) {
-        this->support.ac_led =        (v2_features.value[0] & 0b00000001);
-        this->support.laundry =       (v2_features.value[0] & 0b00001000);
-        this->support.elec =          (v2_features.value[1] & 0b00000001);
-        this->support.temp_range =    (v2_features.value[1] & 0b00000100);
-        this->support.motion_detect = (v2_features.value[1] & 0b00001000);
-        this->support.ac_japan =      (v2_features.value[2] & 0b00000001) == 0;
-        this->support.dry =           (v2_features.value[2] & 0b00001000);
-        this->support.demand =        (v2_features.value[3] & 0b00000001);
-      }
-
-      // todo climate traits and sensor config check -- let user know they can pare down their yaml
-      ESP_LOGD(TAG, "Optional features detected");
     }
-  }
 
-  // Enable alternate sensor readout if primary queries are unsupported. Depends on optional features having been detected.
-  if (this->ready[ReadyOptionalFeatures] && (this->ready[ReadySensorReadout] == false)) {
-    const auto fan_mode = this->get_query_result(EnvironmentQuery::FanMode);
-    const auto inside = this->get_query_result(EnvironmentQuery::InsideTemperature);
-    const auto outside = this->get_query_result(EnvironmentQuery::OutsideTemperature);
-    const auto humidity = this->get_query_result(EnvironmentQuery::IndoorHumidity);
-    // done if all queries have been resolved
-    this->ready[ReadySensorReadout] = fan_mode &&
-                                      inside &&
-                                      ((this->readout_requests[ReadoutTemperatureOutside] == false) || outside) &&
-                                      ((this->readout_requests[ReadoutHumidity] == false) || humidity);
-    // handle results
-    if (this->ready[ReadySensorReadout]) {
-      this->support.fan_mode_query = fan_mode.ack;
-      this->support.inside_temperature_query = inside.ack;
-      this->support.outside_temperature_query = outside.ack;
-      this->support.humidity_query = humidity.ack;
-      // enable coarse fallback query if any sensor query failed
-      const bool alt = inside.nak ||
-                       (this->readout_requests[ReadoutTemperatureOutside] && outside.nak) ||
-                       (this->readout_requests[ReadoutHumidity] && this->support.humidity && humidity.nak); // only enable for humidity's sake if declared to be supported
-      if (alt) {
-        this->queries.emplace_back(StateQuery::InsideOutsideTemperatures, &DaikinS21::handle_state_inside_outside_temperature);
-      }
-      ESP_LOGD(TAG, "%s sensor readout selected", alt ? "Alternate" : "Dedicated");
+    // Detect the model and handle model-specific quirks
+    if (this->ready[ReadyModelDetection] == false) {
+      this->check_ready_model_detection();
     }
-  }
 
-  // Detect the model and handle model-specific quirks
-  if (this->ready[ReadyModelDetection] == false) {
-    const auto model_v0 = this->get_query_result(MiscQuery::Model);
-    const auto model_v2 = this->get_query_result(StateQuery::ModelCode);
-    // done if all queries have been resolved
-    this->ready[ReadyModelDetection] = (model_v0 && model_v2);
-    // handle results
     if (this->ready[ReadyModelDetection]) {
-      // Unit and system state aren't always reliable, blacklist models here
-      switch (this->modelV0) {
-        case ModelRXB35C2V1B:
-        case ModelRXC24AXVJU:
-          this->support.unit_system_state_queries = false;
-          break;
-        case ModelUnknown:
-        default:
-          this->support.unit_system_state_queries = true;
-          break;
+      if (this->ready[ReadyActiveSource] == false) {
+        this->check_ready_active_source();
       }
-      if (this->support.unit_system_state_queries) {
-        if (this->readout_requests[ReadoutUnitStateBits]) {
-          this->queries.emplace_back(EnvironmentQuery::UnitState, &DaikinS21::handle_env_unit_state);
-        }
-        if (this->readout_requests[ReadoutSystemStateBits]) {
-          this->queries.emplace_back(EnvironmentQuery::SystemState, &DaikinS21::handle_env_system_state);
-        }
-      }
-      // no v2 handling required yet
-      ESP_LOGD(TAG, "Model %04" PRIX16 " %04" PRIX16 " detected", this->modelV0, this->modelV2);
-    }
-  }
 
-  // Select the source of the active flag. Depends on the model having been detected.
-  if (this->ready[ReadyModelDetection] && (this->ready[ReadyActiveSource] == false)) {
-    const auto compressor_on_off = this->get_query_result(EnvironmentQuery::CompressorOnOff);
-    if (compressor_on_off) {
-      if (compressor_on_off.ack) {
-        this->support.active_source = ActiveSource::CompressorOnOff;
-      } else {
-        const auto unit_state = this->get_query_result(EnvironmentQuery::UnitState);
-        if ((unit_state == QueryNotScheduled) && this->support.unit_system_state_queries) {
-          this->readout_requests.set(ReadoutUnitStateBits);
-          this->queries.emplace_back(EnvironmentQuery::UnitState, &DaikinS21::handle_env_unit_state);
-        } else if (unit_state.ack) {
-          this->support.active_source = ActiveSource::UnitState;
-        } else if (unit_state.nak) {
-          this->support.unit_system_state_queries = false;  // unit state is assumed to be supported, if it isn't then correct the record
-          this->support.active_source = ActiveSource::Unsupported;
-          this->current.active = true;  // always active, reported action will follow unit
-        }
+      // Select the source of the powerful flag
+      if (this->ready[ReadyPowerfulSource] == false) {
+        this->check_ready_powerful_source();
       }
     }
-    // handle results
-    this->ready[ReadyActiveSource] = (this->support.active_source != ActiveSource::Unknown);
-    if (this->ready[ReadyActiveSource]) {
-      ESP_LOGD(TAG, "Active source is %s", active_source_to_string(this->support.active_source));
-    }
-  }
-
-  // Select the source of the powerful flag. Depends on the model having been detected.
-  if (this->ready[ReadyModelDetection] && (this->ready[ReadyPowerfulSource] == false)) {
-    if (this->readout_requests[ReadoutPresets] &&
-        (this->get_query_result(StateQuery::SpecialModes) == QueryNotScheduled) &&
-        this->support.unit_system_state_queries &&
-        (this->get_query_result(EnvironmentQuery::UnitState) == QueryNotScheduled)) {
-      this->readout_requests.set(ReadoutUnitStateBits);
-      this->queries.emplace_back(EnvironmentQuery::UnitState, &DaikinS21::handle_env_unit_state);
-      ESP_LOGD(TAG, "Alternate powerful source enabled");
-    }
-    this->ready[ReadyPowerfulSource] = true;
   }
 
   // Finally, schedule any user specified debug queries
   // Done last so as to not duplicate automatically added queries
   if (this->ready.all()) {
-    for (const auto debug_query : this->debug_queries) {
-      const auto existing = get_query_result(debug_query);
-      if (existing == QueryNotScheduled) {
-        ESP_LOGD(TAG, "Adding query %" PRI_SV, PRI_SV_ARGS(debug_query));
-        this->queries.emplace_back(debug_query, &DaikinS21::handle_nop);
-      }
+    for (auto &query : this->queries | std::views::filter(DaikinQuery::IsDebug)) {
+      query.enabled = true;
     }
   }
+}
+
+void DaikinS21::check_ready_protocol_detection() {
+  static constexpr uint8_t old_version_0[4] = {'0',0,0,0};
+  static constexpr uint8_t old_version_1[4] = {'0','1',0,0};
+  static constexpr uint8_t old_version_2or3[4] = {'0','2',0,0};
+  static constexpr uint8_t old_version_31plus[4] = {'0','2','0','0'};
+  const auto &old_proto = this->get_query(StateQuery::OldProtocol);
+  const auto &new_proto = this->get_query(StateQuery::NewProtocol);
+
+  this->protocol_version = ProtocolUndetected;
+  // Check availability first, both protocol indicators were enabled on init so skip to the chase
+  if (old_proto.success() && new_proto.failed()) {
+    if (std::ranges::equal(old_proto.value(), old_version_0)) {
+      this->protocol_version = ProtocolVersion(0);
+    } else if (std::ranges::equal(old_proto.value(), old_version_1)) {
+      this->protocol_version = ProtocolVersion(1);
+    } else if (std::ranges::equal(old_proto.value(), old_version_2or3) || std::ranges::equal(old_proto.value(), old_version_31plus)) {
+      this->protocol_version = ProtocolVersion(2); // NAK for NewProtocol rules out 3.0
+    } else {
+      this->protocol_version = ProtocolUnknown;
+    }
+  } else if (old_proto.ready() && new_proto.success()) {
+    const uint16_t raw_version = bytes_to_num(new_proto.value());
+    this->protocol_version = {static_cast<uint8_t>(raw_version / 100), static_cast<uint8_t>(raw_version % 100)};
+    // fixup on the 2 / 3.0 protocol border
+    if (this->protocol_version == ProtocolVersion(3,0)) {
+      if (old_proto.success() && std::ranges::equal(old_proto.value(), old_version_31plus)) {
+        this->protocol_version = ProtocolVersion(3,10);
+      }
+    }
+  } else if (old_proto.failed() && new_proto.failed()) {
+    // both nak'd, even though we're talking to the unit?
+    this->protocol_version = ProtocolUnknown;
+  }
+
+  // Print some info if we're falling back to version 0
+  if (this->protocol_version == ProtocolUnknown) {
+    ESP_LOGE(TAG, "Unable to detect protocol version! Old: %s New: %s",
+      str_repr(old_proto.value()).c_str(),
+      str_repr(new_proto.value()).c_str());
+  }
+
+  // check if complete and handle results if so
+  this->ready[ReadyProtocolDetection] = this->protocol_version != ProtocolUndetected;
+  if (this->ready[ReadyProtocolDetection]) {
+    ESP_LOGD(TAG, "Protocol version %" PRIu8 ".%" PRIu8 " detected", this->protocol_version.major, this->protocol_version.minor);
+    // >= ProtocolVersion(0)
+    this->enable_query(StateQuery::Basic);
+    this->enable_query(StateQuery::OptionalFeatures);
+    this->enable_query(StateQuery::SwingOrHumidity);
+    if (this->protocol_version <= ProtocolVersion(2)) {
+      this->enable_query(EnvironmentQuery::CompressorOnOff);
+      this->enable_query(MiscQuery::Model);
+      this->enable_query(MiscQuery::Version);
+    }
+    if (this->protocol_version >= ProtocolVersion(2)) {
+      if (this->readout_requests[ReadoutPresets]) {
+        this->enable_query(StateQuery::SpecialModes);
+        this->enable_query(StateQuery::DemandAndEcono);
+      }
+      this->enable_query(StateQuery::ModelCode);
+      if (this->readout_requests[ReadoutIRCounter]) {
+        this->enable_query(StateQuery::IRCounter);
+      }
+      this->enable_query(StateQuery::V2OptionalFeatures);
+      if (this->readout_requests[ReadoutPowerConsumption]) {
+        this->enable_query(StateQuery::PowerConsumption);
+      }
+      this->enable_query(StateQuery::FT);
+      this->enable_query(MiscQuery::SoftwareVersion);
+    }
+    // todo >= ProtocolVersion(3,0)
+    this->enable_query(EnvironmentQuery::InsideTemperature);
+    if (this->readout_requests[ReadoutTemperatureCoil]) {
+      this->enable_query(EnvironmentQuery::LiquidTemperature);
+    }
+    if (this->readout_requests[ReadoutTemperatureTarget]) {
+      this->enable_query(EnvironmentQuery::TargetTemperature);
+    }
+    if (this->readout_requests[ReadoutTemperatureOutside]) {
+      this->enable_query(EnvironmentQuery::OutsideTemperature);
+    }
+    if (this->readout_requests[ReadoutDemand]) {
+      this->enable_query(EnvironmentQuery::IndoorFrequencyCommandSignal);
+    }
+    if (this->readout_requests[ReadoutCompressorFrequency]) {
+      this->enable_query(EnvironmentQuery::CompressorFrequency);
+    }
+  }
+}
+
+/**
+ * Detect and handle optional features
+ */
+void DaikinS21::check_ready_optional_features() {
+  const auto &features = this->get_query(StateQuery::OptionalFeatures);
+  const auto &v2_features = this->get_query(StateQuery::V2OptionalFeatures);
+  // check if complete and handle results if so
+  this->ready[ReadyOptionalFeatures] = (features.ready() && v2_features.ready());
+  if (this->ready[ReadyOptionalFeatures]) {
+    // v2 GK info gates base G2 support if present
+    if ((v2_features.success() == false) || (v2_features[2] & 0b00000100)) {
+      // swing
+      this->support.swing = (features.success() && (features[0] & 0b0100));
+      if (this->support.swing) {
+        this->support.horizontal_swing = (features.success() && (features[0] & 0b1000));
+        if (this->readout_requests[ReadoutSwingAngle]) {
+          this->enable_query(EnvironmentQuery::VerticalSwingAngle);
+        }
+      }
+      // fan
+      this->support.fan = true;
+      this->enable_query(EnvironmentQuery::FanMode);
+      if (this->readout_requests[ReadoutFanSpeed]) {
+        this->enable_query(EnvironmentQuery::FanSpeed);
+      }
+    }
+
+    // humidity
+    if ((v2_features.success() == false) || (v2_features[2] & 0b00000010)) {
+      this->support.humidity = (features.success() && (features[3] & 0b0010));
+      if (this->support.humidity) {
+        // unknown if this is a dehumidify mode or humidity sensor. potentially hides the sensor if it's just the mode. my unit supports neither over S21 interface.
+        if (this->readout_requests[ReadoutHumidity]) {
+          this->enable_query(EnvironmentQuery::IndoorHumidity);
+        }
+      }
+    }
+
+    // standalone, info only
+    if (features.success()) {
+      this->support.model_info =    (features[1] & 0b1000) ? 'N': 'C';
+    }
+    if (v2_features.success()) {
+      this->support.ac_led =        (v2_features[0] & 0b00000001);
+      this->support.laundry =       (v2_features[0] & 0b00001000);
+      this->support.elec =          (v2_features[1] & 0b00000001);
+      this->support.temp_range =    (v2_features[1] & 0b00000100);
+      this->support.motion_detect = (v2_features[1] & 0b00001000);
+      this->support.ac_japan =      (v2_features[2] & 0b00000001) == 0;
+      this->support.dry =           (v2_features[2] & 0b00001000);
+      this->support.demand =        (v2_features[3] & 0b00000001);
+    }
+
+    // todo climate traits and sensor config check -- let user know they can pare down their yaml
+    ESP_LOGD(TAG, "Optional features detected");
+  }
+}
+
+/**
+ * Enable alternate sensor readout if primary queries are unsupported
+ */
+void DaikinS21::check_ready_sensor_readout() {
+  const auto &fan_mode = this->get_query(EnvironmentQuery::FanMode);
+  const auto &inside = this->get_query(EnvironmentQuery::InsideTemperature);
+  const auto &outside = this->get_query(EnvironmentQuery::OutsideTemperature);
+  const auto &humidity = this->get_query(EnvironmentQuery::IndoorHumidity);
+  // check if complete and handle results if so
+  this->ready[ReadySensorReadout] = fan_mode.ready() &&
+                                    inside.ready() &&
+                                    ((this->readout_requests[ReadoutTemperatureOutside] == false) || outside.ready()) &&
+                                    ((this->readout_requests[ReadoutHumidity] == false) || humidity.ready());
+  if (this->ready[ReadySensorReadout]) {
+    this->support.fan_mode_query = fan_mode.success();
+    this->support.inside_temperature_query = inside.success();
+    this->support.outside_temperature_query = outside.success();
+    this->support.humidity_query = humidity.success();
+    // enable coarse fallback query if any sensor query failed
+    const bool alt = inside.failed() ||
+                    (this->readout_requests[ReadoutTemperatureOutside] && outside.failed()) ||
+                    (this->readout_requests[ReadoutHumidity] && this->support.humidity && humidity.failed()); // only enable for humidity's sake if declared to be supported
+    if (alt) {
+      this->enable_query(StateQuery::InsideOutsideTemperatures);
+    }
+    ESP_LOGD(TAG, "%s sensor readout selected", alt ? "Alternate" : "Dedicated");
+  }
+}
+
+/**
+ * Detect the model and handle model-specific quirks
+ */
+void DaikinS21::check_ready_model_detection() {
+  const auto &model_v0 = this->get_query(MiscQuery::Model);
+  const auto &model_v2 = this->get_query(StateQuery::ModelCode);
+  // check if complete and handle results if so
+  this->ready[ReadyModelDetection] = (model_v0.ready() && model_v2.ready());
+  if (this->ready[ReadyModelDetection]) {
+    // Unit and system state aren't always reliable, blacklist models here
+    switch (this->modelV0) {
+      case ModelRXB35C2V1B:
+      case ModelRXC24AXVJU:
+        this->support.unit_system_state_queries = false;
+        break;
+      case ModelUnknown:
+      default:
+        this->support.unit_system_state_queries = true;
+        break;
+    }
+    if (this->support.unit_system_state_queries) {
+      if (this->readout_requests[ReadoutUnitStateBits]) {
+        this->enable_query(EnvironmentQuery::UnitState);
+      }
+      if (this->readout_requests[ReadoutSystemStateBits]) {
+        this->enable_query(EnvironmentQuery::SystemState);
+      }
+    }
+    // no v2 handling required yet
+    ESP_LOGD(TAG, "Model %04" PRIX16 " %04" PRIX16 " detected", this->modelV0, this->modelV2);
+  }
+}
+
+/**
+ * Select the source of the active flag
+ */
+void DaikinS21::check_ready_active_source() {
+  const auto &compressor_on_off = this->get_query(EnvironmentQuery::CompressorOnOff);
+  if (compressor_on_off.success()) {
+    this->support.active_source = ActiveSource::CompressorOnOff;
+  } else if (compressor_on_off.failed()) {
+    auto &unit_state = this->get_query(EnvironmentQuery::UnitState);
+    if ((unit_state.enabled == false) && this->support.unit_system_state_queries) {
+      this->readout_requests.set(ReadoutUnitStateBits);
+      unit_state.enabled = true;
+    } else if (unit_state.success()) {
+      this->support.active_source = ActiveSource::UnitState;
+    } else if (unit_state.failed()) {
+      this->support.unit_system_state_queries = false;  // unit state is assumed to be supported, if it isn't then correct the record
+      this->support.active_source = ActiveSource::Unsupported;
+      this->current.active = true;  // always active, reported action will follow unit
+    }
+  }
+  // check if complete and handle results if so
+  this->ready[ReadyActiveSource] = (this->support.active_source != ActiveSource::Unknown);
+  if (this->ready[ReadyActiveSource]) {
+    ESP_LOGD(TAG, "Active source is %s", active_source_to_string(this->support.active_source));
+  }
+}
+
+/**
+ * Select the source of the powerful flag
+ */
+void DaikinS21::check_ready_powerful_source() {
+  auto &unit_state = this->get_query(EnvironmentQuery::UnitState);
+  if (this->readout_requests[ReadoutPresets] &&
+      (this->get_query(StateQuery::SpecialModes).enabled == false) &&
+      this->support.unit_system_state_queries &&
+      (unit_state.enabled == false)) {
+    this->readout_requests.set(ReadoutUnitStateBits);
+    unit_state.enabled = true;
+    ESP_LOGD(TAG, "Alternate powerful source enabled");
+  }
+  this->ready[ReadyPowerfulSource] = true;
 }
 
 /**
@@ -611,17 +707,18 @@ void DaikinS21::handle_serial_idle() {
   }
 
   // Periodic query cycle
-  if (this->query_index < this->queries.size()) {
-    this->serial.send_frame(this->current_query()->command);  // query cycle underway, continue
+  if (this->active_query < this->queries.end()) {
+    this->serial.send_frame(this->active_query->command);  // query cycle underway, continue
     return;
   }
 
   // Query cycle complete
   const auto now = millis();
   this->cycle_active = false;
-  this->refine_queries();
   this->cycle_time_ms = now - this->cycle_time_start_ms;
-  if (this->ready.all()) {
+  if (this->ready.all() == false) {
+    this->ready_state_machine();
+  } else {
     // resolve action
     if (this->current.unit_state.defrost() && (this->current.action_reported == climate::CLIMATE_ACTION_HEATING)) {
       this->current.action = climate::CLIMATE_ACTION_COOLING; // report cooling during defrost
@@ -666,7 +763,6 @@ void DaikinS21::handle_state_basic(std::span<uint8_t> &payload) {
   if (this->support.fan_mode_query == false) {
     this->current.climate.fan = static_cast<daikin_s21::DaikinFanMode>(payload[3]);
   }
-  this->ready.set(ReadyBasic);
 }
 
 void DaikinS21::handle_state_swing_or_humidity(std::span<uint8_t> &payload) {
@@ -700,7 +796,7 @@ void DaikinS21::handle_state_inside_outside_temperature(std::span<uint8_t> &payl
 }
 
 void DaikinS21::handle_state_model_code_v2(std::span<uint8_t> &payload) {
-  this->modelV2 = ahex_u16_le(payload);
+  this->modelV2 = bytes_to_num(payload, 16);
 }
 
 void DaikinS21::handle_state_ir_counter(std::span<uint8_t> &payload) {
@@ -708,7 +804,7 @@ void DaikinS21::handle_state_ir_counter(std::span<uint8_t> &payload) {
 }
 
 void DaikinS21::handle_state_power_consumption(std::span<uint8_t> &payload) {
-  this->current.power_consumption = ahex_u16_le(payload);
+  this->current.power_consumption = bytes_to_num(payload, 16);
 }
 
 /** Vastly inferior to StateQuery::Basic */
@@ -794,7 +890,7 @@ void DaikinS21::handle_env_compressor_on_off(std::span<uint8_t> &payload) {
 }
 
 void DaikinS21::handle_env_unit_state(std::span<uint8_t> &payload) {
-  this->current.unit_state = ahex_digit(payload[0]);
+  this->current.unit_state = bytes_to_num(payload, 16);
   if (this->support.active_source == ActiveSource::UnitState) {
     this->current.active = this->current.unit_state.active(); // used to refine climate action
   }
@@ -802,153 +898,77 @@ void DaikinS21::handle_env_unit_state(std::span<uint8_t> &payload) {
 }
 
 void DaikinS21::handle_env_system_state(std::span<uint8_t> &payload) {
-  this->current.system_state = ahex_u8_le(payload[0], payload[1]);
+  this->current.system_state = bytes_to_num(payload, 16);
 }
 
 void DaikinS21::handle_misc_model_v0(std::span<uint8_t> &payload) {
-  this->modelV0 = ahex_u16_le(payload);
+  this->modelV0 = bytes_to_num(payload, 16);
 }
 
 void DaikinS21::handle_misc_software_version(std::span<uint8_t> &payload) {
-  payload = payload.subspan(0, DaikinQueryValue::software_version_length);  // odd command, trailing characters are "00000M"
+  payload = payload.subspan(0, 8);  // odd command, trailing characters are "00000M"
   std::ranges::reverse(payload);  // reversed ascii
-}
-
-/**
- * Determine the protocol version according to Faikout documentation.
- *
- * @note This is mostly untested, I own only one Daikin system.
- *
- * @return true protocl version was detected
- * @return false protocol version wasn't detected
- */
-bool DaikinS21::determine_protocol_version() {
-  static constexpr uint8_t old_version_0[4] = {'0',0,0,0};
-  static constexpr uint8_t old_version_1[4] = {'0','1',0,0};
-  static constexpr uint8_t old_version_2or3[4] = {'0','2',0,0};
-  static constexpr uint8_t old_version_31plus[4] = {'0','2','0','0'};
-
-  // both protocol indicators should have been scheduled on init
-  const auto old_proto = this->get_query_result(StateQuery::OldProtocol);
-  const auto new_proto = this->get_query_result(StateQuery::NewProtocol);
-
-  // Check availability first
-  if (old_proto.ack && new_proto.nak) {
-    if (std::ranges::equal(old_proto.value, old_version_0)) {
-      this->protocol_version = ProtocolVersion(0);
-    } else if (std::ranges::equal(old_proto.value, old_version_1)) {
-      this->protocol_version = ProtocolVersion(1);
-    } else if (std::ranges::equal(old_proto.value, old_version_2or3) || std::ranges::equal(old_proto.value, old_version_31plus)) {
-      this->protocol_version = ProtocolVersion(2); // NAK for NewProtocol rules out 3.0
-    } else {
-      this->protocol_version = ProtocolUnknown;
-    }
-  } else if (old_proto && new_proto.ack) {
-    const uint16_t raw_version = bytes_to_num(new_proto.value);
-    this->protocol_version = {static_cast<uint8_t>(raw_version / 100), static_cast<uint8_t>(raw_version % 100)};
-    // fixup on the 2 / 3.0 protocol border
-    if (this->protocol_version == ProtocolVersion(3,0)) {
-      if (old_proto.ack && std::ranges::equal(old_proto.value, old_version_31plus)) {
-        this->protocol_version = ProtocolVersion(3,10);
-      }
-    }
-  } else if (old_proto.nak && new_proto.nak) {
-    // both nak'd, even though we're talking to the unit?
-    this->protocol_version = ProtocolUnknown;
-  } else {
-    ESP_LOGV(TAG, "Protocol version not ready yet");
-  }
-
-  // Print some info if we're falling back to version 0
-  if (this->protocol_version == ProtocolUnknown) {
-    ESP_LOGE(TAG, "Unable to detect protocol version! Old: %s New: %s",
-      str_repr(old_proto.value).c_str(),
-      str_repr(new_proto.value).c_str());
-  }
-
-  return this->protocol_version != daikin_s21::ProtocolUndetected;
 }
 
 void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const std::span<uint8_t> response /*= {}*/) {
   const bool is_query = this->current_command.empty();
-  const std::string_view tx_str = is_query ? this->current_query()->command : this->current_command;
+  const std::string_view tx_str = is_query ? this->active_query->command : this->current_command;
   std::span<uint8_t> payload = { response.begin() + tx_str.size(), response.end() };
 
   // add commands to this array to debug their output. empty string is just a placeholder to compile
   static constexpr std::array debug_commands{""};
   const bool is_debug = this->debug && (std::ranges::find(debug_commands, tx_str) != debug_commands.end());
 
-  // debug logging
   switch (result) {
     case DaikinSerial::Result::Ack:
+        // debug logging
       if (/*this->debug ||*/ is_debug) {  // uncomment to debug all, not just debug_commands
         ESP_LOGD(TAG, "ACK: %" PRI_SV " -> %s %s",
                   PRI_SV_ARGS(tx_str),
                   str_repr(payload).c_str(),
                   hex_repr(payload).c_str());
       }
-      break;
-    case DaikinSerial::Result::Nak:
-      ESP_LOGW(TAG, "NAK for %" PRI_SV, PRI_SV_ARGS(tx_str));
-      break;
-    case DaikinSerial::Result::Timeout:
-      ESP_LOGW(TAG, "Timeout waiting for response to %" PRI_SV, PRI_SV_ARGS(tx_str));
-      break;
-    case DaikinSerial::Result::Error:
-      ESP_LOGE(TAG, "Error with %" PRI_SV, PRI_SV_ARGS(tx_str));
-      break;
-    default:
-      break;
-  }
-
-  // handle serial result
-  switch (result) {
-    case DaikinSerial::Result::Ack:
       if (is_query) {
-        // mark as acked
-        this->current_query()->acked = true;
-        this->current_query()->naks = 0;
         // print changed values
         if ((/*this->debug ||*/ is_debug) &&  // uncomment to debug all, not just debug_commands
-            (std::ranges::equal(this->current_query()->value(), payload) == false)) {
+            (std::ranges::equal(this->active_query->value(), payload) == false)) {
           ESP_LOGI(TAG, "%" PRI_SV " changed: %s %s -> %s %s",
-                    PRI_SV_ARGS(this->current_query()->command),
-                    str_repr(this->current_query()->value()).c_str(),
-                    hex_repr(this->current_query()->value()).c_str(),
+                    PRI_SV_ARGS(this->active_query->command),
+                    str_repr(this->active_query->value()).c_str(),
+                    hex_repr(this->active_query->value()).c_str(),
                     str_repr(payload).c_str(),
                     hex_repr(payload).c_str());
         }
         // decode payload
-        if (this->current_query()->handler != nullptr) {
-          std::invoke(this->current_query()->handler, this, payload);
+        if (this->active_query->handler != nullptr) {
+          std::invoke(this->active_query->handler, this, payload);
         } else {
-          ESP_LOGI(TAG, "Unhandled command: %s", hex_repr(response).c_str());
+          ESP_LOGD(TAG, "Unhandled command: %s", hex_repr(response).c_str());
         }
         // save a copy of the payload
-        this->current_query()->set_value(payload);
-        if (this->current_query()->is_static) {
-          this->static_queries.emplace_back(*this->current_query());
-        }
+        this->active_query->ack(payload);
       } else {
         // nothing yet to do when a command is accepted
       }
       break;
 
     case DaikinSerial::Result::Nak:
+      ESP_LOGW(TAG, "NAK for %" PRI_SV, PRI_SV_ARGS(tx_str));
       if (is_query) {
-        this->current_query()->naks++;
+        this->active_query->nak();
       } else {
         // nothing yet to do when a command is rejected
       }
       break;
 
     case DaikinSerial::Result::Timeout:
+      ESP_LOGW(TAG, "Timeout waiting for response to %" PRI_SV, PRI_SV_ARGS(tx_str));
       if (is_query) {
         // It's possible some unsupported queries don't respond at all
         // Treat these as NAKs if we've established communication
         // Otherwise, a disconnected or unpowered HVAC unit will quickly cause all queries to fail
-        if (this->comms_detected()) {
-          this->current_query()->naks++;
+        if (this->ready[ReadyProtocolDetection]) {
+          this->active_query->nak();
         }
       } else {
         // command will be retried, let's hope the code that generates it is bug free
@@ -956,6 +976,8 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
       break;
 
     case DaikinSerial::Result::Error:
+      ESP_LOGE(TAG, "Error with %" PRI_SV, PRI_SV_ARGS(tx_str));
+      break;
     default:
       break;
   }
@@ -970,21 +992,12 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
     this->start_cycle();
   } else {
     if (is_query) {
-      if ((result == DaikinSerial::Result::Ack) && this->current_query()->is_static) {
-        // got the query result and know it won't change, remove
-        this->prune_query(this->current_query()->command);
-      } else if (this->current_query()->naks >= 3) {
-        // query failed, remove
-        ESP_LOGW(TAG, "removing %" PRI_SV " from query pool as unsupported", PRI_SV_ARGS(tx_str));
-        this->failed_queries.emplace_back(this->current_query()->command);
-        this->prune_query(this->current_query()->command);
-      } else {
-        // next query
-        this->query_index++;
-      }
-      // if communication established and all queries have failed we had comms then they were lost
-      if (this->comms_detected() && this->queries.empty()) {
+      // if communication established and all queries are disabled we had comms then they were lost
+      if (this->ready[ReadyProtocolDetection] && (std::ranges::count_if(this->queries, DaikinQuery::IsEnabled) == 0)) {
         this->setup();  // reinitialize in order to prepare for the HVAC unit being reconnected
+      } else {
+        // advance to next query
+        this->active_query = std::ranges::find_if(this->active_query + 1, this->queries.end(), DaikinQuery::IsEnabled);
       }
     } else {
       this->current_command = {};
@@ -999,15 +1012,15 @@ void DaikinS21::dump_state() {
       this->modelV0,
       this->modelV2);
   if (this->debug) {
-    const auto old_proto = this->get_query_result(StateQuery::OldProtocol);
-    const auto new_proto = this->get_query_result(StateQuery::NewProtocol);
-    const auto misc_version = this->get_query_result(MiscQuery::Version);
-    const auto software_version = this->get_query_result(MiscQuery::SoftwareVersion);
+    const auto &old_proto = this->get_query(StateQuery::OldProtocol);
+    const auto &new_proto = this->get_query(StateQuery::NewProtocol);
+    const auto &misc_version = this->get_query(MiscQuery::Version);
+    const auto &software_version = this->get_query(MiscQuery::SoftwareVersion);
     ESP_LOGD(TAG, " G8: %s  GY00: %s  V: %s  VS000M: %s",
-        str_repr(old_proto.value).c_str(),
-        str_repr(new_proto.value).c_str(),
-        str_repr(misc_version.value).c_str(),
-        str_repr(software_version.value).c_str());
+        str_repr(old_proto.value()).c_str(),
+        str_repr(new_proto.value()).c_str(),
+        str_repr(misc_version.value()).c_str(),
+        str_repr(software_version.value()).c_str());
   }
   ESP_LOGD(TAG, "ModelInfo: %c  VSwing: %c  HSwing: %c  Humid: %c  Fan: %c",
       this->support.model_info,
@@ -1016,13 +1029,13 @@ void DaikinS21::dump_state() {
       this->support.humidity ? 'Y' : 'N',
       this->support.fan ? 'Y' : 'N');
   if (this->debug) {
-    const auto features = this->get_query_result(StateQuery::OptionalFeatures);
-    const auto v2_features = this->get_query_result(StateQuery::V2OptionalFeatures);
-    const auto ft_capacity = this->get_query_result(StateQuery::FT);
+    const auto &features = this->get_query(StateQuery::OptionalFeatures);
+    const auto &v2_features = this->get_query(StateQuery::V2OptionalFeatures);
+    const auto &ft_capacity = this->get_query(StateQuery::FT);
     ESP_LOGD(TAG, " G2: %s  GK: %s  GT: %s  ActiveSrc: %s",
-        features.ack ? hex_repr(features.value).c_str() : str_repr(features.value).c_str(),
-        v2_features.ack ? hex_repr(v2_features.value).c_str() : str_repr(v2_features.value).c_str(),
-        ft_capacity.ack ? hex_repr(ft_capacity.value).c_str() : str_repr(ft_capacity.value).c_str(),
+        (features.success() ? hex_repr : str_repr)(features.value()).c_str(),
+        (v2_features.success() ? hex_repr : str_repr)(v2_features.value()).c_str(),
+        (ft_capacity.success() ? hex_repr : str_repr)(ft_capacity.value()).c_str(),
         active_source_to_string(this->support.active_source));
   }
   ESP_LOGD(TAG, "Mode: %s  Action: %s  Preset: %s  Demand: %" PRIu8,
@@ -1049,7 +1062,7 @@ void DaikinS21::dump_state() {
       this->current.unit_state.raw,
       this->current.system_state.raw);
   if (this->debug) {
-    const auto comma_join = [](const auto& queries) {
+    const auto comma_join = [](auto&& queries) {
       std::string str;
       for (const auto &q : queries) {
         str += q;
@@ -1059,9 +1072,9 @@ void DaikinS21::dump_state() {
       }
       return str;
     };
-    ESP_LOGD(TAG, " Active: %s", LOG_STR_ARG(comma_join(std::views::transform(this->queries, DaikinQueryState::GetCommand)).c_str()));
-    ESP_LOGD(TAG, "  Nak'd: %s", LOG_STR_ARG(comma_join(this->failed_queries).c_str()));
-    ESP_LOGD(TAG, " Static: %s", LOG_STR_ARG(comma_join(std::views::transform(this->static_queries, DaikinQueryState::GetCommand)).c_str()));
+    ESP_LOGD(TAG, "Enabled: %s", LOG_STR_ARG(comma_join(this->queries | std::views::filter(DaikinQuery::IsEnabled) | std::views::transform(DaikinQuery::GetCommand)).c_str()));
+    ESP_LOGD(TAG, "  Nak'd: %s", LOG_STR_ARG(comma_join(this->queries | std::views::filter(DaikinQuery::IsFailed) | std::views::transform(DaikinQuery::GetCommand)).c_str()));
+    ESP_LOGD(TAG, " Static: %s", LOG_STR_ARG(comma_join(this->queries | std::views::filter(DaikinQuery::IsAckedStatic) | std::views::transform(DaikinQuery::GetCommand)).c_str()));
   }
 }
 

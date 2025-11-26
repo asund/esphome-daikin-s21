@@ -71,7 +71,7 @@ void DaikinSerial::loop() {
             break;
 
           case ACK:
-            ESP_LOGD(TAG, "Rx STX: Repeated ACK, ignoring"); // on rare occasions my unit will do this
+            ESP_LOGV(TAG, "Rx STX: Repeated ACK, ignoring"); // on rare occasions my unit will do this, not harmful
             break;
 
           default:
