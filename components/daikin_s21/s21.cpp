@@ -107,6 +107,20 @@ const char * active_source_to_string(const ActiveSource source) {
   }
 }
 
+const char * powerful_source_to_string(const PowerfulSource source) {
+  switch (source) {
+    case PowerfulSource::SpecialModes:
+      return "G6";
+    case PowerfulSource::UnitState:
+      return "unit state";
+    case PowerfulSource::Disabled:
+      return "disabled";
+    case PowerfulSource::Unknown:
+    default:
+      return "undetected";
+  }
+}
+
 /**
  * Convert reversed ASCII number to an integer
  *
@@ -124,6 +138,7 @@ DaikinS21::DaikinS21(DaikinSerial * const serial)
   : serial(*serial) { // serial required in config, non-null
   // populate supported queries
   // this is done in the constructor so debug queries are only ever added to this list
+  // see https://github.com/revk/ESP32-Faikout/wiki/S21-Protocol for documentation
   this->queries = {
     {StateQuery::Basic, &DaikinS21::handle_state_basic},
     {StateQuery::OptionalFeatures, &DaikinS21::handle_nop, true},
@@ -424,8 +439,9 @@ void DaikinS21::check_ready_protocol_detection() {
     this->enable_query(StateQuery::Basic);
     this->enable_query(StateQuery::OptionalFeatures);
     this->enable_query(StateQuery::SwingOrHumidity);
+    this->enable_query(EnvironmentQuery::CompressorOnOff);
+    this->enable_query(MiscQuery::SoftwareVersion);
     if (this->protocol_version <= ProtocolVersion(2)) {
-      this->enable_query(EnvironmentQuery::CompressorOnOff);
       this->enable_query(MiscQuery::Model);
       this->enable_query(MiscQuery::Version);
     }
@@ -443,7 +459,6 @@ void DaikinS21::check_ready_protocol_detection() {
         this->enable_query(StateQuery::PowerConsumption);
       }
       this->enable_query(StateQuery::FT);
-      this->enable_query(MiscQuery::SoftwareVersion);
     }
     // todo >= ProtocolVersion(3,0)
     this->enable_query(EnvironmentQuery::InsideTemperature);
@@ -616,16 +631,33 @@ void DaikinS21::check_ready_active_source() {
  * Select the source of the powerful flag
  */
 void DaikinS21::check_ready_powerful_source() {
-  auto &unit_state = this->get_query(EnvironmentQuery::UnitState);
-  if (this->readout_requests[ReadoutPresets] &&
-      (this->get_query(StateQuery::SpecialModes).enabled == false) &&
-      this->support.unit_system_state_queries &&
-      (unit_state.enabled == false)) {
-    this->readout_requests.set(ReadoutUnitStateBits);
-    unit_state.enabled = true;
-    ESP_LOGD(TAG, "Alternate powerful source enabled");
+  if (this->readout_requests[ReadoutPresets]) {
+    auto &special_modes = this->get_query(StateQuery::SpecialModes);
+    if (special_modes.ready()) {
+      if (special_modes.success()) {
+        this->support.powerful_source = PowerfulSource::SpecialModes;
+      } else {
+        auto &unit_state = this->get_query(EnvironmentQuery::UnitState);
+        if (unit_state.ready()) {
+          if (unit_state.success()) {
+            this->support.powerful_source = PowerfulSource::UnitState;
+          } else if (this->support.unit_system_state_queries && (unit_state.enabled == false)) {
+            this->readout_requests.set(ReadoutUnitStateBits);
+            unit_state.enabled = true;
+          } else {
+            this->support.powerful_source = PowerfulSource::Disabled;
+          }
+        }
+      }
+    }
+  } else {
+    this->support.powerful_source = PowerfulSource::Disabled;
   }
-  this->ready[ReadyPowerfulSource] = true;
+  // check if complete and handle results if so
+  this->ready[ReadyPowerfulSource] = (this->support.powerful_source != PowerfulSource::Unknown);
+  if (this->ready[ReadyPowerfulSource]) {
+    ESP_LOGD(TAG, "Powerful source is %s", powerful_source_to_string(this->support.powerful_source));
+  }
 }
 
 /**
@@ -750,7 +782,7 @@ void DaikinS21::handle_serial_idle() {
   }
 }
 
-void DaikinS21::handle_state_basic(std::span<uint8_t> &payload) {
+void DaikinS21::handle_state_basic(const std::span<const uint8_t> payload) {
   if (payload[0] == '0') {
     this->current.climate.mode = climate::CLIMATE_MODE_OFF;
     this->current.action_reported = climate::CLIMATE_ACTION_OFF;
@@ -765,12 +797,12 @@ void DaikinS21::handle_state_basic(std::span<uint8_t> &payload) {
   }
 }
 
-void DaikinS21::handle_state_swing_or_humidity(std::span<uint8_t> &payload) {
+void DaikinS21::handle_state_swing_or_humidity(const std::span<const uint8_t> payload) {
   this->current.climate.swing = daikin_to_climate_swing_mode(payload[0]);
 }
 
-void DaikinS21::handle_state_special_modes(std::span<uint8_t> &payload) {
-  this->current.powerful =    (payload[0] & 0b00000010);
+void DaikinS21::handle_state_special_modes(const std::span<const uint8_t> payload) {
+  this->current.powerful =    (payload[0] & 0b00000010);  // highest precedence, if this query is working there's no need to check powerful_source
   this->current.comfort =     (payload[0] & 0b01000000);
   this->current.quiet =       (payload[0] & 0b10000000);
   this->current.streamer =    (payload[1] & 0b10000000);
@@ -778,12 +810,12 @@ void DaikinS21::handle_state_special_modes(std::span<uint8_t> &payload) {
   this->current.sensor_led =  (payload[3] & 0b00001100) == 0b00001100;
 }
 
-void DaikinS21::handle_state_demand_and_econo(std::span<uint8_t> &payload) {
+void DaikinS21::handle_state_demand_and_econo(const std::span<const uint8_t> payload) {
   this->current.econo =       (payload[1] == '2');
 }
 
 /** Coarser than EnvironmentQuery::InsideTemperature and EnvironmentQuery::OutsideTemperature. Added if those queries fail. */
-void DaikinS21::handle_state_inside_outside_temperature(std::span<uint8_t> &payload) {
+void DaikinS21::handle_state_inside_outside_temperature(const std::span<const uint8_t> payload) {
   if (this->support.inside_temperature_query == false) {
     this->temp_inside = (payload[0] - 128) * 5;  // 1 degree
   }
@@ -795,25 +827,25 @@ void DaikinS21::handle_state_inside_outside_temperature(std::span<uint8_t> &payl
   }
 }
 
-void DaikinS21::handle_state_model_code_v2(std::span<uint8_t> &payload) {
+void DaikinS21::handle_state_model_code_v2(const std::span<const uint8_t> payload) {
   this->modelV2 = bytes_to_num(payload, 16);
 }
 
-void DaikinS21::handle_state_ir_counter(std::span<uint8_t> &payload) {
+void DaikinS21::handle_state_ir_counter(const std::span<const uint8_t> payload) {
   this->current.ir_counter = bytes_to_num(payload); // format unknown
 }
 
-void DaikinS21::handle_state_power_consumption(std::span<uint8_t> &payload) {
+void DaikinS21::handle_state_power_consumption(const std::span<const uint8_t> payload) {
   this->current.power_consumption = bytes_to_num(payload, 16);
 }
 
 /** Vastly inferior to StateQuery::Basic */
-void DaikinS21::handle_env_power_on_off(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_power_on_off(const std::span<const uint8_t> payload) {
   const bool active = payload[0] == '1';
 }
 
 /** Same info as StateQuery::Basic */
-void DaikinS21::handle_env_indoor_unit_mode(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_indoor_unit_mode(const std::span<const uint8_t> payload) {
   if (payload[0] == '0') {
     this->current.climate.mode = climate::CLIMATE_MODE_OFF;
     this->current.action_reported = climate::CLIMATE_ACTION_OFF;
@@ -824,98 +856,108 @@ void DaikinS21::handle_env_indoor_unit_mode(std::span<uint8_t> &payload) {
 }
 
 /** Same info as StateQuery::Basic */
-void DaikinS21::handle_env_temperature_setpoint(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_temperature_setpoint(const std::span<const uint8_t> payload) {
   this->current.climate.setpoint = bytes_to_num(payload) * 10;  // whole degrees C
 }
 
 /** Same info as StateQuery::SwingOrHumidity */
-void DaikinS21::handle_env_swing_mode(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_swing_mode(const std::span<const uint8_t> payload) {
   this->current.climate.swing = daikin_to_climate_swing_mode(payload[0]);
 }
 
 /** Better info than StateQuery::Basic (reports silent) */
-void DaikinS21::handle_env_fan_mode(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_fan_mode(const std::span<const uint8_t> payload) {
   this->current.climate.fan = static_cast<daikin_s21::DaikinFanMode>(payload[0]);
 }
 
-void DaikinS21::handle_env_inside_temperature(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_inside_temperature(const std::span<const uint8_t> payload) {
   this->temp_inside = bytes_to_num(payload);
 }
 
-void DaikinS21::handle_env_liquid_temperature(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_liquid_temperature(const std::span<const uint8_t> payload) {
   this->temp_coil = bytes_to_num(payload);
 }
 
-void DaikinS21::handle_env_fan_speed_setpoint(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_fan_speed_setpoint(const std::span<const uint8_t> payload) {
   this->current.fan_rpm_setpoint = bytes_to_num(payload) * 10;
 }
 
-void DaikinS21::handle_env_fan_speed(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_fan_speed(const std::span<const uint8_t> payload) {
   this->current.fan_rpm = bytes_to_num(payload) * 10;
 }
 
-void DaikinS21::handle_env_vertical_swing_angle_setpoint(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_vertical_swing_angle_setpoint(const std::span<const uint8_t> payload) {
   this->current.swing_vertical_angle_setpoint = bytes_to_num(payload);
 }
 
-void DaikinS21::handle_env_vertical_swing_angle(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_vertical_swing_angle(const std::span<const uint8_t> payload) {
   this->current.swing_vertical_angle = bytes_to_num(payload);
 }
 
-void DaikinS21::handle_env_target_temperature(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_target_temperature(const std::span<const uint8_t> payload) {
   this->temp_target = bytes_to_num(payload); // Internal control loop target temperature
 }
 
-void DaikinS21::handle_env_outside_temperature(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_outside_temperature(const std::span<const uint8_t> payload) {
   this->temp_outside = bytes_to_num(payload);
 }
 
-void DaikinS21::handle_env_indoor_frequency_command_signal(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_indoor_frequency_command_signal(const std::span<const uint8_t> payload) {
   this->demand = bytes_to_num(payload);  // Demand, 0-15
 }
 
-void DaikinS21::handle_env_compressor_frequency(std::span<uint8_t> &payload) {
-  this->compressor_hz = bytes_to_num(payload);
-  if (this->compressor_hz == 999) {
-    this->compressor_hz = 0;  // reported by danijelt
+void DaikinS21::handle_env_compressor_frequency(const std::span<const uint8_t> payload) {
+  this->compressor_rpm = bytes_to_num(payload) * 10;
+  if (this->compressor_rpm == 9990) {
+    this->compressor_rpm = 0;  // reported by danijelt
   }
 }
 
-void DaikinS21::handle_env_indoor_humidity(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_indoor_humidity(const std::span<const uint8_t> payload) {
   this->humidity = bytes_to_num(payload);
 }
 
-void DaikinS21::handle_env_compressor_on_off(std::span<uint8_t> &payload) {
-  this->current.active = (payload[0] == '1'); // highest precedence active source, if this query is working there's no need to check active_source
+void DaikinS21::handle_env_compressor_on_off(const std::span<const uint8_t> payload) {
+  this->current.active = (payload[0] == '1'); // highest precedence, if this query is working there's no need to check active_source
 }
 
-void DaikinS21::handle_env_unit_state(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_unit_state(const std::span<const uint8_t> payload) {
   this->current.unit_state = bytes_to_num(payload, 16);
   if (this->support.active_source == ActiveSource::UnitState) {
     this->current.active = this->current.unit_state.active(); // used to refine climate action
   }
-  this->current.powerful = this->current.unit_state.powerful();  // if G6 is unsupported we can still read out powerful set by remote
+  if (this->support.powerful_source == PowerfulSource::UnitState) {
+    this->current.powerful = this->current.unit_state.powerful();  // if G6 is unsupported we can still read out powerful set by remote
+  }
 }
 
-void DaikinS21::handle_env_system_state(std::span<uint8_t> &payload) {
+void DaikinS21::handle_env_system_state(const std::span<const uint8_t> payload) {
   this->current.system_state = bytes_to_num(payload, 16);
 }
 
-void DaikinS21::handle_misc_model_v0(std::span<uint8_t> &payload) {
+void DaikinS21::handle_misc_model_v0(const std::span<const uint8_t> payload) {
   this->modelV0 = bytes_to_num(payload, 16);
 }
 
-void DaikinS21::handle_misc_software_version(std::span<uint8_t> &payload) {
-  payload = payload.subspan(0, 8);  // odd command, trailing characters are "00000M"
-  std::ranges::reverse(payload);  // reversed ascii
+void DaikinS21::handle_misc_software_version(const std::span<const uint8_t> payload) {
+  if (payload.size() <= 14) {
+    std::ranges::reverse_copy(payload, this->software_version.begin());
+  }
 }
 
-void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const std::span<uint8_t> response /*= {}*/) {
+void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const std::span<const uint8_t> response /*= {}*/) {
   const bool is_query = this->current_command.empty();
   const std::string_view tx_str = is_query ? this->active_query->command : this->current_command;
-  std::span<uint8_t> payload = { response.begin() + tx_str.size(), response.end() };
 
-  // add commands to this array to debug their output. empty string is just a placeholder to compile
+  // Clip off the echoed query when it's echoed back. Most responses have a different leading character so ignore it.
+  std::span<const uint8_t> payload{};
+  if ((tx_str.size() <= response.size()) && std::equal(tx_str.begin() + 1, tx_str.end(), response.begin() + 1)) {
+    payload = { response.begin() + tx_str.size(), response.end() };
+  } else {
+    payload = response; // Some queries have parameters that might not be echoed back, like VS000M -> V for protocol 0
+  }
+
+  // Add commands to this array to debug their output. empty string is just a placeholder to compile
   static constexpr std::array debug_commands{""};
   const bool is_debug = this->debug && (std::ranges::find(debug_commands, tx_str) != debug_commands.end());
 

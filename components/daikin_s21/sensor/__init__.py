@@ -10,7 +10,6 @@ from esphome.const import (
     CONF_ID,
     UNIT_CELSIUS,
     UNIT_DEGREES,
-    UNIT_HERTZ,
     UNIT_KILOWATT_HOURS,
     UNIT_PERCENT,
     UNIT_REVOLUTIONS_PER_MINUTE,
@@ -90,7 +89,7 @@ CONFIG_SCHEMA = (
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional(CONF_COMPRESSOR_FREQUENCY): sensor.sensor_schema(
-            unit_of_measurement=UNIT_HERTZ,
+            unit_of_measurement=UNIT_REVOLUTIONS_PER_MINUTE,
             icon="mdi:pump",
             accuracy_decimals=0,
             device_class=DEVICE_CLASS_FREQUENCY,

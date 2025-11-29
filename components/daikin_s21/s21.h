@@ -73,7 +73,7 @@ class DaikinS21 : public PollingComponent {
   auto get_swing_vertical_angle() { return this->current.swing_vertical_angle; }
   auto get_ir_counter() { return this->current.ir_counter; }
   auto get_power_consumption() { return this->current.power_consumption; }
-  auto get_compressor_frequency() { return this->compressor_hz; }
+  auto get_compressor_frequency() { return this->compressor_rpm; }
   auto get_humidity() { return this->humidity; }
   auto get_demand() { return this->demand; }
   auto get_unit_state() { return this->current.unit_state; }
@@ -82,7 +82,7 @@ class DaikinS21 : public PollingComponent {
   std::span<const uint8_t> get_query_result(std::string_view query_str);
 
   // callbacks for serial events
-  void handle_serial_result(DaikinSerial::Result result, std::span<uint8_t> response = {});
+  void handle_serial_result(DaikinSerial::Result result, std::span<const uint8_t> response = {});
   void handle_serial_idle();
 
  protected:
@@ -122,36 +122,36 @@ class DaikinS21 : public PollingComponent {
   void enable_query(std::string_view query_str);
 
   // query handlers
-  void handle_nop(std::span<uint8_t> &payload) {}
-  void handle_state_basic(std::span<uint8_t> &payload);
-  void handle_state_swing_or_humidity(std::span<uint8_t> &payload);
-  void handle_state_special_modes(std::span<uint8_t> &payload);
-  void handle_state_demand_and_econo(std::span<uint8_t> &payload);
-  void handle_state_inside_outside_temperature(std::span<uint8_t> &payload);
-  void handle_state_model_code_v2(std::span<uint8_t> &payload);
-  void handle_state_ir_counter(std::span<uint8_t> &payload);
-  void handle_state_power_consumption(std::span<uint8_t> &payload);
-  void handle_env_power_on_off(std::span<uint8_t> &payload);
-  void handle_env_indoor_unit_mode(std::span<uint8_t> &payload);
-  void handle_env_temperature_setpoint(std::span<uint8_t> &payload);
-  void handle_env_swing_mode(std::span<uint8_t> &payload);
-  void handle_env_fan_mode(std::span<uint8_t> &payload);
-  void handle_env_inside_temperature(std::span<uint8_t> &payload);
-  void handle_env_liquid_temperature(std::span<uint8_t> &payload);
-  void handle_env_fan_speed_setpoint(std::span<uint8_t> &payload);
-  void handle_env_fan_speed(std::span<uint8_t> &payload);
-  void handle_env_vertical_swing_angle_setpoint(std::span<uint8_t> &payload);
-  void handle_env_vertical_swing_angle(std::span<uint8_t> &payload);
-  void handle_env_target_temperature(std::span<uint8_t> &payload);
-  void handle_env_outside_temperature(std::span<uint8_t> &payload);
-  void handle_env_indoor_frequency_command_signal(std::span<uint8_t> &payload);
-  void handle_env_compressor_frequency(std::span<uint8_t> &payload);
-  void handle_env_indoor_humidity(std::span<uint8_t> &payload);
-  void handle_env_compressor_on_off(std::span<uint8_t> &payload);
-  void handle_env_unit_state(std::span<uint8_t> &payload);
-  void handle_env_system_state(std::span<uint8_t> &payload);
-  void handle_misc_model_v0(std::span<uint8_t> &payload);
-  void handle_misc_software_version(std::span<uint8_t> &payload);
+  void handle_nop(std::span<const uint8_t> payload) {}
+  void handle_state_basic(std::span<const uint8_t> payload);
+  void handle_state_swing_or_humidity(std::span<const uint8_t> payload);
+  void handle_state_special_modes(std::span<const uint8_t> payload);
+  void handle_state_demand_and_econo(std::span<const uint8_t> payload);
+  void handle_state_inside_outside_temperature(std::span<const uint8_t> payload);
+  void handle_state_model_code_v2(std::span<const uint8_t> payload);
+  void handle_state_ir_counter(std::span<const uint8_t> payload);
+  void handle_state_power_consumption(std::span<const uint8_t> payload);
+  void handle_env_power_on_off(std::span<const uint8_t> payload);
+  void handle_env_indoor_unit_mode(std::span<const uint8_t> payload);
+  void handle_env_temperature_setpoint(std::span<const uint8_t> payload);
+  void handle_env_swing_mode(std::span<const uint8_t> payload);
+  void handle_env_fan_mode(std::span<const uint8_t> payload);
+  void handle_env_inside_temperature(std::span<const uint8_t> payload);
+  void handle_env_liquid_temperature(std::span<const uint8_t> payload);
+  void handle_env_fan_speed_setpoint(std::span<const uint8_t> payload);
+  void handle_env_fan_speed(std::span<const uint8_t> payload);
+  void handle_env_vertical_swing_angle_setpoint(std::span<const uint8_t> payload);
+  void handle_env_vertical_swing_angle(std::span<const uint8_t> payload);
+  void handle_env_target_temperature(std::span<const uint8_t> payload);
+  void handle_env_outside_temperature(std::span<const uint8_t> payload);
+  void handle_env_indoor_frequency_command_signal(std::span<const uint8_t> payload);
+  void handle_env_compressor_frequency(std::span<const uint8_t> payload);
+  void handle_env_indoor_humidity(std::span<const uint8_t> payload);
+  void handle_env_compressor_on_off(std::span<const uint8_t> payload);
+  void handle_env_unit_state(std::span<const uint8_t> payload);
+  void handle_env_system_state(std::span<const uint8_t> payload);
+  void handle_misc_model_v0(std::span<const uint8_t> payload);
+  void handle_misc_software_version(std::span<const uint8_t> payload);
 
   // debugging support
   bool debug{};
@@ -195,7 +195,7 @@ class DaikinS21 : public PollingComponent {
   DaikinC10 temp_target{};
   DaikinC10 temp_outside{};
   DaikinC10 temp_coil{};
-  uint8_t compressor_hz{};
+  uint16_t compressor_rpm{};
   uint8_t humidity{50};
   uint8_t demand{};
 
@@ -203,6 +203,8 @@ class DaikinS21 : public PollingComponent {
   ProtocolVersion protocol_version{ProtocolUndetected};
   DaikinModel modelV0{ModelUnknown};
   DaikinModel modelV2{ModelUnknown};
+  std::array<char, 14+1> software_version{};
+
   struct {
     // for alternate readout
     bool fan_mode_query{};
@@ -211,6 +213,7 @@ class DaikinS21 : public PollingComponent {
     bool humidity_query{};
     bool unit_system_state_queries{};
     ActiveSource active_source{ActiveSource::Unknown};
+    PowerfulSource powerful_source{PowerfulSource::Unknown};
     // supported
     char model_info{'?'};
     bool swing{};
