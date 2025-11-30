@@ -61,6 +61,10 @@ class DaikinS21Sensor : public PollingComponent,
     this->power_consumption_sensor_ = sensor;
     this->get_parent()->request_readout(DaikinS21::ReadoutPowerConsumption);
   }
+  void set_outdoor_capacity_sensor(sensor::Sensor *sensor) {
+    this->outdoor_capacity_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutOutdoorCapacity);
+  }
 
  protected:
   bool is_free_run() const { return this->get_update_interval() == 0; }
@@ -76,6 +80,7 @@ class DaikinS21Sensor : public PollingComponent,
   sensor::Sensor *demand_sensor_{};
   sensor::Sensor *ir_counter_sensor_{};
   sensor::Sensor *power_consumption_sensor_{};
+  sensor::Sensor *outdoor_capacity_sensor_{};
 };
 
 } // namespace esphome::daikin_s21

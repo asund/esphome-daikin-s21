@@ -17,9 +17,14 @@ class DaikinS21TextSensor : public Component,
   void loop() override;
   void dump_config() override;
 
+  void set_software_version_sensor(text_sensor::TextSensor *sensor) {
+    this->software_version_sensor_ = sensor;
+  }
   void set_debug_query_sensors(std::vector<text_sensor::TextSensor *> &&sensors);
 
  protected:
+  bool statics_done{};
+  text_sensor::TextSensor *software_version_sensor_{};
   std::vector<text_sensor::TextSensor *> sensors{};
 };
 

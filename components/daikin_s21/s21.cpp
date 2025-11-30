@@ -158,7 +158,7 @@ DaikinS21::DaikinS21(DaikinSerial * const serial)
     // {StateQuery::FP, &DaikinS21::handle_nop}, // unknown
     // {StateQuery::FQ, &DaikinS21::handle_nop}, // unknown
     // {StateQuery::FS, &DaikinS21::handle_nop}, // unknown
-    {StateQuery::FT, &DaikinS21::handle_nop, true}, // unknown, outdoor unit capacity?
+    {StateQuery::OutdoorCapacity, &DaikinS21::handle_state_outdoor_capacity}, // unconfirmed, outdoor unit capacity?
     // {StateQuery::FV, &DaikinS21::handle_nop}, // unknown
     {StateQuery::NewProtocol, &DaikinS21::handle_nop, true},  // protocol version detect
     // {EnvironmentQuery::PowerOnOff, &DaikinS21::handle_env_power_on_off}, // redundant
@@ -458,7 +458,9 @@ void DaikinS21::check_ready_protocol_detection() {
       if (this->readout_requests[ReadoutPowerConsumption]) {
         this->enable_query(StateQuery::PowerConsumption);
       }
-      this->enable_query(StateQuery::FT);
+      if (this->readout_requests[ReadoutOutdoorCapacity]) {
+        this->enable_query(StateQuery::OutdoorCapacity);
+      }
     }
     // todo >= ProtocolVersion(3,0)
     this->enable_query(EnvironmentQuery::InsideTemperature);
@@ -839,6 +841,10 @@ void DaikinS21::handle_state_power_consumption(const std::span<const uint8_t> pa
   this->current.power_consumption = bytes_to_num(payload, 16);
 }
 
+void DaikinS21::handle_state_outdoor_capacity(const std::span<const uint8_t> payload) {
+  this->current.outdoor_capacity = bytes_to_num(payload);
+}
+
 /** Vastly inferior to StateQuery::Basic */
 void DaikinS21::handle_env_power_on_off(const std::span<const uint8_t> payload) {
   const bool active = payload[0] == '1';
@@ -939,8 +945,18 @@ void DaikinS21::handle_misc_model_v0(const std::span<const uint8_t> payload) {
   this->modelV0 = bytes_to_num(payload, 16);
 }
 
-void DaikinS21::handle_misc_software_version(const std::span<const uint8_t> payload) {
-  if (payload.size() <= 14) {
+void DaikinS21::handle_misc_software_version(std::span<const uint8_t> payload) {
+  // these rely on query string being included in the payload, as it is when
+  // the calling code can't trim it off because it's an irregular response
+  if ((payload.size() == 5) && (payload[0] == 'V')) {
+    // protocol 0 returns VXXXX MiscQuery::Model response
+    payload = payload.subspan(1);
+    this->modelV0 = bytes_to_num(payload, 16);
+  } else if ((payload.size() == 16) && (payload[0] == 'V') && (payload[1] == 'S')) {
+    // protocol >=2 returns VSXXXXXXXXM00000 response
+    payload = payload.subspan(2, 8);
+  }
+  if (payload.size() <= (this->software_version.size()-1)) {
     std::ranges::reverse_copy(payload, this->software_version.begin());
   }
 }
@@ -1058,11 +1074,10 @@ void DaikinS21::dump_state() {
     const auto &new_proto = this->get_query(StateQuery::NewProtocol);
     const auto &misc_version = this->get_query(MiscQuery::Version);
     const auto &software_version = this->get_query(MiscQuery::SoftwareVersion);
-    ESP_LOGD(TAG, " G8: %s  GY00: %s  V: %s  VS000M: %s",
+    ESP_LOGD(TAG, " G8: %s  GY00: %s  V: %s",
         str_repr(old_proto.value()).c_str(),
         str_repr(new_proto.value()).c_str(),
-        str_repr(misc_version.value()).c_str(),
-        str_repr(software_version.value()).c_str());
+        str_repr(misc_version.value()).c_str());
   }
   ESP_LOGD(TAG, "ModelInfo: %c  VSwing: %c  HSwing: %c  Humid: %c  Fan: %c",
       this->support.model_info,
@@ -1073,12 +1088,11 @@ void DaikinS21::dump_state() {
   if (this->debug) {
     const auto &features = this->get_query(StateQuery::OptionalFeatures);
     const auto &v2_features = this->get_query(StateQuery::V2OptionalFeatures);
-    const auto &ft_capacity = this->get_query(StateQuery::FT);
-    ESP_LOGD(TAG, " G2: %s  GK: %s  GT: %s  ActiveSrc: %s",
+    ESP_LOGD(TAG, " G2: %s  GK: %s  ActiveSrc: %s  PowerfulSrc: %s",
         (features.success() ? hex_repr : str_repr)(features.value()).c_str(),
         (v2_features.success() ? hex_repr : str_repr)(v2_features.value()).c_str(),
-        (ft_capacity.success() ? hex_repr : str_repr)(ft_capacity.value()).c_str(),
-        active_source_to_string(this->support.active_source));
+        active_source_to_string(this->support.active_source),
+        powerful_source_to_string(this->support.powerful_source));
   }
   ESP_LOGD(TAG, "Mode: %s  Action: %s  Preset: %s  Demand: %" PRIu8,
       LOG_STR_ARG(climate::climate_mode_to_string(this->current.climate.mode)),

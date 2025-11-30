@@ -72,6 +72,9 @@ void DaikinS21Sensor::publish_sensors() {
   if (this->power_consumption_sensor_ != nullptr) {
     this->power_consumption_sensor_->publish_state(this->get_parent()->get_power_consumption() / 100.0F);
   }
+  if (this->outdoor_capacity_sensor_ != nullptr) {
+    this->outdoor_capacity_sensor_->publish_state(this->get_parent()->get_outdoor_capacity());
+  }
 }
 
 void DaikinS21Sensor::dump_config() {
@@ -87,6 +90,7 @@ void DaikinS21Sensor::dump_config() {
   LOG_SENSOR("  ", "Demand", this->demand_sensor_);
   LOG_SENSOR("  ", "IR Counter", this->ir_counter_sensor_);
   LOG_SENSOR("  ", "Power Consumption", this->power_consumption_sensor_);
+  LOG_SENSOR("  ", "Outdoor Capacity", this->outdoor_capacity_sensor_);
 }
 
 } // namespace esphome::daikin_s21

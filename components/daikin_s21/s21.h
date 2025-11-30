@@ -45,6 +45,7 @@ class DaikinS21 : public PollingComponent {
     ReadoutDemand,
     ReadoutIRCounter,
     ReadoutPowerConsumption,
+    ReadoutOutdoorCapacity,
     // just for bitset sizing
     ReadoutCount,
   };
@@ -73,11 +74,13 @@ class DaikinS21 : public PollingComponent {
   auto get_swing_vertical_angle() { return this->current.swing_vertical_angle; }
   auto get_ir_counter() { return this->current.ir_counter; }
   auto get_power_consumption() { return this->current.power_consumption; }
+  auto get_outdoor_capacity() { return this->current.outdoor_capacity; }
   auto get_compressor_frequency() { return this->compressor_rpm; }
   auto get_humidity() { return this->humidity; }
   auto get_demand() { return this->demand; }
   auto get_unit_state() { return this->current.unit_state; }
   auto get_system_state() { return this->current.system_state; }
+  auto get_software_version() { return this->software_version.data(); }
   bool is_active() { return this->current.active; }
   std::span<const uint8_t> get_query_result(std::string_view query_str);
 
@@ -131,6 +134,7 @@ class DaikinS21 : public PollingComponent {
   void handle_state_model_code_v2(std::span<const uint8_t> payload);
   void handle_state_ir_counter(std::span<const uint8_t> payload);
   void handle_state_power_consumption(std::span<const uint8_t> payload);
+  void handle_state_outdoor_capacity(std::span<const uint8_t> payload);
   void handle_env_power_on_off(std::span<const uint8_t> payload);
   void handle_env_indoor_unit_mode(std::span<const uint8_t> payload);
   void handle_env_temperature_setpoint(std::span<const uint8_t> payload);
@@ -170,6 +174,7 @@ class DaikinS21 : public PollingComponent {
     int16_t swing_vertical_angle{};
     uint16_t ir_counter{};
     uint16_t power_consumption{};
+    uint8_t outdoor_capacity{};
     DaikinUnitState unit_state{};
     DaikinSystemState system_state{};
     // modifiers
@@ -203,7 +208,7 @@ class DaikinS21 : public PollingComponent {
   ProtocolVersion protocol_version{ProtocolUndetected};
   DaikinModel modelV0{ModelUnknown};
   DaikinModel modelV2{ModelUnknown};
-  std::array<char, 14+1> software_version{};
+  std::array<char, 8+1> software_version{};
 
   struct {
     // for alternate readout

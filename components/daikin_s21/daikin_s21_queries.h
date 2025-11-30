@@ -32,7 +32,7 @@ namespace StateQuery {
   inline constexpr std::string_view FQ{"FQ"};
   inline constexpr std::string_view LouvreAngleSetpoint{"FR"};
   inline constexpr std::string_view FS{"FS"};
-  inline constexpr std::string_view FT{"FT"};
+  inline constexpr std::string_view OutdoorCapacity{"FT"};
   inline constexpr std::string_view V3OptionalFeatures{"FU00"};
   inline constexpr std::string_view AllowedTemperatureRange{"FU02"};
   // FU04
