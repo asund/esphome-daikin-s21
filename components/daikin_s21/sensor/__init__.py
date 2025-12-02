@@ -10,7 +10,6 @@ from esphome.const import (
     CONF_ID,
     UNIT_CELSIUS,
     UNIT_DEGREES,
-    UNIT_HERTZ,
     UNIT_KILOWATT_HOURS,
     UNIT_PERCENT,
     UNIT_REVOLUTIONS_PER_MINUTE,
@@ -44,6 +43,7 @@ CONF_COMPRESSOR_FREQUENCY = "compressor_frequency"
 CONF_DEMAND = "demand"
 CONF_IR_COUNTER = "ir_counter"
 CONF_POWER_CONSUMPTION = "power_consumption"
+CONF_OUTDOOR_CAPACITY = "outdoor_capacity"
 
 CONFIG_SCHEMA = (
     cv.COMPONENT_SCHEMA
@@ -90,7 +90,7 @@ CONFIG_SCHEMA = (
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional(CONF_COMPRESSOR_FREQUENCY): sensor.sensor_schema(
-            unit_of_measurement=UNIT_HERTZ,
+            unit_of_measurement=UNIT_REVOLUTIONS_PER_MINUTE,
             icon="mdi:pump",
             accuracy_decimals=0,
             device_class=DEVICE_CLASS_FREQUENCY,
@@ -119,6 +119,11 @@ CONFIG_SCHEMA = (
             device_class=DEVICE_CLASS_POWER,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
+        cv.Optional(CONF_OUTDOOR_CAPACITY): sensor.sensor_schema(
+            icon="mdi:file-tree",
+            accuracy_decimals=0,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
     })
 )
 
@@ -139,6 +144,7 @@ async def to_code(config):
         (CONF_DEMAND, var.set_demand_sensor),
         (CONF_IR_COUNTER, var.set_ir_counter_sensor),
         (CONF_POWER_CONSUMPTION, var.set_power_consumption_sensor),
+        (CONF_OUTDOOR_CAPACITY, var.set_outdoor_capacity_sensor),
     )
     for key, func in sensors:
         if key in config:

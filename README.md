@@ -74,6 +74,7 @@ v2 protocol units may also support:
 
 * IR counter that increments when the remote is used (untested)
 * Total power consumption in kWh (untested)
+* Outdoor unit capacity in indoor units
 
 ### Binary Sensor
 
@@ -91,6 +92,11 @@ Not all units support these.
 * Multizone settings conflict
 
 ### Text Sensor
+
+There's not a lot of string data available in protocol v0 units. v2 protocol
+units may support, though untested:
+
+* Software Version
 
 If you've read the Faikout wiki you'll see many more queries available than
 what this project supports. I've added a text_sensor component to read these
@@ -350,6 +356,11 @@ sensor:
       name: Power Consumption
       filters:
         - delta: 0.0
+    outdoor_capacity:
+      name: Outdoor Capacity
+      device_id: daikin_outdoor
+      filters:
+        - delta: 0.0
   # optional external reference sensors
   - platform: homeassistant
     id: room_temp
@@ -383,8 +394,10 @@ binary_sensor:
       device_id: daikin_outdoor
 
 # raw case-sensitive query monitoring for debugging
-# text_sensor:
-#   - platform: daikin_s21
+text_sensor:
+  - platform: daikin_s21
+    software_version:
+      name: Software Version
 #     queries:
 #       - RK
 ```

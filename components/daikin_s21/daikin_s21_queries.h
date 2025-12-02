@@ -32,7 +32,7 @@ namespace StateQuery {
   inline constexpr std::string_view FQ{"FQ"};
   inline constexpr std::string_view LouvreAngleSetpoint{"FR"};
   inline constexpr std::string_view FS{"FS"};
-  inline constexpr std::string_view FT{"FT"};
+  inline constexpr std::string_view OutdoorCapacity{"FT"};
   inline constexpr std::string_view V3OptionalFeatures{"FU00"};
   inline constexpr std::string_view AllowedTemperatureRange{"FU02"};
   // FU04
@@ -118,16 +118,13 @@ namespace StateCommand {
   inline constexpr std::string_view LouvreAngleSetpoint{"DR"};
 }
 
-using PayloadBuffer = std::array<uint8_t, DaikinSerial::STANDARD_PAYLOAD_SIZE>;
-using ExtendedPayloadBuffer = std::array<uint8_t, DaikinSerial::EXTENDED_PAYLOAD_SIZE>;
-
 /**
  * Class for holding periodic query state.
  *
  * @note Don't move or copy once enabled as for simplicity's sake the special member functions are omitted.
  */
 class DaikinQuery {
-  using handler_fn = void (DaikinS21::*)(std::span<uint8_t>&);
+  using handler_fn = void (DaikinS21::*)(std::span<const uint8_t>);
   static inline constexpr uint8_t unscheduled_value[] = {'N','/','A'};
   static inline constexpr uint8_t nak_value[] = {'N','A','K'};
 
@@ -170,7 +167,7 @@ class DaikinQuery {
   void set_value(std::span<const uint8_t> payload);
 
   union {
-    PayloadBuffer internal;
+    std::array<uint8_t, DaikinSerial::STANDARD_PAYLOAD_SIZE> internal;
     uint8_t* external;
   } buffer{};  // last received value
   uint8_t size{};

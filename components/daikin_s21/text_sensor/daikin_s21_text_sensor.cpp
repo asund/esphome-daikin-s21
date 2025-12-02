@@ -23,7 +23,11 @@ void DaikinS21TextSensor::setup() {
  * Publish the sensors and wait for further updates.
  */
 void DaikinS21TextSensor::loop() {
-  // update all sensors
+  if (this->statics_done == false) {
+    software_version_sensor_->publish_state(this->get_parent()->get_software_version());
+    statics_done = true;
+  }
+  // update all debug sensors
   for (auto * const sensor : this->sensors) {
     std::string current_state = str_repr(this->get_parent()->get_query_result(sensor->get_name().c_str()));
     if (sensor->state != current_state) {

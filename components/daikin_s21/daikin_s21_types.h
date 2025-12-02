@@ -69,6 +69,16 @@ enum class ActiveSource : uint8_t {
 };
 
 /**
+ * Possible sources of powerful flag.
+ */
+enum class PowerfulSource : uint8_t {
+  Unknown,
+  SpecialModes, // directly read from query
+  UnitState,    // interpreted from unit state bitfield
+  Disabled,
+};
+
+/**
  * Unit state (RzB2) bitfield decoder
  */
 class DaikinUnitState {
