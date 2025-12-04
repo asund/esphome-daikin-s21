@@ -391,16 +391,18 @@ void DaikinS21::ready_state_machine() {
 }
 
 void DaikinS21::check_ready_protocol_detection() {
-  static constexpr uint8_t old_version_0[4] = {'0',0,0,0};
-  static constexpr uint8_t old_version_1[4] = {'0','1',0,0};
-  static constexpr uint8_t old_version_2or3[4] = {'0','2',0,0};
-  static constexpr uint8_t old_version_31plus[4] = {'0','2','0','0'};
+  static constexpr uint8_t old_version_0[] = {'0',0,0,0};
+  static constexpr uint8_t old_version_1[] = {'0','1',0,0};
+  static constexpr uint8_t old_version_2or3[] = {'0','2',0,0};
+  static constexpr uint8_t old_version_31plus[] = {'0','2','0','0'};
+  static constexpr uint8_t new_version_unsupported[] = {'G',0,0,0,0,0}; // can be returned when unsupported, query string included in the payload
   const auto &old_proto = this->get_query(StateQuery::OldProtocol);
   const auto &new_proto = this->get_query(StateQuery::NewProtocol);
+  const bool new_proto_red_herring = new_proto.success() && std::ranges::equal(new_proto.value(), new_version_unsupported);
 
   this->protocol_version = ProtocolUndetected;
   // Check availability first, both protocol indicators were enabled on init so skip to the chase
-  if (old_proto.success() && new_proto.failed()) {
+  if (old_proto.success() && (new_proto.failed() || new_proto_red_herring)) {
     if (std::ranges::equal(old_proto.value(), old_version_0)) {
       this->protocol_version = ProtocolVersion(0);
     } else if (std::ranges::equal(old_proto.value(), old_version_1)) {
@@ -616,7 +618,7 @@ void DaikinS21::check_ready_active_source() {
       unit_state.enabled = true;
     } else if (unit_state.success()) {
       this->support.active_source = ActiveSource::UnitState;
-    } else if (unit_state.failed()) {
+    } else if ((unit_state.enabled == false) || unit_state.failed()) {
       this->support.unit_system_state_queries = false;  // unit state is assumed to be supported, if it isn't then correct the record
       this->support.active_source = ActiveSource::Unsupported;
       this->current.active = true;  // always active, reported action will follow unit
@@ -949,9 +951,8 @@ void DaikinS21::handle_misc_software_version(std::span<const uint8_t> payload) {
   // these rely on query string being included in the payload, as it is when
   // the calling code can't trim it off because it's an irregular response
   if ((payload.size() == 5) && (payload[0] == 'V')) {
-    // protocol 0 returns VXXXX MiscQuery::Model response
+    // protocol 0 returns VXXXX MiscQuery::Version response
     payload = payload.subspan(1);
-    this->modelV0 = bytes_to_num(payload, 16);
   } else if ((payload.size() == 16) && (payload[0] == 'V') && (payload[1] == 'S')) {
     // protocol >=2 returns VSXXXXXXXXM00000 response
     payload = payload.subspan(2, 8);
@@ -1064,7 +1065,8 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
 }
 
 void DaikinS21::dump_state() {
-  ESP_LOGD(TAG, "Protocol: %" PRIu8 ".%" PRIu8 "  ModelV0: %04" PRIX16 "  ModelV2: %04" PRIX16,
+  ESP_LOGD(TAG, "Ready: 0x%lX  Protocol: %" PRIu8 ".%" PRIu8 "  ModelV0: %04" PRIX16 "  ModelV2: %04" PRIX16,
+      this->ready.to_ulong(),
       this->protocol_version.major,
       this->protocol_version.minor,
       this->modelV0,
