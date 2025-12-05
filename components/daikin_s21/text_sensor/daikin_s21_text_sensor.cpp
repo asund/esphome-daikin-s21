@@ -24,8 +24,10 @@ void DaikinS21TextSensor::setup() {
  */
 void DaikinS21TextSensor::loop() {
   if (this->statics_done == false) {
-    software_version_sensor_->publish_state(this->get_parent()->get_software_version());
-    statics_done = true;
+    if (this->software_version_sensor_ != nullptr) {
+      this->software_version_sensor_->publish_state(this->get_parent()->get_software_version());
+    }
+    this->statics_done = true;
   }
   // update all debug sensors
   for (auto * const sensor : this->sensors) {
