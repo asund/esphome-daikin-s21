@@ -294,6 +294,10 @@ climate:
     # supported_presets:  # optional, enables presets. none is always supported.
     #   - eco
     #   - boost
+    # supported_swing_modes:  # optional, restricts available swing modes. off is always supported.
+    #   - horizontal
+    #   - vertical
+    #   - both
     # Optional sensors to use for temperature and humidity references
     # sensor: room_temp  # External, see homeassistant sensor below
     humidity_sensor: daikin_humidity  # Internal, see humidity sensor below

@@ -22,6 +22,7 @@ class DaikinS21Climate : public climate::Climate,
 
   void set_supported_modes(climate::ClimateModeMask modes);
   void set_supported_presets(climate::ClimatePresetMask presets);
+  void set_supported_swing_modes(climate::ClimateSwingModeMask swing_modes);
   void set_temperature_reference_sensor(sensor::Sensor *sensor) { this->temperature_sensor_ = sensor; }
   void set_humidity_reference_sensor(sensor::Sensor *sensor);
   void set_max_cool_temperature(DaikinC10 temperature) { this->max_cool_temperature = temperature; };

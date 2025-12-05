@@ -5,12 +5,12 @@ Daikin S21 Mini-Split ESPHome climate component config validation & code generat
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import climate, sensor
-from esphome.components.climate import ClimateMode, ClimatePreset
 from esphome.const import (
     CONF_HUMIDITY_SENSOR,
     CONF_SENSOR,
     CONF_SUPPORTED_MODES,
     CONF_SUPPORTED_PRESETS,
+    CONF_SUPPORTED_SWING_MODES,
 )
 from .. import (
     daikin_s21_ns,
@@ -25,18 +25,18 @@ DaikinS21Climate = daikin_s21_ns.class_(
 )
 
 SUPPORTED_CLIMATE_MODES_OPTIONS = {
-    "OFF": ClimateMode.CLIMATE_MODE_OFF,  # always available
-    "HEAT_COOL": ClimateMode.CLIMATE_MODE_HEAT_COOL,
-    "COOL": ClimateMode.CLIMATE_MODE_COOL,
-    "HEAT": ClimateMode.CLIMATE_MODE_HEAT,
-    "FAN_ONLY": ClimateMode.CLIMATE_MODE_FAN_ONLY,
-    "DRY": ClimateMode.CLIMATE_MODE_DRY,
+    "OFF": climate.ClimateMode.CLIMATE_MODE_OFF,  # always available
+    "HEAT_COOL": climate.ClimateMode.CLIMATE_MODE_HEAT_COOL,
+    "COOL": climate.ClimateMode.CLIMATE_MODE_COOL,
+    "HEAT": climate.ClimateMode.CLIMATE_MODE_HEAT,
+    "FAN_ONLY": climate.ClimateMode.CLIMATE_MODE_FAN_ONLY,
+    "DRY": climate.ClimateMode.CLIMATE_MODE_DRY,
 }
 
 SUPPORTED_CLIMATE_PRESETS_OPTIONS = {
-    "NONE":ClimatePreset.CLIMATE_PRESET_NONE,
-    "ECO": ClimatePreset.CLIMATE_PRESET_ECO,
-    "BOOST": ClimatePreset.CLIMATE_PRESET_BOOST,
+    "NONE": climate.ClimatePreset.CLIMATE_PRESET_NONE,  # always available
+    "ECO": climate.ClimatePreset.CLIMATE_PRESET_ECO,
+    "BOOST": climate.ClimatePreset.CLIMATE_PRESET_BOOST,
 }
 
 CONF_MAX_COOL_TEMPERATURE = "max_cool_temperature"
@@ -53,6 +53,7 @@ CONFIG_SCHEMA = (
         cv.Optional(CONF_HUMIDITY_SENSOR): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_SUPPORTED_MODES, default=list(SUPPORTED_CLIMATE_MODES_OPTIONS)): cv.ensure_list(cv.enum(SUPPORTED_CLIMATE_MODES_OPTIONS, upper=True)),
         cv.Optional(CONF_SUPPORTED_PRESETS, default=["NONE"]): cv.ensure_list(cv.enum(SUPPORTED_CLIMATE_PRESETS_OPTIONS, upper=True)),
+        cv.Optional(CONF_SUPPORTED_SWING_MODES, default=list(climate.CLIMATE_SWING_MODES)): cv.ensure_list(cv.enum(climate.CLIMATE_SWING_MODES, upper=True)),
         cv.Optional(CONF_MAX_COOL_TEMPERATURE, default="32"): cv.temperature,
         cv.Optional(CONF_MIN_COOL_TEMPERATURE, default="18"): cv.temperature,
         cv.Optional(CONF_MAX_HEAT_TEMPERATURE, default="30"): cv.temperature,
@@ -74,14 +75,19 @@ async def to_code(config):
         cg.add(var.set_humidity_reference_sensor(sens))
 
     if "OFF" not in config[CONF_SUPPORTED_MODES]:
-        config[CONF_SUPPORTED_MODES].append(ClimateMode.CLIMATE_MODE_OFF)   # always supported
+        config[CONF_SUPPORTED_MODES].append(climate.ClimateMode.CLIMATE_MODE_OFF)   # always supported
     if len(config[CONF_SUPPORTED_MODES]) > 1:   # don't generate code if just OFF, this is already the default
         cg.add(var.set_supported_modes(config[CONF_SUPPORTED_MODES]))
 
     if "NONE" not in config[CONF_SUPPORTED_PRESETS]:
-        config[CONF_SUPPORTED_PRESETS].append(ClimatePreset.CLIMATE_PRESET_NONE)   # always supported
+        config[CONF_SUPPORTED_PRESETS].append(climate.ClimatePreset.CLIMATE_PRESET_NONE)   # always supported
     if len(config[CONF_SUPPORTED_PRESETS]) > 1: # don't generate code if just NONE, leave empty to avoid UI clutter
         cg.add(var.set_supported_presets(config[CONF_SUPPORTED_PRESETS]))
+
+    if "OFF" not in config[CONF_SUPPORTED_SWING_MODES]:
+        config[CONF_SUPPORTED_SWING_MODES].append(climate.ClimateSwingMode.CLIMATE_SWING_OFF)   # always supported
+    if len(config[CONF_SUPPORTED_SWING_MODES]) > 1: # don't generate code if just OFF, leave empty to avoid UI clutter
+        cg.add(var.set_supported_swing_modes(config[CONF_SUPPORTED_SWING_MODES]))
 
     cg.add(var.set_max_cool_temperature(config[CONF_MAX_COOL_TEMPERATURE]))
     cg.add(var.set_min_cool_temperature(config[CONF_MIN_COOL_TEMPERATURE]))
