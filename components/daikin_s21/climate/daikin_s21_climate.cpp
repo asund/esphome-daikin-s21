@@ -49,12 +49,6 @@ void DaikinS21Climate::setup() {
   auto fan_strings = std::views::values(supported_daikin_fan_modes);
   std::vector<const char *> supported_fan_mode_strings{fan_strings.begin(), fan_strings.end()};
   this->traits_.set_supported_custom_fan_modes(supported_fan_mode_strings);
-  this->traits_.set_supported_swing_modes({
-      climate::CLIMATE_SWING_OFF,
-      climate::CLIMATE_SWING_BOTH,
-      climate::CLIMATE_SWING_VERTICAL,
-      climate::CLIMATE_SWING_HORIZONTAL,
-  });
   // ensure optionals are populated with defaults
   this->set_custom_fan_mode(commanded.fan);
   this->preset = commanded.preset;
@@ -231,6 +225,15 @@ void DaikinS21Climate::set_supported_modes(climate::ClimateModeMask modes) {
 void DaikinS21Climate::set_supported_presets(climate::ClimatePresetMask presets) {
   this->traits_.set_supported_presets(presets);
   this->get_parent()->request_readout(DaikinS21::ReadoutPresets);
+}
+
+/**
+ * Override supported swing modes
+ *
+ * @note Modifies traits, call during setup only
+ */
+void DaikinS21Climate::set_supported_swing_modes(climate::ClimateSwingModeMask swing_modes) {
+  this->traits_.set_supported_swing_modes(swing_modes);
 }
 
 /**
