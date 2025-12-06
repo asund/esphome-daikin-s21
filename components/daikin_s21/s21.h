@@ -220,11 +220,17 @@ class DaikinS21 : public PollingComponent {
     ActiveSource active_source{ActiveSource::Unknown};
     PowerfulSource powerful_source{PowerfulSource::Unknown};
     // supported
-    char model_info{'?'};
-    bool swing{};
-    bool horizontal_swing{};
-    bool humidity{};
     bool fan{};
+    bool swing{};
+    bool horiz_swing{};
+    char model_info{'?'};
+    bool humidify{};
+    bool dehumidify{};
+    bool dry{};
+    bool demand{};
+    bool powerful{};
+    bool econo{};
+    bool streamer{};
     // unsupported
     bool ac_led{};
     bool laundry{};
@@ -232,8 +238,6 @@ class DaikinS21 : public PollingComponent {
     bool temp_range{};
     bool motion_detect{};
     bool ac_japan{};
-    bool dry{};
-    bool demand{};  // ignored if protocol <= 2
   } support;
 };
 
