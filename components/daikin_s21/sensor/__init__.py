@@ -29,9 +29,7 @@ from .. import (
     S21_PARENT_SCHEMA,
 )
 
-DaikinS21Sensor = daikin_s21_ns.class_(
-    "DaikinS21Sensor", cg.PollingComponent
-)
+DaikinS21Sensor = daikin_s21_ns.class_("DaikinS21Sensor", cg.PollingComponent)
 
 CONF_INSIDE_TEMP = "inside_temperature"
 CONF_TARGET_TEMP = "target_temperature"

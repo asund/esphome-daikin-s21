@@ -20,9 +20,7 @@ from .. import (
 
 AUTO_LOAD = ["sensor"]
 
-DaikinS21Climate = daikin_s21_ns.class_(
-    "DaikinS21Climate", climate.Climate, cg.PollingComponent
-)
+DaikinS21Climate = daikin_s21_ns.class_("DaikinS21Climate", climate.Climate, cg.PollingComponent)
 
 SUPPORTED_CLIMATE_MODES_OPTIONS = {
     "OFF": climate.ClimateMode.CLIMATE_MODE_OFF,  # always available

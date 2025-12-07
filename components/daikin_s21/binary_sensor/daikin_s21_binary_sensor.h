@@ -17,7 +17,7 @@ class DaikinS21BinarySensor : public Component,
 
   void set_powerful_sensor(binary_sensor::BinarySensor *sensor) {
     this->powerful_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutUnitStateBits);
+    this->get_parent()->request_readout(DaikinS21::ReadoutUnitStateBits); // for units without special modes, use a switch if supported
   }
   void set_defrost_sensor(binary_sensor::BinarySensor *sensor) {
     this->defrost_sensor_ = sensor;

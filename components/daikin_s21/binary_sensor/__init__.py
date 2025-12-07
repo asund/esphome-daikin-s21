@@ -20,9 +20,7 @@ from .. import (
     S21_PARENT_SCHEMA,
 )
 
-DaikinS21BinarySensor = daikin_s21_ns.class_(
-    "DaikinS21BinarySensor", cg.Component
-)
+DaikinS21BinarySensor = daikin_s21_ns.class_("DaikinS21BinarySensor", cg.Component)
 
 CONF_POWERFUL = "powerful"
 CONF_DEFROST = "defrost"

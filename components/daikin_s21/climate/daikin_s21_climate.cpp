@@ -224,7 +224,8 @@ void DaikinS21Climate::set_supported_modes(climate::ClimateModeMask modes) {
  */
 void DaikinS21Climate::set_supported_presets(climate::ClimatePresetMask presets) {
   this->traits_.set_supported_presets(presets);
-  this->get_parent()->request_readout(DaikinS21::ReadoutPresets);
+  this->get_parent()->request_readout(DaikinS21::ReadoutSpecialModes);
+  this->get_parent()->request_readout(DaikinS21::ReadoutDemandAndEcono);
 }
 
 /**

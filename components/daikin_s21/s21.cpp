@@ -384,7 +384,7 @@ void DaikinS21::ready_state_machine() {
 
   // Finally, schedule any user specified debug queries
   // Done last so as to not duplicate automatically added queries
-  if (this->ready.all()) {
+  if (this->is_ready()) {
     for (auto &query : this->queries | std::views::filter(DaikinQuery::IsDebug)) {
       query.enabled = true;
     }
@@ -449,8 +449,10 @@ void DaikinS21::check_ready_protocol_detection() {
       this->enable_query(MiscQuery::Version);
     }
     if (this->protocol_version >= ProtocolVersion(2)) {
-      if (this->readout_requests[ReadoutPresets]) {
+      if (this->readout_requests[ReadoutSpecialModes]) {
         this->enable_query(StateQuery::SpecialModes);
+      }
+      if (this->readout_requests[ReadoutDemandAndEcono]) {
         this->enable_query(StateQuery::DemandAndEcono);
       }
       this->enable_query(StateQuery::ModelCode);
@@ -654,7 +656,7 @@ void DaikinS21::check_ready_active_source() {
  * Select the source of the powerful flag
  */
 void DaikinS21::check_ready_powerful_source() {
-  if (this->readout_requests[ReadoutPresets]) {
+  if (this->readout_requests[ReadoutSpecialModes]) {
     const auto &special_modes = this->get_query(StateQuery::SpecialModes);
     if (special_modes.ready()) {
       if (special_modes.success()) {
@@ -776,7 +778,7 @@ void DaikinS21::handle_serial_idle() {
   const auto now = millis();
   this->cycle_active = false;
   this->cycle_time_ms = now - this->cycle_time_start_ms;
-  if (this->ready.all() == false) {
+  if (this->is_ready() == false) {
     this->ready_state_machine();
   } else {
     // resolve action
@@ -835,7 +837,7 @@ void DaikinS21::handle_state_special_modes(const std::span<const uint8_t> payloa
   this->current.quiet =       (payload[0] & 0b10000000);
   this->current.streamer =    (payload[1] & 0b10000000);
   this->current.sensor =      (payload[3] & 0b00001000);
-  this->current.sensor_led =  (payload[3] & 0b00001100) == 0b00001100;
+  this->current.sensor_led =  (payload[3] & 0b00001100) != 0b00001100;
 }
 
 void DaikinS21::handle_state_demand_and_econo(const std::span<const uint8_t> payload) {

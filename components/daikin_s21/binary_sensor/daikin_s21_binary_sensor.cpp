@@ -28,7 +28,7 @@ void DaikinS21BinarySensor::loop() {
     this->defrost_sensor_->publish_state(unit.defrost());
   }
   if (this->active_sensor_ != nullptr) {
-    this->active_sensor_->publish_state(this->get_parent()->is_active());  // unit
+    this->active_sensor_->publish_state(this->get_parent()->get_active());  // unit
   }
   if (this->online_sensor_ != nullptr) {
     this->online_sensor_->publish_state(unit.online());

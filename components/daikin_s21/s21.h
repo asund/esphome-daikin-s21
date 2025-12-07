@@ -32,8 +32,6 @@ class DaikinS21 : public PollingComponent {
     // binary sensor
     ReadoutUnitStateBits,
     ReadoutSystemStateBits,
-    // climate
-    ReadoutPresets,
     // sensor
     ReadoutTemperatureTarget,
     ReadoutTemperatureOutside,
@@ -46,6 +44,9 @@ class DaikinS21 : public PollingComponent {
     ReadoutIRCounter,
     ReadoutPowerConsumption,
     ReadoutOutdoorCapacity,
+    // multiple
+    ReadoutSpecialModes,
+    ReadoutDemandAndEcono,
     // just for bitset sizing
     ReadoutCount,
   };
@@ -60,28 +61,35 @@ class DaikinS21 : public PollingComponent {
 
   // value accessors
   bool is_ready() { return this->ready.all(); }
-  const DaikinClimateSettings& get_climate_settings() { return this->current.climate; }
-  auto get_climate_mode() { return this->current.climate.mode; }
-  auto get_climate_action() { return this->current.action; }
-  auto get_temp_setpoint() { return this->current.climate.setpoint; }
-  auto get_temp_inside() { return this->temp_inside; }
-  auto get_temp_target() { return this->temp_target; }
-  auto get_temp_outside() { return this->temp_outside; }
-  auto get_temp_coil() { return this->temp_coil; }
-  auto get_fan_rpm_setpoint() { return this->current.fan_rpm_setpoint; }
-  auto get_fan_rpm() { return this->current.fan_rpm; }
-  auto get_swing_vertical_angle_setpoint() { return this->current.swing_vertical_angle_setpoint; }
-  auto get_swing_vertical_angle() { return this->current.swing_vertical_angle; }
-  auto get_ir_counter() { return this->current.ir_counter; }
-  auto get_power_consumption() { return this->current.power_consumption; }
-  auto get_outdoor_capacity() { return this->current.outdoor_capacity; }
-  auto get_compressor_frequency() { return this->compressor_rpm; }
-  auto get_humidity() { return this->humidity; }
-  auto get_demand() { return this->demand; }
-  auto get_unit_state() { return this->current.unit_state; }
-  auto get_system_state() { return this->current.system_state; }
-  auto get_software_version() { return this->software_version.data(); }
-  bool is_active() { return this->current.active; }
+  const DaikinClimateSettings& get_climate_settings() const { return this->current.climate; }
+  auto get_climate_mode() const { return this->current.climate.mode; }
+  auto get_climate_action() const { return this->current.action; }
+  auto get_temp_setpoint() const { return this->current.climate.setpoint; }
+  auto get_temp_inside() const { return this->temp_inside; }
+  auto get_temp_target() const { return this->temp_target; }
+  auto get_temp_outside() const { return this->temp_outside; }
+  auto get_temp_coil() const { return this->temp_coil; }
+  auto get_fan_rpm_setpoint() const { return this->current.fan_rpm_setpoint; }
+  auto get_fan_rpm() const { return this->current.fan_rpm; }
+  auto get_swing_vertical_angle_setpoint() const { return this->current.swing_vertical_angle_setpoint; }
+  auto get_swing_vertical_angle() const { return this->current.swing_vertical_angle; }
+  auto get_ir_counter() const { return this->current.ir_counter; }
+  auto get_power_consumption() const { return this->current.power_consumption; }
+  auto get_outdoor_capacity() const { return this->current.outdoor_capacity; }
+  auto get_compressor_frequency() const { return this->compressor_rpm; }
+  auto get_humidity() const { return this->humidity; }
+  auto get_demand() const { return this->demand; }
+  auto get_unit_state() const { return this->current.unit_state; }
+  auto get_system_state() const { return this->current.system_state; }
+  auto get_software_version() const { return this->software_version.data(); }
+  bool get_active() const { return this->current.active; }
+  bool get_powerful() const { return this->current.powerful; }
+  bool get_comfort() const { return this->current.comfort; }
+  bool get_quiet() const { return this->current.quiet; }
+  bool get_streamer() const { return this->current.streamer; }
+  bool get_sensor() const { return this->current.sensor; }
+  bool get_sensor_led() const { return this->current.sensor_led; }
+  bool get_econo() const { return this->current.econo; }
   std::span<const uint8_t> get_query_result(std::string_view query_str);
 
   // callbacks for serial events
@@ -179,13 +187,13 @@ class DaikinS21 : public PollingComponent {
     DaikinSystemState system_state{};
     // modifiers
     bool active{};      // actively using the compressor
-    bool quiet{};       // outdoor unit fan/compressor limit
-    bool econo{};       // limits demand for power consumption
-    bool powerful{};    // maximum output (20 minute timeout), mutaully exclusive with quiet and econo
+    bool powerful{};    // maximum output (20 minute timeout), mutaully exclusive with comfort/quiet/econo
     bool comfort{};     // fan angle depends on heating/cooling action
+    bool quiet{};       // outdoor unit fan/compressor limit
     bool streamer{};    // electron emitter decontamination?
     bool sensor{};      // "intelligent eye" PIR occupancy setpoint offset
     bool sensor_led{};  // the sensor LED is on
+    bool econo{};       // limits demand for power consumption
   } current{};
 
   struct {

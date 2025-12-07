@@ -22,9 +22,7 @@ from .. import (
     S21_PARENT_SCHEMA,
 )
 
-DaikinS21TextSensor = daikin_s21_ns.class_(
-    "DaikinS21TextSensor", cg.Component
-)
+DaikinS21TextSensor = daikin_s21_ns.class_("DaikinS21TextSensor", cg.Component)
 
 CONF_QUERIES = "queries"
 CONF_SOFTWARE_VERSION = "software_version"
