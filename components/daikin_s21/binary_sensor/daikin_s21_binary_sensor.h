@@ -46,6 +46,9 @@ class DaikinS21BinarySensor : public Component,
     this->multizone_conflict_sensor_ = sensor;
     this->get_parent()->request_readout(DaikinS21::ReadoutSystemStateBits);
   }
+  void set_serial_error_sensor(binary_sensor::BinarySensor *sensor) {
+    this->serial_error_sensor_ = sensor;
+  }
 
  protected:
   binary_sensor::BinarySensor *powerful_sensor_{};
@@ -56,6 +59,7 @@ class DaikinS21BinarySensor : public Component,
   binary_sensor::BinarySensor *short_cycle_sensor_{};
   binary_sensor::BinarySensor *system_defrost_sensor_{};
   binary_sensor::BinarySensor *multizone_conflict_sensor_{};
+  binary_sensor::BinarySensor *serial_error_sensor_{};
 };
 
 } // namespace esphome::daikin_s21

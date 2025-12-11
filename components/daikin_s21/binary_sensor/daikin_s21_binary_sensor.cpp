@@ -45,6 +45,9 @@ void DaikinS21BinarySensor::loop() {
   if (this->multizone_conflict_sensor_ != nullptr) {
     this->multizone_conflict_sensor_->publish_state(!system.multizone_conflict()); // invert for Home Assistant locked/unlocked logic
   }
+  if (this->serial_error_sensor_ != nullptr) {
+    this->serial_error_sensor_->publish_state(this->get_parent()->get_serial_error());
+  }
 
   this->disable_loop(); // wait for further updates
 }
@@ -59,6 +62,7 @@ void DaikinS21BinarySensor::dump_config() {
   LOG_BINARY_SENSOR("  ", "Short Cycle", this->short_cycle_sensor_);
   LOG_BINARY_SENSOR("  ", "System Defrost", this->system_defrost_sensor_);
   LOG_BINARY_SENSOR("  ", "Multizone Conflict", this->multizone_conflict_sensor_);
+  LOG_BINARY_SENSOR("  ", "Serial Error", this->serial_error_sensor_);
 }
 
 } // namespace esphome::daikin_s21

@@ -11,6 +11,7 @@ from esphome.const import (
     DEVICE_CLASS_LOCK,
     DEVICE_CLASS_OPENING,
     DEVICE_CLASS_POWER,
+    DEVICE_CLASS_PROBLEM,
     DEVICE_CLASS_RUNNING,
 )
 
@@ -30,6 +31,7 @@ CONF_VALVE = "valve"
 CONF_SHORT_CYCLE = "short_cycle"
 CONF_SYSTEM_DEFROST = "system_defrost"
 CONF_MULTIZONE_CONFLICT = "multizone_conflict"
+CONF_SERIAL_ERROR = "serial_error"
 
 CONFIG_SCHEMA = (
     cv.COMPONENT_SCHEMA
@@ -60,6 +62,9 @@ CONFIG_SCHEMA = (
         cv.Optional(CONF_MULTIZONE_CONFLICT): binary_sensor.binary_sensor_schema(
             device_class=DEVICE_CLASS_LOCK,
         ),
+        cv.Optional(CONF_SERIAL_ERROR): binary_sensor.binary_sensor_schema(
+            device_class=DEVICE_CLASS_PROBLEM,
+        ),
     })
 )
 
@@ -77,6 +82,7 @@ async def to_code(config):
         (CONF_SHORT_CYCLE, var.set_short_cycle_sensor),
         (CONF_SYSTEM_DEFROST, var.set_system_defrost_sensor),
         (CONF_MULTIZONE_CONFLICT, var.set_multizone_conflict_sensor),
+        (CONF_SERIAL_ERROR, var.set_serial_error_sensor),
     )
     for key, func in binary_sensors:
         if key in config:

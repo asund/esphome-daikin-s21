@@ -143,7 +143,7 @@ DaikinS21::DaikinS21(DaikinSerial * const serial)
     {StateQuery::Basic, &DaikinS21::handle_state_basic},
     {StateQuery::OptionalFeatures, &DaikinS21::handle_nop, true},
     // {StateQuery::OnOffTimer},  // unused, use home assistant for scheduling
-    // {StateQuery::ErrorStatus}, // not handled yet
+    {StateQuery::ErrorStatus, &DaikinS21::handle_state_error_status},
     {StateQuery::SwingOrHumidity, &DaikinS21::handle_state_swing_or_humidity},
     {StateQuery::SpecialModes, &DaikinS21::handle_state_special_modes},
     {StateQuery::DemandAndEcono, &DaikinS21::handle_state_demand_and_econo},
@@ -231,22 +231,13 @@ void DaikinS21::dump_config() {
   // todo basic detect output
 }
 
+/**
+ * Set the climate settings bundle and trigger a write to the unit.
+ */
 void DaikinS21::set_climate_settings(const DaikinClimateSettings &settings) {
   if ((this->pending.climate.mode != settings.mode) ||
       (this->pending.climate.setpoint != settings.setpoint) ||
       (this->pending.climate.fan != settings.fan)) {
-
-    // If this is the first time settings are being applied, we need to force
-    // all of them to be applied to the unit so our state will be in sync and
-    // thus rely on this change detection to work in the future.
-    // The pending settings mode has been initialized in the object constructor
-    // to the unsupported (by this project) CLIMATE_MODE_AUTO in order to detect
-    // this one time condition here.
-    if (this->pending.climate.mode == climate::CLIMATE_MODE_AUTO) {
-      this->pending.activate_swing_mode = true;
-      this->pending.activate_preset = true;
-    }
-
     this->pending.activate_climate = true;
     this->trigger_cycle();
   }
@@ -382,9 +373,13 @@ void DaikinS21::ready_state_machine() {
     }
   }
 
-  // Finally, schedule any user specified debug queries
-  // Done last so as to not duplicate automatically added queries
+  // Finally, all queries should be scheduled and important ones read out
   if (this->is_ready()) {
+    // Populate pending state caches with current values so change detection on future commands works
+    this->pending.climate = this->current.climate;
+    this->pending.modes = this->current.modes;
+
+    // Schedule any user specified debug queries, done last so as to not duplicate automatically added queries
     for (auto &query : this->queries | std::views::filter(DaikinQuery::IsDebug)) {
       query.enabled = true;
     }
@@ -441,6 +436,7 @@ void DaikinS21::check_ready_protocol_detection() {
     // >= ProtocolVersion(0)
     this->enable_query(StateQuery::Basic);
     this->enable_query(StateQuery::OptionalFeatures);
+    this->enable_query(StateQuery::ErrorStatus);
     this->enable_query(StateQuery::SwingOrHumidity);
     this->enable_query(EnvironmentQuery::CompressorOnOff);
     this->enable_query(MiscQuery::SoftwareVersion);
@@ -753,14 +749,14 @@ void DaikinS21::handle_serial_idle() {
         payload[1] = '0';
         payload[2] = '0';
         payload[3] = '0';
-        this->send_command(StateCommand::Powerful, payload);
+        this->send_command(StateCommand::SpecialModes, payload);
         return;
       case climate::CLIMATE_PRESET_ECO:
         payload[0] = '0';
         payload[1] = enable ? '2' : '0';
         payload[2] = '0';
         payload[3] = '0';
-        this->send_command(StateCommand::Econo, payload);
+        this->send_command(StateCommand::DemandAndEcono, payload);
         return;
       case climate::CLIMATE_PRESET_NONE:
       default:
@@ -825,6 +821,10 @@ void DaikinS21::handle_state_basic(const std::span<const uint8_t> payload) {
   if (this->support.fan_mode_query == false) {
     this->current.climate.fan = static_cast<daikin_s21::DaikinFanMode>(payload[3]);
   }
+}
+
+void DaikinS21::handle_state_error_status(const std::span<const uint8_t> payload) {
+  this->current.serial_error = (payload[2] & 0b00010000);
 }
 
 void DaikinS21::handle_state_swing_or_humidity(const std::span<const uint8_t> payload) {

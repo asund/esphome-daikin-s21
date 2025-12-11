@@ -90,6 +90,7 @@ class DaikinS21 : public PollingComponent {
   bool get_sensor() const { return this->current.sensor; }
   bool get_sensor_led() const { return this->current.sensor_led; }
   bool get_econo() const { return this->current.econo; }
+  bool get_serial_error() const { return this->current.serial_error; }
   std::span<const uint8_t> get_query_result(std::string_view query_str);
 
   // callbacks for serial events
@@ -135,6 +136,7 @@ class DaikinS21 : public PollingComponent {
   // query handlers
   void handle_nop(std::span<const uint8_t> payload) {}
   void handle_state_basic(std::span<const uint8_t> payload);
+  void handle_state_error_status(std::span<const uint8_t> payload);
   void handle_state_swing_or_humidity(std::span<const uint8_t> payload);
   void handle_state_special_modes(std::span<const uint8_t> payload);
   void handle_state_demand_and_econo(std::span<const uint8_t> payload);
@@ -192,12 +194,13 @@ class DaikinS21 : public PollingComponent {
     bool quiet{};       // outdoor unit fan/compressor limit
     bool streamer{};    // electron emitter decontamination?
     bool sensor{};      // "intelligent eye" PIR occupancy setpoint offset
+    bool serial_error{};
     bool sensor_led{};  // the sensor LED is on
     bool econo{};       // limits demand for power consumption
   } current{};
 
   struct {
-    DaikinClimateSettings climate{ .mode = climate::CLIMATE_MODE_AUTO }; // unsupported sentinel value, see set_climate_settings
+    DaikinClimateSettings climate{};
     bool activate_climate{};
     bool activate_swing_mode{};
     bool activate_preset{};
