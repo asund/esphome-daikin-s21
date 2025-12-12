@@ -27,6 +27,7 @@ class DaikinS21 : public PollingComponent {
 
   // external command action
   void set_climate_settings(const DaikinClimateSettings &settings);
+  void set_mode(DaikinMode mode, bool enable);
 
   enum ReadoutRequest {
     // binary sensor
@@ -83,14 +84,8 @@ class DaikinS21 : public PollingComponent {
   auto get_system_state() const { return this->current.system_state; }
   auto get_software_version() const { return this->software_version.data(); }
   bool get_active() const { return this->current.active; }
-  bool get_powerful() const { return this->current.powerful; }
-  bool get_comfort() const { return this->current.comfort; }
-  bool get_quiet() const { return this->current.quiet; }
-  bool get_streamer() const { return this->current.streamer; }
-  bool get_sensor() const { return this->current.sensor; }
-  bool get_sensor_led() const { return this->current.sensor_led; }
-  bool get_econo() const { return this->current.econo; }
   bool get_serial_error() const { return this->current.serial_error; }
+  bool get_mode(DaikinMode mode) const;
   std::span<const uint8_t> get_query_result(std::string_view query_str);
 
   // callbacks for serial events
@@ -178,6 +173,7 @@ class DaikinS21 : public PollingComponent {
     DaikinClimateSettings climate{};
     climate::ClimateAction action_reported = climate::CLIMATE_ACTION_OFF; // raw readout
     climate::ClimateAction action = climate::CLIMATE_ACTION_OFF; // corrected at end of cycle
+    std::bitset<DaikinModeCount> modes{};
     uint16_t fan_rpm_setpoint{};
     uint16_t fan_rpm{};
     int16_t swing_vertical_angle_setpoint{};
@@ -187,20 +183,16 @@ class DaikinS21 : public PollingComponent {
     uint8_t outdoor_capacity{};
     DaikinUnitState unit_state{};
     DaikinSystemState system_state{};
-    // modifiers
     bool active{};      // actively using the compressor
-    bool powerful{};    // maximum output (20 minute timeout), mutaully exclusive with comfort/quiet/econo
-    bool comfort{};     // fan angle depends on heating/cooling action
-    bool quiet{};       // outdoor unit fan/compressor limit
-    bool streamer{};    // electron emitter decontamination?
-    bool sensor{};      // "intelligent eye" PIR occupancy setpoint offset
     bool serial_error{};
+    // todo see if this can be used as an input:
     bool sensor_led{};  // the sensor LED is on
-    bool econo{};       // limits demand for power consumption
   } current{};
 
   struct {
     DaikinClimateSettings climate{};
+    std::bitset<DaikinModeCount> modes{};
+    std::bitset<DaikinModeCount> activate_modes{};
     bool activate_climate{};
     bool activate_swing_mode{};
     bool activate_preset{};

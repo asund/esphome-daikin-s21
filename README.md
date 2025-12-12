@@ -76,6 +76,17 @@ v2 protocol units may also support:
 * Total power consumption in kWh (untested)
 * Outdoor unit capacity in indoor units
 
+### Switch
+
+Mode toggle switches for protocol 2+. Untested and probably glitchy.
+
+* Powerful
+* Comfort
+* Quiet
+* Streamer
+* Sensor
+* Econo
+
 ### Binary Sensor
 
 New, extracted from the unit and system state bitfields. Still need to observe
@@ -90,6 +101,7 @@ Not all units support these.
 * Short Cycle Lock (3 minute compressor lockout)
 * System Defrost (shadows defrost?)
 * Multizone settings conflict
+* Serial error (always OK if working, developer use)
 
 ### Text Sensor
 
@@ -377,6 +389,21 @@ sensor:
     unit_of_measurement: "%"
     accuracy_decimals: 1
 
+switch:
+  - platform: daikin_s21
+    powerful:
+      name: Powerful
+    comfort:
+      name: Comfort
+    quiet:
+      name: Quiet
+    streamer:
+      name: Streamer
+    sensor:
+      name: Sensor
+    econo:
+      name: Econo
+
 binary_sensor:
   - platform: daikin_s21
     powerful:
@@ -396,6 +423,8 @@ binary_sensor:
     multizone_conflict:
       name: Multizone Conflict
       device_id: daikin_outdoor
+    # serial_error:
+    #   name: Serial Error
 
 # raw case-sensitive query monitoring for debugging
 text_sensor:

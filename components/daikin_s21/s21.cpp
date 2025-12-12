@@ -256,6 +256,19 @@ void DaikinS21::set_climate_settings(const DaikinClimateSettings &settings) {
 }
 
 /**
+ * Set the enable value of the specified mode and trigger a write to the unit if it changed.
+ */
+void DaikinS21::set_mode(const DaikinMode mode, const bool enable) {
+  if (mode < DaikinModeCount) {
+    if (this->pending.modes[mode] != enable) {
+      this->pending.modes[mode] = enable;
+      this->pending.activate_modes[mode] = true;
+      this->trigger_cycle();
+    }
+  }
+}
+
+/**
  * Add debug query to the list, flagging them as such
  *
  * @note important to only call during setup phase so as not to invalidate the query iterator
@@ -268,6 +281,16 @@ void DaikinS21::add_debug_query(std::string_view query_str) {
   } else {
     iter->is_debug = true;  // could exist but not enabled during init
   }
+}
+
+/**
+ * Get the enable value of the specified mode
+ */
+bool DaikinS21::get_mode(const DaikinMode mode) const {
+  if (mode < DaikinModeCount) {
+    return this->current.modes[mode];
+  }
+  return false;
 }
 
 /**
@@ -704,7 +727,7 @@ void DaikinS21::send_command(const std::string_view command, const std::span<con
  * - Start the next cycle if free running or triggered in polling mode
  */
 void DaikinS21::handle_serial_idle() {
-  std::array<uint8_t, 4U> payload;  // all command payloads here are 4 bytes long for now
+  std::array<uint8_t, 4U> payload = {'0','0','0','0'};  // all command payloads here are 4 bytes long for now
 
   // Apply any pending settings
   // Important to clear the activate flag here as another command can be queued while waiting for this one to complete
@@ -721,10 +744,41 @@ void DaikinS21::handle_serial_idle() {
   if (this->pending.activate_swing_mode) {
     this->pending.activate_swing_mode = false;
     payload[0] = climate_swing_mode_to_daikin(this->pending.climate.swing);
-    payload[1] = (this->pending.climate.swing != climate::CLIMATE_SWING_OFF) ? '?' : '0';
-    payload[2] = '0';
-    payload[3] = '0';
+    if (this->pending.climate.swing != climate::CLIMATE_SWING_OFF) {
+      payload[1] = '?';
+    }
     this->send_command(StateCommand::LouvreSwingMode, payload);
+    return;
+  }
+
+  if (this->pending.activate_modes.any()) {
+    // value to send is the pending value of any modes being activated and the current value of any modes not being activated
+    const std::bitset<DaikinModeCount> send_value = (this->pending.activate_modes & this->pending.modes) | (~this->pending.activate_modes & this->current.modes);
+    if (this->pending.activate_modes[ModeEcono] == false) {
+      if (send_value[ModePowerful]) {
+        payload[0] |= 0b00000010;
+      }
+      if (send_value[ModeComfort]) {
+        payload[0] |= 0b01000000;
+      }
+      if (send_value[ModeQuiet]) {
+        payload[0] |= 0b10000000;
+      }
+      if (send_value[ModeStreamer]) {
+        payload[1] |= 0b10000000;
+      }
+      if (send_value[ModeSensor]) {
+        payload[3] |= 0b10000000;
+      }
+      this->send_command(StateCommand::SpecialModes, payload);
+      this->pending.activate_modes &= std::bitset<DaikinModeCount>().set(ModeEcono);
+    } else {
+      if (send_value[ModeEcono]) {
+        payload[1] |= 0b00000010;
+      }
+      this->send_command(StateCommand::DemandAndEcono, payload);
+      this->pending.activate_modes.reset(ModeEcono);
+    }
     return;
   }
 
@@ -786,9 +840,9 @@ void DaikinS21::handle_serial_idle() {
       this->current.action = climate::CLIMATE_ACTION_IDLE;
     }
     // resolve presets
-    if (this->current.powerful) {
+    if (this->current.modes[ModePowerful]) {
       this->current.climate.preset = climate::CLIMATE_PRESET_BOOST;
-    } else if (this->current.econo) {
+    } else if (this->current.modes[ModeEcono]) {
       this->current.climate.preset = climate::CLIMATE_PRESET_ECO;
     } else {
       this->current.climate.preset = climate::CLIMATE_PRESET_NONE;
@@ -832,16 +886,16 @@ void DaikinS21::handle_state_swing_or_humidity(const std::span<const uint8_t> pa
 }
 
 void DaikinS21::handle_state_special_modes(const std::span<const uint8_t> payload) {
-  this->current.powerful =    (payload[0] & 0b00000010);  // highest precedence, if this query is working there's no need to check powerful_source
-  this->current.comfort =     (payload[0] & 0b01000000);
-  this->current.quiet =       (payload[0] & 0b10000000);
-  this->current.streamer =    (payload[1] & 0b10000000);
-  this->current.sensor =      (payload[3] & 0b00001000);
-  this->current.sensor_led =  (payload[3] & 0b00001100) != 0b00001100;
+  this->current.modes[ModePowerful] = (payload[0] & 0b00000010);  // highest precedence, if this query is working there's no need to check powerful_source
+  this->current.modes[ModeComfort] =  (payload[0] & 0b01000000);
+  this->current.modes[ModeQuiet] =    (payload[0] & 0b10000000);
+  this->current.modes[ModeStreamer] = (payload[1] & 0b10000000);
+  this->current.modes[ModeSensor] =   (payload[3] & 0b00001000);
+  this->current.sensor_led =          (payload[3] & 0b00001100) != 0b00001100;
 }
 
 void DaikinS21::handle_state_demand_and_econo(const std::span<const uint8_t> payload) {
-  this->current.econo =       (payload[1] == '2');
+  this->current.modes[ModeEcono] =    (payload[1] == '2');
 }
 
 /** Coarser than EnvironmentQuery::InsideTemperature and EnvironmentQuery::OutsideTemperature. Added if those queries fail. */
@@ -961,7 +1015,7 @@ void DaikinS21::handle_env_unit_state(const std::span<const uint8_t> payload) {
     this->current.active = this->current.unit_state.active(); // used to refine climate action
   }
   if (this->support.powerful_source == PowerfulSource::UnitState) {
-    this->current.powerful = this->current.unit_state.powerful();  // if G6 is unsupported we can still read out powerful set by remote
+    this->current.modes[ModePowerful] = this->current.unit_state.powerful();  // if G6 is unsupported we can still read out powerful set by remote
   }
 }
 
