@@ -45,7 +45,8 @@ class DaikinS21 : public PollingComponent {
     ReadoutIRCounter,
     ReadoutPowerConsumption,
     ReadoutOutdoorCapacity,
-    // multiple
+    // multiple components
+    ReadoutPowerful,
     ReadoutSpecialModes,
     ReadoutDemandAndEcono,
     // just for bitset sizing

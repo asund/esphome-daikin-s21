@@ -24,7 +24,7 @@ class DaikinS21BinarySensor : public Component,
   void set_mode_sensor(DaikinS21BinarySensorMode *mode_sensor) {
     this->mode_sensors_[mode_sensor->mode] = mode_sensor;
     if (mode_sensor->mode == ModePowerful) {
-      this->get_parent()->request_readout(DaikinS21::ReadoutUnitStateBits); // for units without special modes, use a switch if supported
+      this->get_parent()->request_readout(DaikinS21::ReadoutPowerful);
     } else if (mode_sensor->mode == ModeEcono) {
       this->get_parent()->request_readout(DaikinS21::ReadoutDemandAndEcono);
     } else {

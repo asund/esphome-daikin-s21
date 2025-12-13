@@ -468,7 +468,7 @@ void DaikinS21::check_ready_protocol_detection() {
       this->enable_query(MiscQuery::Version);
     }
     if (this->protocol_version >= ProtocolVersion(2)) {
-      if (this->readout_requests[ReadoutSpecialModes]) {
+      if (this->readout_requests[ReadoutPowerful] || this->readout_requests[ReadoutSpecialModes]) {
         this->enable_query(StateQuery::SpecialModes);
       }
       if (this->readout_requests[ReadoutDemandAndEcono]) {
@@ -642,7 +642,7 @@ void DaikinS21::check_ready_model_detection() {
  * Select the source of the active flag
  */
 void DaikinS21::check_ready_active_source() {
-  const auto &compressor_on_off = this->get_query(EnvironmentQuery::CompressorOnOff);
+  const auto &compressor_on_off = this->get_query(EnvironmentQuery::CompressorOnOff); // always enabled
   if (compressor_on_off.success()) {
     this->support.active_source = ActiveSource::CompressorOnOff;
   } else if (compressor_on_off.failed()) {
@@ -675,28 +675,26 @@ void DaikinS21::check_ready_active_source() {
  * Select the source of the powerful flag
  */
 void DaikinS21::check_ready_powerful_source() {
-  if (this->readout_requests[ReadoutSpecialModes]) {
-    const auto &special_modes = this->get_query(StateQuery::SpecialModes);
-    if (special_modes.ready()) {
-      if (special_modes.success()) {
-        this->support.powerful_source = PowerfulSource::SpecialModes;
-      } else {
-        auto &unit_state = this->get_query(EnvironmentQuery::UnitState);
-        if (unit_state.success()) {
-          this->support.powerful_source = PowerfulSource::UnitState;
-        } else if (unit_state.failed()) {
+  if (this->readout_requests[ReadoutPowerful]) {
+    const auto &special_modes = this->get_query(StateQuery::SpecialModes);  // enabled when requested and protocol >= 2
+    if (special_modes.success()) {
+      this->support.powerful_source = PowerfulSource::SpecialModes;
+    } else if (special_modes.failed() || (this->protocol_version < ProtocolVersion(2))) {
+      auto &unit_state = this->get_query(EnvironmentQuery::UnitState);
+      if (unit_state.success()) {
+        this->support.powerful_source = PowerfulSource::UnitState;
+      } else if (unit_state.failed()) {
+        this->support.powerful_source = PowerfulSource::Disabled;
+      } else if (unit_state.enabled == false) {
+        if (this->support.unit_system_state_queries) {
+          this->readout_requests.set(ReadoutUnitStateBits);
+          unit_state.enabled = true;
+        } else {
           this->support.powerful_source = PowerfulSource::Disabled;
-        } else if (unit_state.enabled == false) {
-          if (this->support.unit_system_state_queries) {
-            this->readout_requests.set(ReadoutUnitStateBits);
-            unit_state.enabled = true;
-          } else {
-            this->support.powerful_source = PowerfulSource::Disabled;
-          }
         }
-        if (this->support.powerful_source == PowerfulSource::Disabled) {
-          this->support.unit_system_state_queries = false;  // unit state is assumed to be supported, if it isn't then correct the record
-        }
+      }
+      if (this->support.powerful_source == PowerfulSource::Disabled) {
+        this->support.unit_system_state_queries = false;  // unit state is assumed to be supported, if it isn't then correct the record
       }
     }
   } else {
