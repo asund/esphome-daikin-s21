@@ -6,6 +6,7 @@ import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.const import (
   CONF_ID,
+  ICON_ACCOUNT_CHECK,
 )
 
 DEPENDENCIES = ["uart"]
@@ -16,9 +17,22 @@ CONF_UART = "uart"
 CONF_DEBUG_COMMS = "debug_comms"
 CONF_DEBUG_PROTOCOL = "debug_protocol"
 
+# used by subcomponents
+CONF_COMFORT = "comfort"
+CONF_ECONO = "econo"
+CONF_POWERFUL = "powerful"
+CONF_QUIET = "quiet"
+CONF_STREAMER = "streamer"
+ICON_COMFORT = ICON_ACCOUNT_CHECK
+ICON_ECONO = "mdi:leaf"
+ICON_POWERFUL = "mdi:arm-flex"
+ICON_QUIET = "mdi:volume-minus"
+ICON_STREAMER = "mdi:creation"
+
 daikin_s21_ns = cg.esphome_ns.namespace("daikin_s21")
 DaikinS21 = daikin_s21_ns.class_("DaikinS21", cg.PollingComponent)
 DaikinSerial = daikin_s21_ns.class_("DaikinSerial", cg.Component)
+DaikinS21Modes = daikin_s21_ns.enum("DaikinMode")
 uart_ns = cg.esphome_ns.namespace("uart")
 UARTComponent = uart_ns.class_("UARTComponent")
 

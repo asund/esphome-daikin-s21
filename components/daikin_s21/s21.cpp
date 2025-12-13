@@ -767,7 +767,7 @@ void DaikinS21::handle_serial_idle() {
       if (send_value[ModeStreamer]) {
         payload[1] |= 0b10000000;
       }
-      if (send_value[ModeSensor]) {
+      if (send_value[ModeMotionSensor]) {
         payload[3] |= 0b10000000;
       }
       this->send_command(StateCommand::SpecialModes, payload);
@@ -886,16 +886,16 @@ void DaikinS21::handle_state_swing_or_humidity(const std::span<const uint8_t> pa
 }
 
 void DaikinS21::handle_state_special_modes(const std::span<const uint8_t> payload) {
-  this->current.modes[ModePowerful] = (payload[0] & 0b00000010);  // highest precedence, if this query is working there's no need to check powerful_source
-  this->current.modes[ModeComfort] =  (payload[0] & 0b01000000);
-  this->current.modes[ModeQuiet] =    (payload[0] & 0b10000000);
-  this->current.modes[ModeStreamer] = (payload[1] & 0b10000000);
-  this->current.modes[ModeSensor] =   (payload[3] & 0b00001000);
-  this->current.sensor_led =          (payload[3] & 0b00001100) != 0b00001100;
+  this->current.modes[ModePowerful] =     (payload[0] & 0b00000010);  // highest precedence, if this query is working there's no need to check powerful_source
+  this->current.modes[ModeComfort] =      (payload[0] & 0b01000000);
+  this->current.modes[ModeQuiet] =        (payload[0] & 0b10000000);
+  this->current.modes[ModeStreamer] =     (payload[1] & 0b10000000);
+  this->current.modes[ModeMotionSensor] = (payload[3] & 0b00001000);
+  this->current.sensor_led =              (payload[3] & 0b00001100) != 0b00001100;
 }
 
 void DaikinS21::handle_state_demand_and_econo(const std::span<const uint8_t> payload) {
-  this->current.modes[ModeEcono] =    (payload[1] == '2');
+  this->current.modes[ModeEcono] =        (payload[1] == '2');
 }
 
 /** Coarser than EnvironmentQuery::InsideTemperature and EnvironmentQuery::OutsideTemperature. Added if those queries fail. */

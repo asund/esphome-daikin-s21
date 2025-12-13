@@ -13,6 +13,7 @@ class DaikinS21SwitchMode : public switch_::Switch,
  protected:
   void write_state(bool state) override;
  public:
+  DaikinS21SwitchMode(const DaikinMode mode) : mode(mode) {}
   DaikinMode mode;
 };
 
@@ -23,44 +24,17 @@ class DaikinS21Switch : public Component,
   void loop() override;
   void dump_config() override;
 
-  void set_powerful_switch(DaikinS21SwitchMode *mode_switch) {
-    mode_switch->mode = ModePowerful;
+  void set_mode_switch(DaikinS21SwitchMode *mode_switch) {
     this->mode_switches_[mode_switch->mode] = mode_switch;
-    this->get_parent()->request_readout(DaikinS21::ReadoutSpecialModes);
-  }
-
-  void set_comfort_switch(DaikinS21SwitchMode *mode_switch) {
-    mode_switch->mode = ModeComfort;
-    this->mode_switches_[mode_switch->mode] = mode_switch;
-    this->get_parent()->request_readout(DaikinS21::ReadoutSpecialModes);
-  }
-
-  void set_quiet_switch(DaikinS21SwitchMode *mode_switch) {
-    mode_switch->mode = ModeQuiet;
-    this->mode_switches_[mode_switch->mode] = mode_switch;
-    this->get_parent()->request_readout(DaikinS21::ReadoutSpecialModes);
-  }
-
-  void set_streamer_switch(DaikinS21SwitchMode *mode_switch) {
-    mode_switch->mode = ModeStreamer;
-    this->mode_switches_[mode_switch->mode] = mode_switch;
-    this->get_parent()->request_readout(DaikinS21::ReadoutSpecialModes);
-  }
-
-  void set_sensor_switch(DaikinS21SwitchMode *mode_switch) {
-    mode_switch->mode = ModeSensor;
-    this->mode_switches_[mode_switch->mode] = mode_switch;
-    this->get_parent()->request_readout(DaikinS21::ReadoutSpecialModes);
-  }
-
-  void set_econo_switch(DaikinS21SwitchMode *mode_switch) {
-    mode_switch->mode = ModeEcono;
-    this->mode_switches_[mode_switch->mode] = mode_switch;
-    this->get_parent()->request_readout(DaikinS21::ReadoutDemandAndEcono);
+    if (mode_switch->mode == ModeEcono) {
+      this->get_parent()->request_readout(DaikinS21::ReadoutDemandAndEcono);
+    } else {
+      this->get_parent()->request_readout(DaikinS21::ReadoutSpecialModes);
+    }
   }
 
  protected:
-  DaikinS21SwitchMode * mode_switches_[DaikinModeCount]{};
+  DaikinS21SwitchMode *mode_switches_[DaikinModeCount]{};
 };
 
 } // namespace esphome::daikin_s21

@@ -21,8 +21,10 @@ void DaikinS21BinarySensor::loop() {
   const DaikinUnitState unit = this->get_parent()->get_unit_state();
   const DaikinSystemState system = this->get_parent()->get_system_state();
 
-  if (this->powerful_sensor_ != nullptr) {
-    this->powerful_sensor_->publish_state(unit.powerful());
+  for (auto mode_sensor : this->mode_sensors_) {
+    if (mode_sensor != nullptr) {
+      mode_sensor->publish_state(this->get_parent()->get_mode(mode_sensor->mode));
+    }
   }
   if (this->defrost_sensor_ != nullptr) {
     this->defrost_sensor_->publish_state(unit.defrost());
@@ -54,7 +56,11 @@ void DaikinS21BinarySensor::loop() {
 
 void DaikinS21BinarySensor::dump_config() {
   ESP_LOGCONFIG(TAG, "Daikin S21 Binary Sensor:");
-  LOG_BINARY_SENSOR("  ", "Powerful", this->powerful_sensor_);
+  for (auto mode_sensor : this->mode_sensors_) {
+    if (mode_sensor != nullptr) {
+      LOG_BINARY_SENSOR("  ", mode_sensor->get_name().c_str(), mode_sensor);
+    }
+  }
   LOG_BINARY_SENSOR("  ", "Defrost", this->defrost_sensor_);
   LOG_BINARY_SENSOR("  ", "Active", this->active_sensor_);
   LOG_BINARY_SENSOR("  ", "Online", this->online_sensor_);

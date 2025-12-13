@@ -70,7 +70,7 @@ only changes will be published over the network. See the example configuration.
   not present)
 * Unit's demand from outside exchanger
 
-v2 protocol units may also support:
+v2+ protocol units may also support:
 
 * IR counter that increments when the remote is used (untested)
 * Total power consumption in kWh (untested)
@@ -78,22 +78,40 @@ v2 protocol units may also support:
 
 ### Switch
 
-Mode toggle switches for protocol 2+. Untested and probably glitchy.
+Mode toggle switches for protocol v2+. Even if these modes are supported some
+units don't seem to be able to be set via the S21 interface, so a parallel set
+of binary sensors are offered as a read only indication of modes set via the IR
+remote. There's no point in having both the switch and binary sensor active at
+the same time.
 
-* Powerful
-* Comfort
-* Quiet
-* Streamer
-* Sensor
-* Econo
+* Powerful Mode
+* Comfort Mode
+* Quiet Mode
+* Streamer Mode
+* Sensor Mode
+* Econo Mode
 
 ### Binary Sensor
 
-New, extracted from the unit and system state bitfields. Still need to observe
-to see how valuable these are. I may remove the redundant ones in the future.
-Not all units support these.
+Mode indicators that mirror the switches above for units and modes that don't
+support setting via S21. On one unit comfort, quiet and sensor control wasn't
+supported, but these binary sensors can be used to see the value set via the IR
+remote. There's no point in having both the switch and binary sensor active at
+the same time.
 
-* Powerful
+* Powerful Mode (can pull from unit state bitfield, see note below)
+* Comfort Mode
+* Quiet Mode
+* Streamer Mode
+* Sensor Mode
+* Econo Mode
+
+Extracted from the unit and system state bitfields. Still need to observe
+to see how valuable these are. I may remove the redundant ones in the future.
+Not all units support these. If you see nonsense output then we are likely
+reading random memory. Your debug logs can let me blacklist your model and let
+others avoid this.
+
 * Defrost
 * Active (Actively controlling climate, climate action can tell us this)
 * Online (In a climate controlling mode, climate mode can tell us this)
@@ -101,6 +119,9 @@ Not all units support these.
 * Short Cycle Lock (3 minute compressor lockout)
 * System Defrost (shadows defrost?)
 * Multizone settings conflict
+
+Additional binary sensors:
+
 * Serial error (always OK if working, developer use)
 
 ### Text Sensor
@@ -132,7 +153,6 @@ this writing, independent UART pin inversion control also wasn't possible.
   ESP8266.
 * Tested with 4MXL36TVJU outdoor unit and CTXS07LVJU, FTXS12LVJU, FTXS15LVJU
   indoor units.
-* Powerful and econo modes are untested (no v2 hardware).
 * Does not support comfort or presence detection features on some models.
 * Does not interact with the indoor units schedules (do that with HA instead).
 * Higher protocol versions have limited support due to the equipment available
@@ -205,7 +225,7 @@ schema, see the example configuration.
 ### PCB Option 2
 
 I am using ESP32-S3 mini dev boards and directly wiring communication to the
-S21 port. My Daikin unit pulls our TX line up to 5V, so I've configured my pin
+S21 port. My Daikin unit pulls the TX line up to 5V, so I've configured my pin
 as open drain to work with it. The RX line relies on the ESP32's 5V tolerant
 GPIO pins. For power I am using a cheap 5V -> 3.3V switching module wired into
 Vcc on the dev board.
@@ -222,13 +242,20 @@ ways:
   output of different models.
 * Let me know how useful the binary sensor values are and which just shadow
   other sensor values.
-
-Please consider documenting characteristics of your unit in the appropriate
-place in the Faikout wiki. I don't want to make an inferior copy of this
-information if possible. Please don't report issues with this component to them
-as we don't share a codebase. Some of the readout values here are not
-byteswapped if we don't otherwise use them so unknown static fields may appear
-reversed compared to that project. Please verify this when contributing.
+* Tell me if there are any problems with the control code for your units. The
+  supported features vary wildly so you may find control or even readout of
+  features or sensors doesn't work for you. This is normal, especially for my
+  v0 units. It's recommended that once you figure out what doesn't work for you
+  that you just disable those controls or sensors. However if you find that
+  your unit does support something via enabling protocol debugging or testing
+  with debug queries then I would like to add support for it.
+* Please consider documenting characteristics of your unit in the appropriate
+  place in the Faikout wiki. I don't want to make an inferior copy of this
+  information if possible. Please don't report issues with this component to
+  them as we don't share a codebase. Some of the readout values here are not
+  byteswapped if we don't otherwise use them so unknown static fields may
+  appear reversed compared to that project. Please verify this when
+  contributing.
 
 See existing issues, open a new one or post in the discussions section with
 your findings. Thanks.
@@ -392,22 +419,32 @@ sensor:
 switch:
   - platform: daikin_s21
     powerful:
-      name: Powerful
+      name: Powerful Mode Switch
     comfort:
-      name: Comfort
+      name: Comfort Mode Switch
     quiet:
-      name: Quiet
+      name: Quiet Mode Switch
     streamer:
-      name: Streamer
-    sensor:
-      name: Sensor
+      name: Streamer Mode Switch
+    motion:
+      name: Sensor Mode Switch
     econo:
-      name: Econo
+      name: Econo Mode Switch
 
 binary_sensor:
   - platform: daikin_s21
     powerful:
-      name: Powerful
+      name: Powerful Mode Sensor
+    comfort:
+      name: Comfort Mode Sensor
+    quiet:
+      name: Quiet Mode Sensor
+    streamer:
+      name: Streamer Mode Sensor
+    motion:
+      name: Sensor Mode Sensor
+    econo:
+      name: Econo Mode Sensor
     defrost:
       name: Defrost
     online:
@@ -431,8 +468,8 @@ text_sensor:
   - platform: daikin_s21
     software_version:
       name: Software Version
-#     queries:
-#       - RK
+    # queries:
+    #   - RK
 ```
 
 Here is an example of how daikin_s21 can be used with inverted UART pins

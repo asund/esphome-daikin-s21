@@ -7,23 +7,36 @@ import esphome.config_validation as cv
 from esphome.components import binary_sensor
 from esphome.const import (
     CONF_ID,
+    CONF_MOTION,
     DEVICE_CLASS_COLD,
     DEVICE_CLASS_LOCK,
     DEVICE_CLASS_OPENING,
     DEVICE_CLASS_POWER,
     DEVICE_CLASS_PROBLEM,
     DEVICE_CLASS_RUNNING,
+    ICON_MOTION_SENSOR,
 )
 
 from .. import (
     daikin_s21_ns,
     CONF_S21_ID,
     S21_PARENT_SCHEMA,
+    DaikinS21Modes,
+    CONF_ECONO,
+    CONF_COMFORT,
+    CONF_POWERFUL,
+    CONF_QUIET,
+    CONF_STREAMER,
+    ICON_ECONO,
+    ICON_COMFORT,
+    ICON_POWERFUL,
+    ICON_QUIET,
+    ICON_STREAMER,
 )
 
 DaikinS21BinarySensor = daikin_s21_ns.class_("DaikinS21BinarySensor", cg.Component)
+DaikinS21BinarySensorMode = daikin_s21_ns.class_("DaikinS21BinarySensorMode", binary_sensor.BinarySensor)
 
-CONF_POWERFUL = "powerful"
 CONF_DEFROST = "defrost"
 CONF_ACTIVE = "active"
 CONF_ONLINE = "online"
@@ -39,7 +52,28 @@ CONFIG_SCHEMA = (
     .extend(S21_PARENT_SCHEMA)
     .extend({
         cv.Optional(CONF_POWERFUL): binary_sensor.binary_sensor_schema(
-            device_class=DEVICE_CLASS_POWER,
+            DaikinS21BinarySensorMode,
+            icon=ICON_POWERFUL,
+        ),
+        cv.Optional(CONF_COMFORT): binary_sensor.binary_sensor_schema(
+            DaikinS21BinarySensorMode,
+            icon=ICON_COMFORT,
+        ),
+        cv.Optional(CONF_QUIET): binary_sensor.binary_sensor_schema(
+            DaikinS21BinarySensorMode,
+            icon=ICON_QUIET,
+        ),
+        cv.Optional(CONF_STREAMER): binary_sensor.binary_sensor_schema(
+            DaikinS21BinarySensorMode,
+            icon=ICON_STREAMER,
+        ),
+        cv.Optional(CONF_MOTION): binary_sensor.binary_sensor_schema(
+            DaikinS21BinarySensorMode,
+            icon=ICON_MOTION_SENSOR,
+        ),
+        cv.Optional(CONF_ECONO): binary_sensor.binary_sensor_schema(
+            DaikinS21BinarySensorMode,
+            icon=ICON_ECONO,
         ),
         cv.Optional(CONF_DEFROST): binary_sensor.binary_sensor_schema(
             device_class=DEVICE_CLASS_COLD,
@@ -73,8 +107,20 @@ async def to_code(config):
     await cg.register_component(var, config)
     await cg.register_parented(var, config[CONF_S21_ID])
 
+    mode_sensors = (
+        (CONF_POWERFUL, DaikinS21Modes.ModePowerful),
+        (CONF_COMFORT, DaikinS21Modes.ModeComfort),
+        (CONF_QUIET, DaikinS21Modes.ModeQuiet),
+        (CONF_STREAMER, DaikinS21Modes.ModeStreamer),
+        (CONF_MOTION, DaikinS21Modes.ModeMotionSensor),
+        (CONF_ECONO, DaikinS21Modes.ModeEcono),
+    )
+    for key, mode in mode_sensors:
+        if key in config:
+            sens = await binary_sensor.new_binary_sensor(config[key], mode)
+            cg.add(var.set_mode_sensor(sens))
+
     binary_sensors = (
-        (CONF_POWERFUL, var.set_powerful_sensor),
         (CONF_DEFROST, var.set_defrost_sensor),
         (CONF_ACTIVE, var.set_active_sensor),
         (CONF_ONLINE, var.set_online_sensor),

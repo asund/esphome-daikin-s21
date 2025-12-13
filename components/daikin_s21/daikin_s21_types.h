@@ -59,12 +59,12 @@ inline constexpr DaikinC10 TEMPERATURE_STEP{0.5F}; // Daikin temperature sensor 
 inline constexpr DaikinC10 TEMPERATURE_INVALID{DaikinC10::nan_sentinel}; // NaN
 
 enum DaikinMode : uint8_t {
-  ModePowerful, // maximum output (20 minute timeout), mutaully exclusive with comfort/quiet/econo
-  ModeComfort,  // fan angle depends on heating/cooling action
-  ModeQuiet,    // outdoor unit fan/compressor limit
-  ModeStreamer, // electron emitter decontamination
-  ModeSensor,   // "intelligent eye" PIR occupancy setpoint offset
-  ModeEcono,    // limits demand for power consumption
+  ModePowerful,       // maximum output (20 minute timeout), mutaully exclusive with comfort/quiet/econo
+  ModeComfort,        // fan angle depends on heating/cooling action
+  ModeQuiet,          // outdoor unit fan/compressor limit
+  ModeStreamer,       // electron emitter decontamination
+  ModeMotionSensor,   // "intelligent eye" PIR occupancy setpoint offset
+  ModeEcono,          // limits demand for power consumption
   // just for bitset sizing
   DaikinModeCount,
 };

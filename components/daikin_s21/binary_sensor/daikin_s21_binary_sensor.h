@@ -8,6 +8,12 @@
 
 namespace esphome::daikin_s21 {
 
+class DaikinS21BinarySensorMode : public binary_sensor::BinarySensor {
+ public:
+  DaikinS21BinarySensorMode(const DaikinMode mode) : mode(mode) {}
+  DaikinMode mode;
+};
+
 class DaikinS21BinarySensor : public Component,
                               public Parented<DaikinS21> {
  public:
@@ -15,9 +21,15 @@ class DaikinS21BinarySensor : public Component,
   void loop() override;
   void dump_config() override;
 
-  void set_powerful_sensor(binary_sensor::BinarySensor *sensor) {
-    this->powerful_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutUnitStateBits); // for units without special modes, use a switch if supported
+  void set_mode_sensor(DaikinS21BinarySensorMode *mode_sensor) {
+    this->mode_sensors_[mode_sensor->mode] = mode_sensor;
+    if (mode_sensor->mode == ModePowerful) {
+      this->get_parent()->request_readout(DaikinS21::ReadoutUnitStateBits); // for units without special modes, use a switch if supported
+    } else if (mode_sensor->mode == ModeEcono) {
+      this->get_parent()->request_readout(DaikinS21::ReadoutDemandAndEcono);
+    } else {
+      this->get_parent()->request_readout(DaikinS21::ReadoutSpecialModes);
+    }
   }
   void set_defrost_sensor(binary_sensor::BinarySensor *sensor) {
     this->defrost_sensor_ = sensor;
@@ -51,7 +63,7 @@ class DaikinS21BinarySensor : public Component,
   }
 
  protected:
-  binary_sensor::BinarySensor *powerful_sensor_{};
+  DaikinS21BinarySensorMode *mode_sensors_[DaikinModeCount]{};
   binary_sensor::BinarySensor *defrost_sensor_{};
   binary_sensor::BinarySensor *active_sensor_{};
   binary_sensor::BinarySensor *online_sensor_{};

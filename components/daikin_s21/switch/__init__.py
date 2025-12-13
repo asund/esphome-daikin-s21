@@ -7,23 +7,29 @@ import esphome.config_validation as cv
 from esphome.components import switch
 from esphome.const import (
     CONF_ID,
+    CONF_MOTION,
+    ICON_MOTION_SENSOR,
 )
 
 from .. import (
     daikin_s21_ns,
     CONF_S21_ID,
     S21_PARENT_SCHEMA,
+    DaikinS21Modes,
+    CONF_ECONO,
+    CONF_COMFORT,
+    CONF_POWERFUL,
+    CONF_QUIET,
+    CONF_STREAMER,
+    ICON_ECONO,
+    ICON_COMFORT,
+    ICON_POWERFUL,
+    ICON_QUIET,
+    ICON_STREAMER,
 )
 
 DaikinS21Switch = daikin_s21_ns.class_("DaikinS21Switch", cg.Component)
 DaikinS21SwitchMode = daikin_s21_ns.class_("DaikinS21SwitchMode", switch.Switch)
-
-CONF_POWERFUL = "powerful"
-CONF_COMFORT = "comfort"
-CONF_QUIET = "quiet"
-CONF_STREAMER = "streamer"
-CONF_SENSOR = "sensor"
-CONF_ECONO = "econo"
 
 CONFIG_SCHEMA = (
     cv.COMPONENT_SCHEMA
@@ -32,27 +38,27 @@ CONFIG_SCHEMA = (
     .extend({
         cv.Optional(CONF_POWERFUL): switch.switch_schema(
             DaikinS21SwitchMode,
-            icon="mdi:arm-flex",
+            icon=ICON_POWERFUL,
         ).extend(S21_PARENT_SCHEMA),
         cv.Optional(CONF_COMFORT): switch.switch_schema(
             DaikinS21SwitchMode,
-            icon="mdi:account-check",
+            icon=ICON_COMFORT,
         ).extend(S21_PARENT_SCHEMA),
         cv.Optional(CONF_QUIET): switch.switch_schema(
             DaikinS21SwitchMode,
-            icon="mdi:volume-minus",
+            icon=ICON_QUIET,
         ).extend(S21_PARENT_SCHEMA),
         cv.Optional(CONF_STREAMER): switch.switch_schema(
             DaikinS21SwitchMode,
-            icon="mdi:creation",
+            icon=ICON_STREAMER,
         ).extend(S21_PARENT_SCHEMA),
-        cv.Optional(CONF_SENSOR): switch.switch_schema(
+        cv.Optional(CONF_MOTION): switch.switch_schema(
             DaikinS21SwitchMode,
-            icon="mdi:motion-sensor",
+            icon=ICON_MOTION_SENSOR,
         ).extend(S21_PARENT_SCHEMA),
         cv.Optional(CONF_ECONO): switch.switch_schema(
             DaikinS21SwitchMode,
-            icon="mdi:leaf",
+            icon=ICON_ECONO,
         ).extend(S21_PARENT_SCHEMA),
     })
 )
@@ -62,16 +68,16 @@ async def to_code(config):
     await cg.register_component(var, config)
     await cg.register_parented(var, config[CONF_S21_ID])
 
-    switches = (
-      (CONF_POWERFUL, var.set_powerful_switch),
-      (CONF_COMFORT, var.set_comfort_switch),
-      (CONF_QUIET, var.set_quiet_switch),
-      (CONF_STREAMER, var.set_streamer_switch),
-      (CONF_SENSOR, var.set_sensor_switch),
-      (CONF_ECONO, var.set_econo_switch),
+    mode_switches = (
+      (CONF_POWERFUL, DaikinS21Modes.ModePowerful),
+      (CONF_COMFORT, DaikinS21Modes.ModeComfort),
+      (CONF_QUIET, DaikinS21Modes.ModeQuiet),
+      (CONF_STREAMER, DaikinS21Modes.ModeStreamer),
+      (CONF_MOTION, DaikinS21Modes.ModeMotionSensor),
+      (CONF_ECONO, DaikinS21Modes.ModeEcono),
     )
-    for key, func in switches:
+    for key, mode in mode_switches:
         if key in config:
-            sw = await switch.new_switch(config[key])
+            sw = await switch.new_switch(config[key], mode)
             await cg.register_parented(sw, config[CONF_S21_ID])
-            cg.add(func(sw))
+            cg.add(var.set_mode_switch(sw))
