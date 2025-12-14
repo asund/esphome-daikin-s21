@@ -175,7 +175,7 @@ class DaikinS21 : public PollingComponent {
     DaikinClimateSettings climate{};
     climate::ClimateAction action_reported = climate::CLIMATE_ACTION_OFF; // raw readout
     climate::ClimateAction action = climate::CLIMATE_ACTION_OFF; // corrected at end of cycle
-    std::bitset<DaikinModeCount> modes{};
+    ModeBitset modes{};
     uint16_t fan_rpm_setpoint{};
     uint16_t fan_rpm{};
     int16_t swing_vertical_angle_setpoint{};
@@ -193,8 +193,8 @@ class DaikinS21 : public PollingComponent {
 
   struct {
     DaikinClimateSettings climate{};
-    std::bitset<DaikinModeCount> modes{};
-    std::bitset<DaikinModeCount> activate_modes{};
+    ModeBitset modes{};
+    ModeBitset activate_modes{};
     bool activate_climate{};
     bool activate_swing_mode{};
     bool activate_preset{};

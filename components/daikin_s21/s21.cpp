@@ -260,7 +260,7 @@ void DaikinS21::set_climate_settings(const DaikinClimateSettings &settings) {
  */
 void DaikinS21::set_mode(const DaikinMode mode, const bool enable) {
   if (mode < DaikinModeCount) {
-    if (this->pending.modes[mode] != enable) {
+    if ((this->current.modes[mode] != enable) || (this->pending.modes[mode] != enable)) {
       this->pending.modes[mode] = enable;
       this->pending.activate_modes[mode] = true;
       this->trigger_cycle();
@@ -743,9 +743,10 @@ void DaikinS21::handle_serial_idle() {
   }
 
   if (this->pending.activate_modes.any()) {
+    static const auto special_modes_mask = ModeBitset().set().reset(ModeEcono);
     // value to send is the pending value of any modes being activated and the current value of any modes not being activated
-    const std::bitset<DaikinModeCount> send_value = (this->pending.activate_modes & this->pending.modes) | (~this->pending.activate_modes & this->current.modes);
-    if (this->pending.activate_modes[ModeEcono] == false) {
+    const ModeBitset send_value = (this->pending.activate_modes & this->pending.modes) | (~this->pending.activate_modes & this->current.modes);
+    if ((this->pending.activate_modes & special_modes_mask).any()) {
       if (send_value[ModePowerful]) {
         payload[0] |= 0b00000010;
       }
@@ -762,7 +763,7 @@ void DaikinS21::handle_serial_idle() {
         payload[3] |= 0b10000000;
       }
       this->send_command(StateCommand::SpecialModes, payload);
-      this->pending.activate_modes &= std::bitset<DaikinModeCount>().set(ModeEcono);
+      this->pending.activate_modes &= ~special_modes_mask;
     } else {
       if (send_value[ModeEcono]) {
         payload[1] |= 0b00000010;
@@ -1136,7 +1137,7 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
 }
 
 void DaikinS21::dump_state() {
-  ESP_LOGD(TAG, "Ready: 0x%lX  Protocol: %" PRIu8 ".%" PRIu8 "  ModelV0: %04" PRIX16 "  ModelV2: %04" PRIX16,
+  ESP_LOGD(TAG, "Ready: %lX  Protocol: %" PRIu8 ".%" PRIu8 "  ModelV0: %04" PRIX16 "  ModelV2: %04" PRIX16,
       this->ready.to_ulong(),
       this->protocol_version.major,
       this->protocol_version.minor,

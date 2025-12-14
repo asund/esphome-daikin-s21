@@ -1,5 +1,6 @@
 #pragma once
 
+#include <bitset>
 #include <compare>
 #include <functional>
 #include <limits>
@@ -68,6 +69,8 @@ enum DaikinMode : uint8_t {
   // just for bitset sizing
   DaikinModeCount,
 };
+
+using ModeBitset = std::bitset<DaikinModeCount>;
 
 /**
  * Possible sources of active flag.
