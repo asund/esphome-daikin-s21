@@ -461,6 +461,16 @@ void DaikinS21::check_ready_protocol_detection() {
     this->enable_query(StateQuery::OptionalFeatures);
     this->enable_query(StateQuery::ErrorStatus);
     this->enable_query(StateQuery::SwingOrHumidity);
+    this->enable_query(EnvironmentQuery::FanMode);
+    if (this->readout_requests[ReadoutFanSpeed]) {
+      this->enable_query(EnvironmentQuery::FanSpeed);
+    }
+    if (this->readout_requests[ReadoutSwingAngle]) {
+      this->enable_query(EnvironmentQuery::VerticalSwingAngle);
+    }
+    if (this->readout_requests[ReadoutHumidity]) {
+      this->enable_query(EnvironmentQuery::IndoorHumidity);
+    }
     this->enable_query(EnvironmentQuery::CompressorOnOff);
     this->enable_query(MiscQuery::SoftwareVersion);
     if (this->protocol_version <= ProtocolVersion(2)) {
@@ -555,23 +565,6 @@ void DaikinS21::check_ready_optional_features() {
       this->support.streamer =      (v3_features[5] == '3');
     }
 
-    if (this->support.fan) {
-      this->enable_query(EnvironmentQuery::FanMode);
-      if (this->readout_requests[ReadoutFanSpeed]) {
-        this->enable_query(EnvironmentQuery::FanSpeed);
-      }
-    }
-    if (this->support.swing && this->readout_requests[ReadoutSwingAngle]) {
-      this->enable_query(EnvironmentQuery::VerticalSwingAngle);
-    }
-    if (this->support.humidify || this->support.dehumidify) {
-      // unknown if this is (de)humidify mode or humidity sensor, potentially hides the sensor if it's just the mode
-      if (this->readout_requests[ReadoutHumidity]) {
-        this->enable_query(EnvironmentQuery::IndoorHumidity);
-      }
-    }
-
-    // todo climate traits and sensor config check -- let user know they can pare down their yaml
     ESP_LOGD(TAG, "Optional features detected");
   }
 }

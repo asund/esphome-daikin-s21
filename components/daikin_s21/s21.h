@@ -88,6 +88,7 @@ class DaikinS21 : public PollingComponent {
   bool get_serial_error() const { return this->current.serial_error; }
   bool get_mode(DaikinMode mode) const;
   std::span<const uint8_t> get_query_result(std::string_view query_str);
+  auto get_cycle_interval_ms() const { return std::max(this->get_update_interval(), this->cycle_time_ms); }
 
   // callbacks for serial events
   void handle_serial_result(DaikinSerial::Result result, std::span<const uint8_t> response = {});

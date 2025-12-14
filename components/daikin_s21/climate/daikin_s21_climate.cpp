@@ -425,7 +425,7 @@ void DaikinS21Climate::set_s21_climate() {
   // followed by the active state.
   this->command_active = true;
   this->set_timeout(command_timeout_name,
-                    DaikinS21Climate::state_publication_timeout_ms + this->get_parent()->get_update_interval(), // extend the timeour if S21 is polling to wait for slower updates
+                    DaikinS21Climate::state_publication_timeout_ms + this->get_parent()->get_cycle_interval_ms(),
                     [this](){ this->command_timeout_handler(); });
 
   ESP_LOGI(TAG, "Controlling S21 climate:");
