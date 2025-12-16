@@ -7,7 +7,9 @@ import esphome.config_validation as cv
 from esphome.components import switch
 from esphome.const import (
     CONF_ID,
+    CONF_LED,
     CONF_MOTION,
+    ICON_LIGHTBULB,
     ICON_MOTION_SENSOR,
 )
 
@@ -52,6 +54,10 @@ CONFIG_SCHEMA = (
             DaikinS21SwitchMode,
             icon=ICON_STREAMER,
         ).extend(S21_PARENT_SCHEMA),
+        cv.Optional(CONF_LED): switch.switch_schema(
+            DaikinS21SwitchMode,
+            icon=ICON_LIGHTBULB,
+        ).extend(S21_PARENT_SCHEMA),
         cv.Optional(CONF_MOTION): switch.switch_schema(
             DaikinS21SwitchMode,
             icon=ICON_MOTION_SENSOR,
@@ -73,6 +79,7 @@ async def to_code(config):
       (CONF_COMFORT, DaikinS21Modes.ModeComfort),
       (CONF_QUIET, DaikinS21Modes.ModeQuiet),
       (CONF_STREAMER, DaikinS21Modes.ModeStreamer),
+      (CONF_LED, DaikinS21Modes.ModeSensorLED),
       (CONF_MOTION, DaikinS21Modes.ModeMotionSensor),
       (CONF_ECONO, DaikinS21Modes.ModeEcono),
     )

@@ -187,8 +187,6 @@ class DaikinS21 : public PollingComponent {
     DaikinSystemState system_state{};
     bool active{};      // actively using the compressor
     bool serial_error{};
-    // todo see if this can be used as an input:
-    bool sensor_led{};  // the sensor LED is on
   } current{};
 
   struct {
@@ -197,7 +195,6 @@ class DaikinS21 : public PollingComponent {
     ModeBitset activate_modes{};
     bool activate_climate{};
     bool activate_swing_mode{};
-    bool activate_preset{};
   } pending{};
 
   // current values

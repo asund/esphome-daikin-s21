@@ -5,14 +5,16 @@ protocol available over S21 and related ports.
 
 A big thanks to:
 * [revk](https://github.com/revk) for work on the fantastic
-  [Faikout](https://github.com/revk/ESP32-Faikout) (née Faikin) project, which was the primary
-  inspiration and guide for building this ESPHome component. In addition, the
-  very active and resourceful community that project has fostered that has
-  decoded much of the protocol.
+  [Faikout](https://github.com/revk/ESP32-Faikout) (née Faikin) project, which
+  was the primary inspiration and guide for building this ESPHome component. In
+  addition, the very active and resourceful community that project has fostered
+  that has decoded much of the protocol.
 * [joshbenner](https://github.com/joshbenner), the original author of this
   integration. His [repository](https://github.com/joshbenner/esphome-daikin-s21)
   would be my preferred place to commit patches to avoid fragmentation, but he
   lacks the time at the moment to manage the project.
+* [amzaldua](https://github.com/amzaldua) for help with multiple rounds of v3
+  protocol control debugging.
 * The users of this project who have contributed, tested or offered feedback.
 
 ## Features
@@ -24,11 +26,13 @@ A big thanks to:
   heating or cooling while in HEAT_COOL.
 * Fan modes auto, silent and 1-5.
 * Swing modes horizontal, vertical, and both.
-* Untested support for Powerful and Econo presets ("Boost" and "Eco").
-  My unit doesn't support these over the wired protocol.
 * Optional humidity reporting.
 * Limits for commanded setpoints. Defaults should work fine, but if your
   unit is different they can be overridden.
+
+Daikin's modes don't neatly fit into the discrete preset category modelled by
+ESPHome as they function more like mode modifiers. Switches are provided
+for individual control of these modifiers instead of climate presets.
 
 The standard Daikin control loop has a few deficiencies:
 * The setpoint value has 1.0°C granularity.
@@ -88,6 +92,7 @@ the same time.
 * Comfort Mode
 * Quiet Mode
 * Streamer Mode
+* Sensor LED
 * Sensor Mode
 * Econo Mode
 
@@ -103,6 +108,7 @@ the same time.
 * Comfort Mode
 * Quiet Mode
 * Streamer Mode
+* Sensor LED
 * Sensor Mode
 * Econo Mode
 
@@ -330,9 +336,6 @@ climate:
     #   - heat
     #   - dry
     #   - fan_only
-    # supported_presets:  # optional, enables presets. none is always supported.
-    #   - eco
-    #   - boost
     # supported_swing_modes:  # optional, restricts available swing modes. off is always supported.
     #   - horizontal
     #   - vertical
@@ -426,6 +429,8 @@ switch:
       name: Quiet Mode Switch
     streamer:
       name: Streamer Mode Switch
+    led:
+      name: Sensor LED Switch
     motion:
       name: Sensor Mode Switch
     econo:
@@ -441,6 +446,8 @@ binary_sensor:
       name: Quiet Mode Sensor
     streamer:
       name: Streamer Mode Sensor
+    led:
+      name: Sensor LED Sensor
     motion:
       name: Sensor Mode Sensor
     econo:

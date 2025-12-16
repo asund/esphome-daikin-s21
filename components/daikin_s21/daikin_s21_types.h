@@ -64,6 +64,7 @@ enum DaikinMode : uint8_t {
   ModeComfort,        // fan angle depends on heating/cooling action
   ModeQuiet,          // outdoor unit fan/compressor limit
   ModeStreamer,       // electron emitter decontamination
+  ModeSensorLED,      // motion sensor LED control
   ModeMotionSensor,   // "intelligent eye" PIR occupancy setpoint offset
   ModeEcono,          // limits demand for power consumption
   // just for bitset sizing
@@ -123,7 +124,6 @@ struct DaikinClimateSettings {
   DaikinC10 setpoint{23};
   climate::ClimateSwingMode swing{climate::CLIMATE_SWING_OFF};
   DaikinFanMode fan{DaikinFanMode::Auto};
-  climate::ClimatePreset preset{climate::CLIMATE_PRESET_NONE};
 
   constexpr bool operator==(const DaikinClimateSettings &other) const = default;
 };

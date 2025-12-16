@@ -247,11 +247,6 @@ void DaikinS21::set_climate_settings(const DaikinClimateSettings &settings) {
     this->trigger_cycle();
   }
 
-  if (this->pending.climate.preset != settings.preset) {
-    this->pending.activate_preset = true;
-    this->trigger_cycle();
-  }
-
   this->pending.climate = settings;
 }
 
@@ -759,8 +754,11 @@ void DaikinS21::handle_serial_idle() {
       if (send_value[ModeStreamer]) {
         payload[1] |= 0b10000000;
       }
+      if (send_value[ModeSensorLED]) {
+        payload[3] |= 0b00000100;
+      }
       if (send_value[ModeMotionSensor]) {
-        payload[3] |= 0b10000000;
+        payload[3] |= 0b00001000;
       }
       this->send_command(StateCommand::SpecialModes, payload);
       this->pending.activate_modes &= ~special_modes_mask;
@@ -772,42 +770,6 @@ void DaikinS21::handle_serial_idle() {
       this->pending.activate_modes.reset(ModeEcono);
     }
     return;
-  }
-
-  if (this->pending.activate_preset) {
-    // potentially a two stage operation -- first disabling the old, then enabling the new
-    climate::ClimatePreset preset;
-    bool enable;
-    if ((this->current.climate.preset != this->pending.climate.preset) && (this->current.climate.preset != climate::CLIMATE_PRESET_NONE)) {
-      preset = this->current.climate.preset;
-      enable = false;
-      if (this->pending.climate.preset == climate::CLIMATE_PRESET_NONE) {
-        this->pending.activate_preset = false;  // don't execute again if we're just disabling the current preset
-      }
-    } else {
-      preset = this->pending.climate.preset;
-      enable = true;
-      this->pending.activate_preset = false;  // don't execute again if we're setting the desired preset
-    }
-    switch (preset) {
-      case climate::CLIMATE_PRESET_BOOST:
-        payload[0] = enable ? '2' : '0';
-        payload[1] = '0';
-        payload[2] = '0';
-        payload[3] = '0';
-        this->send_command(StateCommand::SpecialModes, payload);
-        return;
-      case climate::CLIMATE_PRESET_ECO:
-        payload[0] = '0';
-        payload[1] = enable ? '2' : '0';
-        payload[2] = '0';
-        payload[3] = '0';
-        this->send_command(StateCommand::DemandAndEcono, payload);
-        return;
-      case climate::CLIMATE_PRESET_NONE:
-      default:
-        break;
-    }
   }
 
   // Periodic query cycle
@@ -830,14 +792,6 @@ void DaikinS21::handle_serial_idle() {
       this->current.action = this->current.action_reported; // trust the unit when active or in fan only
     } else {
       this->current.action = climate::CLIMATE_ACTION_IDLE;
-    }
-    // resolve presets
-    if (this->current.modes[ModePowerful]) {
-      this->current.climate.preset = climate::CLIMATE_PRESET_BOOST;
-    } else if (this->current.modes[ModeEcono]) {
-      this->current.climate.preset = climate::CLIMATE_PRESET_ECO;
-    } else {
-      this->current.climate.preset = climate::CLIMATE_PRESET_NONE;
     }
     // signal there's fresh data to consumers
     this->update_callbacks.call();
@@ -882,8 +836,8 @@ void DaikinS21::handle_state_special_modes(const std::span<const uint8_t> payloa
   this->current.modes[ModeComfort] =      (payload[0] & 0b01000000);
   this->current.modes[ModeQuiet] =        (payload[0] & 0b10000000);
   this->current.modes[ModeStreamer] =     (payload[1] & 0b10000000);
+  this->current.modes[ModeSensorLED] =    (payload[3] & 0b00000100);
   this->current.modes[ModeMotionSensor] = (payload[3] & 0b00001000);
-  this->current.sensor_led =              (payload[3] & 0b00001100) != 0b00001100;
 }
 
 void DaikinS21::handle_state_demand_and_econo(const std::span<const uint8_t> payload) {
@@ -1116,9 +1070,9 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
   // update local state for next action
   if (result == DaikinSerial::Result::Error) {
     // something went terribly wrong, try to reinitialize communications
+    this->pending.activate_modes.reset();
     this->pending.activate_climate = false;
     this->pending.activate_swing_mode = false;
-    this->pending.activate_preset = false;
     this->current_command = {};
     this->start_cycle();
   } else {
@@ -1180,10 +1134,9 @@ void DaikinS21::dump_state() {
         active_source_to_string(this->support.active_source),
         powerful_source_to_string(this->support.powerful_source));
   }
-  ESP_LOGD(TAG, "Mode: %s  Action: %s  Preset: %s  Demand: %" PRIu8,
+  ESP_LOGD(TAG, "Mode: %s  Action: %s  Demand: %" PRIu8,
       LOG_STR_ARG(climate::climate_mode_to_string(this->current.climate.mode)),
       LOG_STR_ARG(climate::climate_action_to_string(this->get_climate_action())),
-      LOG_STR_ARG(climate::climate_preset_to_string(this->current.climate.preset)),
       this->get_demand());
   if (this->support.fan || this->support.swing) {
     ESP_LOGD(TAG, "Fan: %s (%" PRIu16 " RPM)  Swing: %s",

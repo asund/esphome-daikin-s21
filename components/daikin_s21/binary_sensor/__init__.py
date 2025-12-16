@@ -7,6 +7,7 @@ import esphome.config_validation as cv
 from esphome.components import binary_sensor
 from esphome.const import (
     CONF_ID,
+    CONF_LED,
     CONF_MOTION,
     DEVICE_CLASS_COLD,
     DEVICE_CLASS_LOCK,
@@ -14,6 +15,7 @@ from esphome.const import (
     DEVICE_CLASS_POWER,
     DEVICE_CLASS_PROBLEM,
     DEVICE_CLASS_RUNNING,
+    ICON_LIGHTBULB,
     ICON_MOTION_SENSOR,
 )
 
@@ -67,6 +69,10 @@ CONFIG_SCHEMA = (
             DaikinS21BinarySensorMode,
             icon=ICON_STREAMER,
         ),
+        cv.Optional(CONF_LED): binary_sensor.binary_sensor_schema(
+            DaikinS21BinarySensorMode,
+            icon=ICON_LIGHTBULB,
+        ),
         cv.Optional(CONF_MOTION): binary_sensor.binary_sensor_schema(
             DaikinS21BinarySensorMode,
             icon=ICON_MOTION_SENSOR,
@@ -112,6 +118,7 @@ async def to_code(config):
         (CONF_COMFORT, DaikinS21Modes.ModeComfort),
         (CONF_QUIET, DaikinS21Modes.ModeQuiet),
         (CONF_STREAMER, DaikinS21Modes.ModeStreamer),
+        (CONF_LED, DaikinS21Modes.ModeSensorLED),
         (CONF_MOTION, DaikinS21Modes.ModeMotionSensor),
         (CONF_ECONO, DaikinS21Modes.ModeEcono),
     )
