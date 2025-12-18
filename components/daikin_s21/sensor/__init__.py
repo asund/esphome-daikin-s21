@@ -15,11 +15,9 @@ from esphome.const import (
     UNIT_REVOLUTIONS_PER_MINUTE,
     ICON_COUNTER,
     ICON_FAN,
-    DEVICE_CLASS_FREQUENCY,
+    DEVICE_CLASS_ENERGY,
     DEVICE_CLASS_HUMIDITY,
-    DEVICE_CLASS_POWER,
     DEVICE_CLASS_TEMPERATURE,
-    DEVICE_CLASS_WIND_DIRECTION,
     STATE_CLASS_MEASUREMENT,
 )
 
@@ -77,21 +75,18 @@ CONFIG_SCHEMA = (
             unit_of_measurement=UNIT_REVOLUTIONS_PER_MINUTE,
             icon=ICON_FAN,
             accuracy_decimals=0,
-            device_class=DEVICE_CLASS_FREQUENCY,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional(CONF_SWING_VERTICAL_ANGLE): sensor.sensor_schema(
             unit_of_measurement=UNIT_DEGREES,
             icon="mdi:pan-vertical",
             accuracy_decimals=0,
-            device_class=DEVICE_CLASS_WIND_DIRECTION,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional(CONF_COMPRESSOR_FREQUENCY): sensor.sensor_schema(
             unit_of_measurement=UNIT_REVOLUTIONS_PER_MINUTE,
             icon="mdi:pump",
             accuracy_decimals=0,
-            device_class=DEVICE_CLASS_FREQUENCY,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional(CONF_HUMIDITY): sensor.sensor_schema(
@@ -114,7 +109,7 @@ CONFIG_SCHEMA = (
         cv.Optional(CONF_POWER_CONSUMPTION): sensor.sensor_schema(
             unit_of_measurement=UNIT_KILOWATT_HOURS,
             accuracy_decimals=2,
-            device_class=DEVICE_CLASS_POWER,
+            device_class=DEVICE_CLASS_ENERGY,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional(CONF_OUTDOOR_CAPACITY): sensor.sensor_schema(
