@@ -1,5 +1,6 @@
 #pragma once
 
+#include <bitset>
 #include <compare>
 #include <functional>
 #include <limits>
@@ -58,6 +59,20 @@ inline constexpr DaikinC10 SETPOINT_STEP{1.0F}; // Daikin setpoint granularity
 inline constexpr DaikinC10 TEMPERATURE_STEP{0.5F}; // Daikin temperature sensor granularity
 inline constexpr DaikinC10 TEMPERATURE_INVALID{DaikinC10::nan_sentinel}; // NaN
 
+enum DaikinMode : uint8_t {
+  ModePowerful,       // maximum output (20 minute timeout), mutaully exclusive with comfort/quiet/econo
+  ModeComfort,        // fan angle depends on heating/cooling action
+  ModeQuiet,          // outdoor unit fan/compressor limit
+  ModeStreamer,       // electron emitter decontamination
+  ModeSensorLED,      // motion sensor LED control
+  ModeMotionSensor,   // "intelligent eye" PIR occupancy setpoint offset
+  ModeEcono,          // limits demand for power consumption
+  // just for bitset sizing
+  DaikinModeCount,
+};
+
+using ModeBitset = std::bitset<DaikinModeCount>;
+
 /**
  * Possible sources of active flag.
  */
@@ -109,7 +124,6 @@ struct DaikinClimateSettings {
   DaikinC10 setpoint{23};
   climate::ClimateSwingMode swing{climate::CLIMATE_SWING_OFF};
   DaikinFanMode fan{DaikinFanMode::Auto};
-  climate::ClimatePreset preset{climate::CLIMATE_PRESET_NONE};
 
   constexpr bool operator==(const DaikinClimateSettings &other) const = default;
 };

@@ -111,8 +111,8 @@ namespace StateCommand {
   // D2
   inline constexpr std::string_view OnOffTimer{"D3"};
   inline constexpr std::string_view LouvreSwingMode{"D5"};
-  inline constexpr std::string_view Powerful{"D6"};
-  inline constexpr std::string_view Econo{"D7"};
+  inline constexpr std::string_view SpecialModes{"D6"};
+  inline constexpr std::string_view DemandAndEcono{"D7"};
   // DH
   inline constexpr std::string_view DJ{"DJ"};
   inline constexpr std::string_view LouvreAngleSetpoint{"DR"};

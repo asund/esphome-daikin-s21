@@ -5,30 +5,47 @@ protocol available over S21 and related ports.
 
 A big thanks to:
 * [revk](https://github.com/revk) for work on the fantastic
-  [Faikout](https://github.com/revk/ESP32-Faikout) (née Faikin) project, which was the primary
-  inspiration and guide for building this ESPHome component. In addition, the
-  very active and resourceful community that project has fostered that has
-  decoded much of the protocol.
+  [Faikout](https://github.com/revk/ESP32-Faikout) (née Faikin) project, which
+  was the primary inspiration and guide for building this ESPHome component. In
+  addition, the very active and resourceful community that project has fostered
+  that has decoded much of the protocol.
 * [joshbenner](https://github.com/joshbenner), the original author of this
   integration. His [repository](https://github.com/joshbenner/esphome-daikin-s21)
   would be my preferred place to commit patches to avoid fragmentation, but he
   lacks the time at the moment to manage the project.
+* [amzaldua](https://github.com/amzaldua) for help with multiple rounds of v3
+  protocol control debugging.
 * The users of this project who have contributed, tested or offered feedback.
 
 ## Features
 
+The S21 platform provides a few ESPhome component types that expose the
+functionality of a Daikin unit.
+
+**NOTE:** Daikin's support for depth of unit control varies wildly over thier
+product line. Your unit could have a lot of features that are exposed via the
+IR remote but offer only basic control over the S21 wired bus. There's not much
+this project can do for you if this is the case. ESPHome doesn't yet offer an
+easy way for the unit to dynamically enable components based on feature
+detection. You're best bet at the moment is to include components you'd like to
+use and then remove them later if not supported.
+
 ### Climate
 * Setpoint temperature.
-* Selectable climate modes OFF, HEAT_COOL, COOL, HEAT, FAN_ONLY and DRY.
+* Climate modes OFF, HEAT_COOL, COOL, HEAT, FAN_ONLY and DRY. The list is
+  configurable in case your unit doesn't support them all.
 * Climate action reporting. See what your unit is trying to do, e.g.
-  heating or cooling while in HEAT_COOL.
+  reporting either heating, cooling or idle while in HEAT_COOL mode.
 * Fan modes auto, silent and 1-5.
-* Swing modes horizontal, vertical, and both.
-* Untested support for Powerful and Econo presets ("Boost" and "Eco").
-  My unit doesn't support these over the wired protocol.
-* Optional humidity reporting.
+* Swing modes off, horizontal, vertical, and both. These can also be restricted
+  to a specified list.
+* Optional humidity reporting from an internal or external sensor.
 * Limits for commanded setpoints. Defaults should work fine, but if your
   unit is different they can be overridden.
+
+Daikin's modes don't neatly fit into the discrete preset category modelled by
+ESPHome as they function more like mode modifiers. Switches are provided
+for individual control of these modifiers instead of climate presets.
 
 The standard Daikin control loop has a few deficiencies:
 * The setpoint value has 1.0°C granularity.
@@ -50,11 +67,11 @@ difference in temperature between the unit and your space.
 
 ### Sensor
 
-Sensors in ESPHome are geared more towards an ADC value that can be filtered
-as necessary. The values read from the Daikin unit are pre-processed and won't
-normally require averaging filters and the like. The sensor component supports
-a configurable update interval that will publish the current values
-periodically. To make this reporting more responsive, the user can set this
+Sensors in ESPHome are geared more towards a periodic ADC value that can be
+filtered as necessary. The values read from the Daikin unit are pre-processed
+and won't normally require averaging filters and the like. The sensor component
+supports a configurable update interval that will publish the current values
+at a chosen rate. To make this reporting more responsive, the user can set this
 value to zero and every update from the unit, interesting or not, will be
 published. To reduce spam, please configure a delta filter on your sensors and
 only changes will be published over the network. See the example configuration.
@@ -63,38 +80,73 @@ only changes will be published over the network. See the example configuration.
 * Outside temperature (outside exchanger)
 * Coil temperature (indoor air handler's coil)
 * Target temperature (internal setpoint, modified by special modes)
-* Fan speed
+* Fan speed (inside blower)
 * Vertical swing angle (directional flap)
 * Compressor frequency (outside exchanger)
 * Humidity (not supported on all units, can report a consistent 50% if
   not present)
 * Unit's demand from outside exchanger
 
-v2 protocol units may also support:
+v2+ protocol units may also support:
 
 * IR counter that increments when the remote is used (untested)
 * Total power consumption in kWh (untested)
-* Outdoor unit capacity in indoor units
+* Outdoor unit capacity in indoor units (unverified)
+
+### Switch
+
+Mode toggle switches for protocol v2+. Even if these modes are supported some
+units don't seem to be able to be set via the S21 interface, so a parallel set
+of binary sensors are offered as a read only indication of modes set via the IR
+remote. There's no point in having both the switch and binary sensor active at
+the same time.
+
+* Powerful Mode
+* Comfort Mode
+* Quiet Mode
+* Streamer Mode
+* Sensor LED (unverified)
+* Sensor Mode (unverified)
+* Econo Mode
 
 ### Binary Sensor
 
-New, extracted from the unit and system state bitfields. Still need to observe
-to see how valuable these are. I may remove the redundant ones in the future.
-Not all units support these.
+Mode indicators that mirror the switches above for units and modes that don't
+support setting via S21. On one unit comfort, quiet and sensor control wasn't
+supported, but these binary sensors can be used to see the value set via the IR
+remote. There's no point in having both the switch and binary sensor active at
+the same time.
 
-* Powerful
+* Powerful Mode (can pull from unit state bitfield, see note below)
+* Comfort Mode
+* Quiet Mode
+* Streamer Mode
+* Sensor LED (unverified)
+* Sensor Mode (unverified)
+* Econo Mode
+
+On some units a memory location was identified that contains unit and system
+state informtation. We still need to observe to see how valuable these are. I
+may remove the redundant ones in the future. Not all units support these. If
+you see nonsense output then we are likely reading random memory. Your debug
+logs can let me blacklist your model and let others avoid this.
+
 * Defrost
 * Active (Actively controlling climate, climate action can tell us this)
 * Online (In a climate controlling mode, climate mode can tell us this)
 * Refrigerant Valve (shadows active?)
-* Short Cycle Lock (3 minute compressor lockout)
+* Short Cycle Lock (3 minute compressor lockout when changing operation)
 * System Defrost (shadows defrost?)
 * Multizone settings conflict
+
+Additional binary sensors:
+
+* Serial error (always OK if working, developer use)
 
 ### Text Sensor
 
 There's not a lot of string data available in protocol v0 units. v2 protocol
-units may support, though untested:
+units may support:
 
 * Software Version
 
@@ -104,8 +156,8 @@ raw values out for debugging and protocol decoding use, without having to add
 a dedicated sensor. Normally you wouldn't need to use this, but if a value
 looks interesting you can see the value change over time in Home Assistant.
 I'd prefer if we use this just to confirm a query works and then add proper
-support, rather than trying to interpret the string. Open an issue with details
-if you want a sensor added.
+support, rather than trying to interpret the string via HA. Open an issue with
+details if you want a sensor added.
 
 ## Limitations
 
@@ -116,15 +168,20 @@ ESP-IDF PlatformIO framework for now (Arduino is an extra shim over the ESP-IDF
 SDK anyways). See the framework selection in the configuration example. As of
 this writing, independent UART pin inversion control also wasn't possible.
 
+* Aforementioned S21 control limitations. Your unit may support a mode but
+  support for controlling over S21 may not be there. See your model's
+  documentation for supported wired remotes and their feature sets to confirm.
 * This code has only been tested on ESP32 pico and ESP32-S3. It compiles for
   ESP8266.
 * Tested with 4MXL36TVJU outdoor unit and CTXS07LVJU, FTXS12LVJU, FTXS15LVJU
   indoor units.
-* Powerful and econo modes are untested (no v2 hardware).
-* Does not support comfort or presence detection features on some models.
+* Presence detection is limited to mode configuration. I haven't found a way to
+  detect the state of the sensor and expose a motion detector sensor. If you're
+  handy with electronics, the PIR sensor output can be wired to a spare GPIO
+  and used that way.
 * Does not interact with the indoor units schedules (do that with HA instead).
-* Higher protocol versions have limited support due to the equipment available
-  to me, though I'm happy to try to work with you.
+* Higher protocol versions have limited support for their features due to the
+  equipment available to me, though I'm happy to try to work with you.
 * Daikin's internal R&D departments must be a bit chaotic. The latest models
   might have inferior command sets to those released years ago.
 
@@ -193,7 +250,7 @@ schema, see the example configuration.
 ### PCB Option 2
 
 I am using ESP32-S3 mini dev boards and directly wiring communication to the
-S21 port. My Daikin unit pulls our TX line up to 5V, so I've configured my pin
+S21 port. My Daikin unit pulls the TX line up to 5V, so I've configured my pin
 as open drain to work with it. The RX line relies on the ESP32's 5V tolerant
 GPIO pins. For power I am using a cheap 5V -> 3.3V switching module wired into
 Vcc on the dev board.
@@ -207,16 +264,24 @@ ways:
 * Report your experince with different Daikin units. Turning on protocol
   debugging and getting the protocol and model detection output values would be
   the first step if you encounter issues and help me learn more about the
-  output of different models.
+  output of different models. The 60s debug dump in the logs is valuable for
+  documentation and support.
 * Let me know how useful the binary sensor values are and which just shadow
   other sensor values.
-
-Please consider documenting characteristics of your unit in the appropriate
-place in the Faikout wiki. I don't want to make an inferior copy of this
-information if possible. Please don't report issues with this component to them
-as we don't share a codebase. Some of the readout values here are not
-byteswapped if we don't otherwise use them so unknown static fields may appear
-reversed compared to that project. Please verify this when contributing.
+* Tell me if there are any problems with the control code for your units. The
+  supported features vary wildly so you may find control or even readout of
+  features or sensors doesn't work for you. This is normal, especially for my
+  v0 units. It's recommended that once you figure out what doesn't work for you
+  that you just disable those controls or sensors. However if you find that
+  your unit does support something via enabling protocol debugging or testing
+  with debug queries then I would like to add support for it.
+* Please consider documenting characteristics of your unit in the appropriate
+  place in the Faikout wiki. I don't want to make an inferior copy of this
+  information if possible. Please don't report issues with this component to
+  them as we don't share a codebase. Some of the readout values here are not
+  byteswapped if we don't otherwise use them so unknown static fields may
+  appear reversed compared to that project. Please verify this when
+  contributing.
 
 See existing issues, open a new one or post in the discussions section with
 your findings. Thanks.
@@ -291,9 +356,6 @@ climate:
     #   - heat
     #   - dry
     #   - fan_only
-    # supported_presets:  # optional, enables presets. none is always supported.
-    #   - eco
-    #   - boost
     # supported_swing_modes:  # optional, restricts available swing modes. off is always supported.
     #   - horizontal
     #   - vertical
@@ -319,6 +381,10 @@ sensor:
       name: Inside Temperature
       filters:
         - delta: 0.0
+    # target_temperature: # unit control loop setpoint, taking mode modifiers into account. probably only useful when debugging
+    #   name: Target Temperature
+    #   filters:
+    #     - delta: 0.0
     outside_temperature:
       name: Outside Temperature
       device_id: daikin_outdoor
@@ -377,10 +443,42 @@ sensor:
     unit_of_measurement: "%"
     accuracy_decimals: 1
 
+switch:
+  - platform: daikin_s21
+    # F6 and F7 mode states, not always supported
+    powerful:
+      name: Powerful Mode Switch
+    comfort:
+      name: Comfort Mode Switch
+    quiet:
+      name: Quiet Mode Switch
+    streamer:
+      name: Streamer Mode Switch
+    led:
+      name: Sensor LED Switch
+    motion:
+      name: Sensor Mode Switch
+    econo:
+      name: Econo Mode Switch
+
 binary_sensor:
   - platform: daikin_s21
+    # F6 and F7 mode states, not always supported
     powerful:
-      name: Powerful
+      name: Powerful Mode Sensor
+    comfort:
+      name: Comfort Mode Sensor
+    quiet:
+      name: Quiet Mode Sensor
+    streamer:
+      name: Streamer Mode Sensor
+    led:
+      name: Sensor LED Sensor
+    motion:
+      name: Sensor Mode Sensor
+    econo:
+      name: Econo Mode Sensor
+    # unit and system state bitfield derived, not always supported or reliable:
     defrost:
       name: Defrost
     online:
@@ -396,14 +494,16 @@ binary_sensor:
     multizone_conflict:
       name: Multizone Conflict
       device_id: daikin_outdoor
+    # serial_error:
+    #   name: Serial Error
 
-# raw case-sensitive query monitoring for debugging
 text_sensor:
   - platform: daikin_s21
     software_version:
       name: Software Version
-#     queries:
-#       - RK
+    # raw case-sensitive query monitoring for debugging
+    # queries:
+    #   - RK
 ```
 
 Here is an example of how daikin_s21 can be used with inverted UART pins
