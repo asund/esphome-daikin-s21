@@ -30,26 +30,10 @@ class DaikinS21Climate : public climate::Climate,
   void set_min_heat_temperature(DaikinC10 temperature) { this->min_heat_temperature = temperature; };
 
  protected:
-  static constexpr const char * command_timeout_name = "cmd";
   static constexpr uint32_t state_publication_timeout_ms{8 * 1000}; // experimentally determined with fudge factor
 
   climate::ClimateTraits traits_{};
   climate::ClimateTraits traits() override { return traits_; };
-
-  sensor::Sensor *temperature_sensor_{};
-  sensor::Sensor *humidity_sensor_{};
-  DaikinC10 max_cool_temperature{};
-  DaikinC10 min_cool_temperature{};
-  DaikinC10 max_heat_temperature{};
-  DaikinC10 min_heat_temperature{};
-
-  bool command_active{};  // ESPHome could use a is_timeout_active()...
-  bool check_setpoint{};
-  DaikinClimateSettings commanded{};
-
-  ESPPreferenceObject auto_setpoint_pref;
-  ESPPreferenceObject cool_setpoint_pref;
-  ESPPreferenceObject heat_setpoint_pref;
 
   void set_custom_fan_mode(DaikinFanMode mode);
   bool temperature_sensor_unit_is_valid();
@@ -61,7 +45,20 @@ class DaikinS21Climate : public climate::Climate,
   DaikinC10 load_setpoint();
   float get_current_humidity() const;
   void set_s21_climate();
-  void command_timeout_handler();
+
+  DaikinClimateSettings commanded{};
+  sensor::Sensor *temperature_sensor_{};
+  sensor::Sensor *humidity_sensor_{};
+  DaikinC10 max_cool_temperature{};
+  DaikinC10 min_cool_temperature{};
+  DaikinC10 max_heat_temperature{};
+  DaikinC10 min_heat_temperature{};
+  uint32_t next_publish_ms{};
+  bool check_publish{true}; // capture startup state
+  bool check_setpoint{};
+  ESPPreferenceObject auto_setpoint_pref;
+  ESPPreferenceObject cool_setpoint_pref;
+  ESPPreferenceObject heat_setpoint_pref;
 };
 
 } // namespace esphome::daikin_s21

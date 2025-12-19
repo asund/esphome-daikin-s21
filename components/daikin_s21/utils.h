@@ -13,4 +13,8 @@ namespace esphome::daikin_s21 {
 std::string hex_repr(std::span<const uint8_t> bytes);
 std::string str_repr(std::span<const uint8_t> bytes);
 
+constexpr bool timestamp_passed(const uint32_t now_ms, const uint32_t timestamp_ms) {
+  return static_cast<int32_t>(now_ms - timestamp_ms) >= 0;
+}
+
 } // namespace esphome::daikin_s21
