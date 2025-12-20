@@ -67,16 +67,13 @@ void DaikinS21Climate::setup() {
  * Publish any state changes to Home Assistant.
  */
 void DaikinS21Climate::loop() {
+  const auto now = millis();
   const auto &reported = this->get_parent()->get_climate_settings();
 
-  // If an active command took effect, cancel the timeout and lift the publication ban
-  if (this->command_active && (this->commanded == reported)) {
-    this->command_active = false;
-    this->cancel_timeout(command_timeout_name);
-  }
+  // Publish if a command timed out or it took effect -- avoids UI glitches
+  if (timestamp_passed(now, this->next_publish_ms) || (this->commanded == reported)) {
+    this->next_publish_ms = now;
 
-  // Don't publish current state if a command is in progress -- avoids UI glitches
-  if (this->command_active == false) {
     // Allowed to publish, determine if we should
     bool do_publish = false;
     bool update_unit_setpoint = false;
@@ -168,17 +165,6 @@ void DaikinS21Climate::loop() {
  */
 void DaikinS21Climate::update() {
   this->check_setpoint = true;
-}
-
-/**
- * Command timeout handler
- *
- * Called when a command times out without seeming to take effect.
- * Trigger a publish of the current state.
- */
-void DaikinS21Climate::command_timeout_handler() {
-  this->command_active = false;
-  this->loop();
 }
 
 void DaikinS21Climate::dump_config() {
@@ -398,6 +384,15 @@ void DaikinS21Climate::set_s21_climate() {
   this->commanded.setpoint = this->calc_s21_setpoint();
   this->commanded.swing = this->swing_mode;
   this->commanded.fan = string_to_daikin_fan_mode(this->get_custom_fan_mode());
+
+  ESP_LOGI(TAG, "Controlling S21 climate:");
+  ESP_LOGI(TAG, "  Mode: %s  Setpoint: %.1f (s21: %.1f)  Fan: %s  Swing: %s",
+      LOG_STR_ARG(climate::climate_mode_to_string(this->commanded.mode)),
+      this->target_temperature,
+      this->commanded.setpoint.f_degc(),
+      LOG_STR_ARG(daikin_fan_mode_to_cstr(this->commanded.fan)),
+      LOG_STR_ARG(climate::climate_swing_mode_to_string(this->commanded.swing)));
+
   this->get_parent()->set_climate_settings(this->commanded);
 
   // HVAC unit takes a few seconds to begin reporting settings changes back to
@@ -405,17 +400,7 @@ void DaikinS21Climate::set_s21_climate() {
   // takes effect or is given enough time to take effect or we get a jumpy UI
   // in Home Assistant as stale state is published over the commanded state
   // followed by the active state.
-  this->command_active = true;
-  this->set_timeout(command_timeout_name,
-                    DaikinS21Climate::state_publication_timeout_ms + this->get_parent()->get_cycle_interval_ms(),
-                    [this](){ this->command_timeout_handler(); });
-
-  ESP_LOGI(TAG, "Controlling S21 climate:");
-  ESP_LOGI(TAG, "  Mode: %s", LOG_STR_ARG(climate::climate_mode_to_string(this->commanded.mode)));
-  ESP_LOGI(TAG, "  Setpoint: %.1f (s21: %.1f)", this->target_temperature, this->commanded.setpoint.f_degc());
-  ESP_LOGI(TAG, "  Fan: %s", LOG_STR_ARG(daikin_fan_mode_to_cstr(this->commanded.fan)));
-  ESP_LOGI(TAG, "  Swing: %s", LOG_STR_ARG(climate::climate_swing_mode_to_string(this->commanded.swing)));
-
+  this->next_publish_ms = millis() + DaikinS21Climate::state_publication_timeout_ms + this->get_parent()->get_cycle_interval_ms();
   this->save_setpoint(this->target_temperature);
 }
 

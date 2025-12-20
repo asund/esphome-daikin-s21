@@ -23,16 +23,45 @@ void DaikinSerial::setup() {
 /**
  * Component polling loop
  *
- * If the loop is active, we're trying the receive data from the unit.
+ * If the loop is active the state machine is actively communicating.
  */
 void DaikinSerial::loop() {
-  uint8_t rx_bytes = 0;
-  bool rx_in_progress = true;
+  // Handle delays
+  const auto now = millis();
+  const bool delay_expired = timestamp_passed(now, this->next_event_ms);
+  switch (this->comm_state) {
+    case CommState::DelayAck: // Waiting for turnaround time to send Ack
+      if (delay_expired) {
+        this->uart.write_byte(ACK);
+        this->comm_state = CommState::DelayIdle;
+        this->next_event_ms = now + DaikinSerial::next_tx_delay_period_ms;
+      }
+      return;
 
-  while (rx_in_progress && this->uart.available()) {
+    case CommState::DelayIdle:  // Waiting for cooldown before idle
+      if (delay_expired) {
+        this->disable_loop();
+        this->get_parent()->handle_serial_idle();
+      }
+      return;
+
+    default:  // Rx Timeouts
+      if (delay_expired) {
+        this->comm_state = CommState::DelayIdle;
+        this->next_event_ms = now + DaikinSerial::rx_timout_period_ms; // 2x rx_timout_period_ms in total before retry
+        this->get_parent()->handle_serial_result(Result::Timeout);
+        return;
+      }
+      break;  // still have time to receive bytes below
+  }
+
+  // Otherwise, we're trying the receive data from the unit
+  uint8_t rx_bytes = 0;
+  while (this->uart.available()) {
     uint8_t byte;
     this->uart.read_byte(&byte);
     rx_bytes++;
+    this->next_event_ms = now + DaikinSerial::rx_timout_period_ms;  // received a byte, reset the character timeout
 
     // handle the byte
     switch (this->comm_state) {
@@ -43,24 +72,25 @@ void DaikinSerial::loop() {
             if (this->comm_state == CommState::QueryAck) {
               this->comm_state = CommState::QueryStx; // query results text to follow
             } else {
-              this->set_busy_timeout(DaikinSerial::next_tx_delay_period_ms);
+              this->comm_state = CommState::DelayIdle;
+              this->next_event_ms = now + DaikinSerial::next_tx_delay_period_ms;
               this->get_parent()->handle_serial_result(Result::Ack);
-              rx_in_progress = false;
+              return;
             }
             break;
 
           case NAK:
-            this->set_busy_timeout(DaikinSerial::next_tx_delay_period_ms);
+            this->comm_state = CommState::DelayIdle;
+            this->next_event_ms = now + DaikinSerial::next_tx_delay_period_ms;
             this->get_parent()->handle_serial_result(Result::Nak);
-            rx_in_progress = false;
-            break;
+            return;
 
           default:
             ESP_LOGW(TAG, "Rx ACK: Unexpected 0x%02" PRIX8, byte);
-            this->set_busy_timeout(DaikinSerial::error_delay_period_ms);
+            this->comm_state = CommState::DelayIdle;
+            this->next_event_ms = now + DaikinSerial::error_delay_period_ms;
             this->get_parent()->handle_serial_result(Result::Error);
-            rx_in_progress = false;
-            break;
+            return;
         }
         break;
 
@@ -76,9 +106,10 @@ void DaikinSerial::loop() {
 
           default:
             ESP_LOGW(TAG, "Rx STX: Unexpected 0x%02" PRIX8, byte);
-            this->set_busy_timeout(DaikinSerial::error_delay_period_ms);
+            this->comm_state = CommState::DelayIdle;
+            this->next_event_ms = now + DaikinSerial::error_delay_period_ms;
             this->get_parent()->handle_serial_result(Result::Error);
-            rx_in_progress = false;
+            return;
         }
         break;
 
@@ -90,15 +121,24 @@ void DaikinSerial::loop() {
               this->response.pop_back();
               const uint8_t calc_checksum = std::reduce(this->response.begin(), this->response.end(), 0U);
               if ((calc_checksum == checksum) || ((calc_checksum == STX) && (checksum == ENQ))) {  // protocol avoids STX in message body
-                this->set_ack_timeout(rx_bytes);
+                // Reduce the delay period by the number of character times waiting for the scheduler
+                // to call loop() since the final ETX was received. This is very minor.
+                auto delay_period_ms = DaikinSerial::ack_delay_period_ms;
+                constexpr uint32_t char_time = 1000 / (2400 / (1+8+2+1));
+                const int max_bytes_per_loop = App.get_loop_interval() / char_time;
+                delay_period_ms -= std::max(max_bytes_per_loop - rx_bytes, 0) * char_time;
+
+                this->comm_state = CommState::DelayAck;
+                this->next_event_ms = now + delay_period_ms;
                 this->get_parent()->handle_serial_result(Result::Ack, this->response);
-                rx_in_progress = false;
+                return;
               } else {
                 ESP_LOGW(TAG, "Rx ETX: Checksum mismatch: 0x%02" PRIX8 " != 0x%02" PRIX8 " (calc from %s)",
-                  checksum, calc_checksum, hex_repr(this->response).c_str());
-                this->set_busy_timeout(DaikinSerial::error_delay_period_ms);
+                    checksum, calc_checksum, hex_repr(this->response).c_str());
+                this->comm_state = CommState::DelayIdle;
+                this->next_event_ms = now + DaikinSerial::error_delay_period_ms;
                 this->get_parent()->handle_serial_result(Result::Error);
-                rx_in_progress = false;
+                return;
               }
             }
             break;
@@ -107,34 +147,31 @@ void DaikinSerial::loop() {
             this->response.push_back(byte);
             if (this->response.size() > MAX_RESPONSE_SIZE) {
               ESP_LOGW(TAG, "Rx ETX: Overflow %s %s + 0x%02" PRIX8,
-                str_repr(this->response).c_str(), hex_repr(this->response).c_str(), byte);
-              this->set_busy_timeout(DaikinSerial::error_delay_period_ms);
+                  str_repr(this->response).c_str(), hex_repr(this->response).c_str(), byte);
+              this->comm_state = CommState::DelayIdle;
+              this->next_event_ms = now + DaikinSerial::error_delay_period_ms;
               this->get_parent()->handle_serial_result(Result::Error);
-              rx_in_progress = false;
+              return;
             }
             break;
         }
         break;
 
       default:
-        rx_in_progress = false;
-        break;
+        return;
     }
-  }
-
-  // if we received some bytes but still need more, reset the character timeout
-  if (rx_in_progress && (rx_bytes != 0)) {
-    this->set_rx_timeout();
   }
 }
 
 void DaikinSerial::send_frame(const std::string_view cmd, const std::span<const uint8_t> payload /*= {}*/) {
   if (cmd.size() > MAX_COMMAND_SIZE) {
     ESP_LOGE(TAG, "Tx: Command '%" PRI_SV "' too large", PRI_SV_ARGS(cmd));
+    // Prevent spam by starting the state machine anyways to delay
+    // this is called from DaikinS21 context when idle, trigger it again after a cooldown
+    this->comm_state = CommState::DelayIdle;
+    this->next_event_ms = millis() + DaikinSerial::error_delay_period_ms;
+    this->enable_loop_soon_any_context();
     this->get_parent()->handle_serial_result(Result::Error);
-    // prevent spam by marking the component as busy
-    // called from DaikinS21 context when idle, trigger it again after a cooldown without touching DaikinSerial's loop state
-    this->set_timeout(DaikinSerial::timer_name, DaikinSerial::error_delay_period_ms, [this](){ this->get_parent()->handle_serial_idle(); });
     return;
   }
 
@@ -172,44 +209,8 @@ void DaikinSerial::send_frame(const std::string_view cmd, const std::span<const 
 
   // wait for result
   this->comm_state = payload.empty() ? CommState::QueryAck : CommState::CommandAck;
-  this->set_rx_timeout();
+  this->next_event_ms = millis() + DaikinSerial::rx_timout_period_ms;
   this->enable_loop_soon_any_context();
-}
-
-void DaikinSerial::set_ack_timeout(const int bytes_received) {
-  // Reduce the delay period by the number of character times waiting for the scheduler
-  // to call loop() since the final ETX was received. This is very minor.
-  auto delay_period_ms = DaikinSerial::ack_delay_period_ms;
-  constexpr uint32_t char_time = 1000 / (2400 / (1+8+2+1));
-  const int max_bytes_per_loop = App.get_loop_interval() / char_time;
-  delay_period_ms -= std::max(max_bytes_per_loop - bytes_received, 0) * char_time;
-
-  this->disable_loop();
-  this->set_timeout(DaikinSerial::timer_name, delay_period_ms, [this](){ this->ack_timeout_handler(); });
-}
-
-void DaikinSerial::ack_timeout_handler() {
-  this->uart.write_byte(ACK);
-  this->set_timeout(DaikinSerial::timer_name, DaikinSerial::next_tx_delay_period_ms, [this](){ this->busy_timeout_handler(); });
-}
-
-void DaikinSerial::set_busy_timeout(const uint32_t delay_ms) {
-  this->disable_loop();
-  this->set_timeout(DaikinSerial::timer_name, delay_ms, [this](){ this->busy_timeout_handler(); });
-}
-
-void DaikinSerial::busy_timeout_handler() {
-  this->get_parent()->handle_serial_idle();
-}
-
-void DaikinSerial::set_rx_timeout() {
-  this->set_timeout(DaikinSerial::timer_name, DaikinSerial::rx_timout_period_ms, [this](){ this->rx_timeout_handler(); });
-}
-
-void DaikinSerial::rx_timeout_handler() {
-  this->disable_loop();
-  this->get_parent()->handle_serial_result(Result::Timeout);
-  this->set_busy_timeout(DaikinSerial::rx_timout_period_ms);  // 2x rx_timout_period_ms in total before retry
 }
 
 } // namespace esphome::daikin_s21
