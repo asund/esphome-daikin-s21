@@ -116,7 +116,7 @@ void DaikinS21Climate::loop() {
             this->commanded.setpoint.f_degc(), reported.setpoint.f_degc());
         this->target_temperature = reported.setpoint.f_degc();
         update_unit_setpoint = true;
-      } else if (this->check_setpoint) {
+      } else if (this->is_free_run() || this->check_setpoint) {
         // Periodic adjustment of the Daikin setpoint to reflect changes
         // to the component's reference temperature.
         this->check_setpoint = false;
