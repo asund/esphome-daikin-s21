@@ -34,7 +34,7 @@ class DaikinC10 {
   constexpr DaikinC10() = default;
 
   template <typename T, typename std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
-  constexpr DaikinC10(const T valf) : value(std::isnan(valf) ? nan_sentinel : ((static_cast<int16_t>(valf * 10 * 2) + 1) / 2)) {} // round to nearest 0.1C
+  constexpr DaikinC10(const T valf) : value(std::isfinite(valf) ? ((static_cast<int16_t>(valf * 10 * 2) + 1) / 2) : nan_sentinel) {} // round to nearest 0.1C
 
   template <typename T, typename std::enable_if_t<std::is_integral_v<T>, bool> = true>
   constexpr DaikinC10(const T vali) : value(vali) {}

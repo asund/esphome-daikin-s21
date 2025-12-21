@@ -102,7 +102,7 @@ void DaikinS21Climate::loop() {
       // the user's desired temperature. This is distinct from the HVAC unit's
       // setpoint because we may be using an external sensor. So we only update
       // the target temperature here if it appears uninitialized.
-      if (std::isnan(this->target_temperature)) {
+      if (std::isfinite(this->target_temperature) == false) {
         // Use stored setpoint for mode, or fall back to use s21's setpoint.
         const auto setpoint = this->load_setpoint();
         this->target_temperature = ((setpoint != TEMPERATURE_INVALID) ? setpoint : reported.setpoint).f_degc();
