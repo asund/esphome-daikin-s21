@@ -35,6 +35,7 @@ class DaikinS21Climate : public climate::Climate,
   climate::ClimateTraits traits_{};
   climate::ClimateTraits traits() override { return traits_; };
 
+  bool is_free_run() const { return this->get_update_interval() == 0; }
   void set_custom_fan_mode(DaikinFanMode mode);
   bool temperature_sensor_unit_is_valid();
   bool use_temperature_sensor();

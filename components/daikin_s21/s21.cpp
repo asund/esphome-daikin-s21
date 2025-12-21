@@ -721,7 +721,11 @@ void DaikinS21::handle_serial_idle() {
     this->pending.activate_climate = false;
     payload[0] = (this->pending.climate.mode == climate::CLIMATE_MODE_OFF) ? '0' : '1'; // power
     payload[1] = climate_mode_to_daikin(this->pending.climate.mode);
-    payload[2] = (static_cast<int16_t>(this->pending.climate.setpoint) / 5) + 28;
+    if (this->pending.climate.setpoint == TEMPERATURE_INVALID) {
+      payload[2] = 0x80;
+    } else {
+      payload[2] = (static_cast<int16_t>(this->pending.climate.setpoint) / 5) + 28;
+    }
     payload[3] = static_cast<char>(this->pending.climate.fan);
     this->send_command(StateCommand::PowerModeTempFan, payload);
     return;
@@ -816,7 +820,11 @@ void DaikinS21::handle_state_basic(const std::span<const uint8_t> payload) {
     this->current.climate.mode = daikin_to_climate_mode(payload[1]);
     this->current.action_reported = daikin_to_climate_action(payload[1]);
   }
-  this->current.climate.setpoint = (payload[2] - 28) * 5;  // Celsius * 10
+  if (payload[2] == 0x80) {
+    this->current.climate.setpoint = TEMPERATURE_INVALID;
+  } else {
+    this->current.climate.setpoint = (payload[2] - 28) * 5;  // Celsius * 10
+  }
   // silent fan mode not reported here so prefer RG if present
   if (this->support.fan_mode_query == false) {
     this->current.climate.fan = static_cast<daikin_s21::DaikinFanMode>(payload[3]);
