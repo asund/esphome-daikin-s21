@@ -30,13 +30,10 @@ class DaikinS21Climate : public climate::Climate,
   void set_min_heat_temperature(DaikinC10 temperature) { this->min_heat_temperature = temperature; };
 
  protected:
-  static constexpr uint32_t state_publication_timeout_ms{8 * 1000}; // experimentally determined with fudge factor
-
   climate::ClimateTraits traits_{};
   climate::ClimateTraits traits() override { return traits_; };
 
   bool is_free_run() const { return this->get_update_interval() == 0; }
-  void set_custom_fan_mode(DaikinFanMode mode);
   bool temperature_sensor_unit_is_valid();
   bool use_temperature_sensor();
   DaikinC10 temperature_sensor_degc();
@@ -47,15 +44,13 @@ class DaikinS21Climate : public climate::Climate,
   float get_current_humidity() const;
   void set_s21_climate();
 
-  DaikinClimateSettings commanded{};
   sensor::Sensor *temperature_sensor_{};
   sensor::Sensor *humidity_sensor_{};
+  DaikinC10 unit_setpoint{};
   DaikinC10 max_cool_temperature{};
   DaikinC10 min_cool_temperature{};
   DaikinC10 max_heat_temperature{};
   DaikinC10 min_heat_temperature{};
-  uint32_t next_publish_ms{};
-  bool check_publish{true}; // capture startup state
   bool check_setpoint{};
   ESPPreferenceObject auto_setpoint_pref;
   ESPPreferenceObject cool_setpoint_pref;

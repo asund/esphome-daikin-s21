@@ -14,7 +14,6 @@ class DaikinS21SwitchMode : public switch_::Switch,
   void write_state(bool state) override;
  public:
   DaikinS21SwitchMode(const DaikinMode mode) : mode(mode) {}
-  uint32_t next_publish_ms{};
   DaikinMode mode{};
 };
 

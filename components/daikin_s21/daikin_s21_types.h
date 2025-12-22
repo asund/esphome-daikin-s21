@@ -59,6 +59,36 @@ inline constexpr DaikinC10 SETPOINT_STEP{1.0F}; // Daikin setpoint granularity
 inline constexpr DaikinC10 TEMPERATURE_STEP{0.5F}; // Daikin temperature sensor granularity
 inline constexpr DaikinC10 TEMPERATURE_INVALID{DaikinC10::nan_sentinel}; // NaN
 
+/**
+ * Command states.
+ *
+ * For values that can be commanded by the user, track the progress of applying the setting.
+ * Used to temporarily return the pending value to prevent logic and UI glitches.
+ */
+class CommandState {
+  static constexpr uint8_t active_value = std::numeric_limits<uint8_t>::min();
+  static constexpr uint8_t staged_value = std::numeric_limits<uint8_t>::max();
+  uint8_t raw{active_value};
+
+ public:
+  constexpr bool is_active() const { return this->raw == active_value; } // the active value is live
+  constexpr bool is_staged() const { return this->raw == staged_value; } // the pending value should be sent to the unit
+  constexpr bool is_confirm() const { return (this->is_active() == false) && (this->is_staged() == false); } // waiting for the value to appear on the unit
+  constexpr void set_staged() { this->raw = staged_value; }
+  constexpr void set_confirm_ms(const uint32_t cycle_interval_ms, const uint32_t timeout_ms = 1000) {
+    this->raw = std::clamp(static_cast<int>(timeout_ms / cycle_interval_ms) + 2, active_value + 1, staged_value - 1); // +2 for truncation and short first cycle
+  }
+  constexpr void check_confirm(const bool confirmed) {
+    if (this->is_confirm()) {
+      if (confirmed) {
+        this->raw = active_value;
+      } else {
+        this->raw--;
+      }
+    }
+  }
+};
+
 enum DaikinMode : uint8_t {
   ModePowerful,       // maximum output (20 minute timeout), mutaully exclusive with comfort/quiet/econo
   ModeComfort,        // fan angle depends on heating/cooling action
@@ -121,9 +151,8 @@ class DaikinSystemState {
 
 struct DaikinClimateSettings {
   climate::ClimateMode mode{climate::CLIMATE_MODE_OFF};
-  DaikinC10 setpoint{23};
-  climate::ClimateSwingMode swing{climate::CLIMATE_SWING_OFF};
   DaikinFanMode fan{DaikinFanMode::Auto};
+  DaikinC10 setpoint{23};
 
   constexpr bool operator==(const DaikinClimateSettings &other) const = default;
 };
