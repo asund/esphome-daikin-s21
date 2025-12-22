@@ -264,6 +264,17 @@ void DaikinS21::set_mode(const DaikinMode mode, const bool enable) {
 }
 
 /**
+ * Set the demand control percentage and trigger a write to the unit if it changed.
+ */
+void DaikinS21::set_demand_control(const uint8_t percent) {
+  if ((this->pending.demand_control != percent) || (this->current.demand_control != percent)) {
+    this->pending.demand_control = percent;
+    this->pending.activate_modes[ModeEcono] = true; // shares D7 with econo
+    this->trigger_cycle();
+  }
+}
+
+/**
  * Add debug query to the list, flagging them as such
  *
  * @note important to only call during setup phase so as not to invalidate the query iterator
@@ -396,6 +407,7 @@ void DaikinS21::ready_state_machine() {
     // Populate pending state caches with current values so change detection on future commands works
     this->pending.climate = this->current.climate;
     this->pending.modes = this->current.modes;
+    this->pending.demand_control = this->current.demand_control;
 
     // Schedule any user specified debug queries, done last so as to not duplicate automatically added queries
     for (auto &query : this->queries | std::views::filter(DaikinQuery::IsDebug)) {
@@ -649,7 +661,7 @@ void DaikinS21::check_ready_active_source() {
     }
     if (this->support.active_source == ActiveSource::Unsupported) {
       this->support.unit_system_state_queries = false;  // unit state is assumed to be supported, if it isn't then correct the record
-      this->current.active = true;  // always active, reported action will follow unit
+      this->active = true;  // always active, reported action will follow unit
     }
   }
   // check if complete and handle results if so
@@ -767,6 +779,7 @@ void DaikinS21::handle_serial_idle() {
       this->send_command(StateCommand::SpecialModes, payload);
       this->pending.activate_modes &= ~special_modes_mask;
     } else {
+      payload[0] = '0' + (100 - pending.demand_control);
       if (send_value[ModeEcono]) {
         payload[1] |= 0b00000010;
       }
@@ -790,19 +803,19 @@ void DaikinS21::handle_serial_idle() {
     this->ready_state_machine();
   } else {
     // resolve action
-    if (this->current.unit_state.defrost() && (this->current.action_reported == climate::CLIMATE_ACTION_HEATING)) {
-      this->current.action = climate::CLIMATE_ACTION_COOLING; // report cooling during defrost
-    } else if (this->current.active || (this->current.action_reported == climate::CLIMATE_ACTION_FAN)) {
-      this->current.action = this->current.action_reported; // trust the unit when active or in fan only
+    if (this->unit_state.defrost() && (this->action_reported == climate::CLIMATE_ACTION_HEATING)) {
+      this->action = climate::CLIMATE_ACTION_COOLING; // report cooling during defrost
+    } else if (this->active || (this->action_reported == climate::CLIMATE_ACTION_FAN)) {
+      this->action = this->action_reported; // trust the unit when active or in fan only
     } else {
-      this->current.action = climate::CLIMATE_ACTION_IDLE;
+      this->action = climate::CLIMATE_ACTION_IDLE;
     }
     // signal there's fresh data to consumers
     this->update_callbacks.call();
   }
 
-  if ((now - last_state_dump_ms) > (60 * 1000)) { // every minute
-    last_state_dump_ms = now;
+  if (timestamp_passed(now, this->next_state_dump_ms)) {
+    this->next_state_dump_ms = now + (60 * 1000); // every minute
     this->enable_loop_soon_any_context();  // dump state in foreground, blocks for too long here
   }
 
@@ -815,10 +828,10 @@ void DaikinS21::handle_serial_idle() {
 void DaikinS21::handle_state_basic(const std::span<const uint8_t> payload) {
   if (payload[0] == '0') {
     this->current.climate.mode = climate::CLIMATE_MODE_OFF;
-    this->current.action_reported = climate::CLIMATE_ACTION_OFF;
+    this->action_reported = climate::CLIMATE_ACTION_OFF;
   } else {
     this->current.climate.mode = daikin_to_climate_mode(payload[1]);
-    this->current.action_reported = daikin_to_climate_action(payload[1]);
+    this->action_reported = daikin_to_climate_action(payload[1]);
   }
   if (payload[2] == 0x80) {
     this->current.climate.setpoint = TEMPERATURE_INVALID;
@@ -832,7 +845,7 @@ void DaikinS21::handle_state_basic(const std::span<const uint8_t> payload) {
 }
 
 void DaikinS21::handle_state_error_status(const std::span<const uint8_t> payload) {
-  this->current.serial_error = (payload[2] & 0b00010000);
+  this->serial_error = (payload[2] & 0b00010000);
 }
 
 void DaikinS21::handle_state_swing_or_humidity(const std::span<const uint8_t> payload) {
@@ -849,6 +862,7 @@ void DaikinS21::handle_state_special_modes(const std::span<const uint8_t> payloa
 }
 
 void DaikinS21::handle_state_demand_and_econo(const std::span<const uint8_t> payload) {
+  this->current.demand_control = 100 - (payload[0] - '0');
   this->current.modes[ModeEcono] =        (payload[1] == '2');
 }
 
@@ -870,15 +884,15 @@ void DaikinS21::handle_state_model_code_v2(const std::span<const uint8_t> payloa
 }
 
 void DaikinS21::handle_state_ir_counter(const std::span<const uint8_t> payload) {
-  this->current.ir_counter = bytes_to_num(payload); // format unknown
+  this->ir_counter = bytes_to_num(payload); // format unknown
 }
 
 void DaikinS21::handle_state_power_consumption(const std::span<const uint8_t> payload) {
-  this->current.power_consumption = bytes_to_num(payload, 16);
+  this->power_consumption = bytes_to_num(payload, 16);
 }
 
 void DaikinS21::handle_state_outdoor_capacity(const std::span<const uint8_t> payload) {
-  this->current.outdoor_capacity = bytes_to_num(payload);
+  this->outdoor_capacity = bytes_to_num(payload);
 }
 
 /** Vastly inferior to StateQuery::Basic */
@@ -890,10 +904,10 @@ void DaikinS21::handle_env_power_on_off(const std::span<const uint8_t> payload) 
 void DaikinS21::handle_env_indoor_unit_mode(const std::span<const uint8_t> payload) {
   if (payload[0] == '0') {
     this->current.climate.mode = climate::CLIMATE_MODE_OFF;
-    this->current.action_reported = climate::CLIMATE_ACTION_OFF;
+    this->action_reported = climate::CLIMATE_ACTION_OFF;
   } else {
     this->current.climate.mode = daikin_to_climate_mode(payload[1]);
-    this->current.action_reported = daikin_to_climate_action(payload[1]);
+    this->action_reported = daikin_to_climate_action(payload[1]);
   }
 }
 
@@ -925,7 +939,7 @@ void DaikinS21::handle_env_fan_speed_setpoint(const std::span<const uint8_t> pay
 }
 
 void DaikinS21::handle_env_fan_speed(const std::span<const uint8_t> payload) {
-  this->current.fan_rpm = bytes_to_num(payload) * 10;
+  this->fan_rpm = bytes_to_num(payload) * 10;
 }
 
 void DaikinS21::handle_env_vertical_swing_angle_setpoint(const std::span<const uint8_t> payload) {
@@ -933,7 +947,7 @@ void DaikinS21::handle_env_vertical_swing_angle_setpoint(const std::span<const u
 }
 
 void DaikinS21::handle_env_vertical_swing_angle(const std::span<const uint8_t> payload) {
-  this->current.swing_vertical_angle = bytes_to_num(payload);
+  this->swing_vertical_angle = bytes_to_num(payload);
 }
 
 void DaikinS21::handle_env_target_temperature(const std::span<const uint8_t> payload) {
@@ -945,7 +959,7 @@ void DaikinS21::handle_env_outside_temperature(const std::span<const uint8_t> pa
 }
 
 void DaikinS21::handle_env_indoor_frequency_command_signal(const std::span<const uint8_t> payload) {
-  this->demand = bytes_to_num(payload);  // Demand, 0-15
+  this->demand_pull = bytes_to_num(payload);  // Demand, 0-15
 }
 
 void DaikinS21::handle_env_compressor_frequency(const std::span<const uint8_t> payload) {
@@ -960,21 +974,21 @@ void DaikinS21::handle_env_indoor_humidity(const std::span<const uint8_t> payloa
 }
 
 void DaikinS21::handle_env_compressor_on_off(const std::span<const uint8_t> payload) {
-  this->current.active = (payload[0] == '1'); // highest precedence, if this query is working there's no need to check active_source
+  this->active = (payload[0] == '1'); // highest precedence, if this query is working there's no need to check active_source
 }
 
 void DaikinS21::handle_env_unit_state(const std::span<const uint8_t> payload) {
-  this->current.unit_state = bytes_to_num(payload, 16);
+  this->unit_state = bytes_to_num(payload, 16);
   if (this->support.active_source == ActiveSource::UnitState) {
-    this->current.active = this->current.unit_state.active(); // used to refine climate action
+    this->active = this->unit_state.active(); // used to refine climate action
   }
   if (this->support.powerful_source == PowerfulSource::UnitState) {
-    this->current.modes[ModePowerful] = this->current.unit_state.powerful();  // if G6 is unsupported we can still read out powerful set by remote
+    this->current.modes[ModePowerful] = this->unit_state.powerful();  // if G6 is unsupported we can still read out powerful set by remote
   }
 }
 
 void DaikinS21::handle_env_system_state(const std::span<const uint8_t> payload) {
-  this->current.system_state = bytes_to_num(payload, 16);
+  this->system_state = bytes_to_num(payload, 16);
 }
 
 void DaikinS21::handle_misc_model_v0(const std::span<const uint8_t> payload) {
@@ -1145,11 +1159,11 @@ void DaikinS21::dump_state() {
   ESP_LOGD(TAG, "Mode: %s  Action: %s  Demand: %" PRIu8,
       LOG_STR_ARG(climate::climate_mode_to_string(this->current.climate.mode)),
       LOG_STR_ARG(climate::climate_action_to_string(this->get_climate_action())),
-      this->get_demand());
+      this->get_demand_pull());
   if (this->support.fan || this->support.swing) {
     ESP_LOGD(TAG, "Fan: %s (%" PRIu16 " RPM)  Swing: %s",
         LOG_STR_ARG(daikin_fan_mode_to_cstr(this->current.climate.fan)),
-        this->current.fan_rpm,
+        this->fan_rpm,
         this->support.swing ? LOG_STR_ARG(climate::climate_swing_mode_to_string(this->current.climate.swing)) : "N/A");
   }
   ESP_LOGD(TAG, "Setpoint: %.1fC  Target: %.1fC  Inside: %.1fC  Coil: %.1fC",
@@ -1162,8 +1176,8 @@ void DaikinS21::dump_state() {
   }
   ESP_LOGD(TAG, "Cycle Time: %" PRIu32 "ms  UnitState: %" PRIX8 "  SysState: %02" PRIX8,
       this->cycle_time_ms,
-      this->current.unit_state.raw,
-      this->current.system_state.raw);
+      this->unit_state.raw,
+      this->system_state.raw);
   if (this->debug) {
     const auto comma_join = [](auto&& queries) {
       std::string str;
