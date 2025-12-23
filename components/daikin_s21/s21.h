@@ -69,7 +69,7 @@ class DaikinS21 : public PollingComponent {
   auto get_climate_action() const { return this->action; }
   auto get_swing_mode() const { return this->pending.swing_mode_state.is_active() ? this->current.swing_mode : this->pending.swing_mode; }
   auto get_temp_setpoint() const { return this->current.climate.setpoint; }
-  auto get_demand_control() const { return this->pending.mode_states[ModeEcono].is_active() ? this->current.demand_control : this->pending.demand_control; }
+  auto get_demand_control() const { return this->pending.demand_econo_state.is_active() ? this->current.demand_econo.demand : this->pending.demand_econo.demand; }
   auto get_temp_inside() const { return this->temp_inside; }
   auto get_temp_target() const { return this->temp_target; }
   auto get_temp_outside() const { return this->temp_outside; }
@@ -177,8 +177,8 @@ class DaikinS21 : public PollingComponent {
   struct {
     DaikinClimateSettings climate{};
     climate::ClimateSwingMode swing_mode{climate::CLIMATE_SWING_OFF};
-    ModeBitset modes{};
-    uint8_t demand_control{100};
+    DaikinSpecialModes special_modes{};
+    DaikinDemandEcono demand_econo{};
     uint16_t fan_rpm_setpoint{};
     int16_t swing_vertical_angle_setpoint{};
   } current{};
@@ -188,9 +188,10 @@ class DaikinS21 : public PollingComponent {
     CommandState climate_state{};
     climate::ClimateSwingMode swing_mode{};
     CommandState swing_mode_state{};
-    ModeBitset modes{};
-    uint8_t demand_control{};
-    std::array<CommandState, DaikinModeCount> mode_states{};
+    DaikinSpecialModes special_modes{};
+    std::array<CommandState, DaikinSpecialModesCount> special_mode_states{};
+    DaikinDemandEcono demand_econo{};
+    CommandState demand_econo_state{};
   } pending{};
 
   // current values

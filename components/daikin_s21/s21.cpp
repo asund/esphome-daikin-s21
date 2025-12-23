@@ -254,13 +254,17 @@ void DaikinS21::set_swing_mode(const climate::ClimateSwingMode swing) {
  * Set the enable value of the specified mode and trigger a write to the unit if it changed.
  */
 void DaikinS21::set_mode(const DaikinMode mode, const bool enable) {
-  if (mode < DaikinModeCount) {
-    if ((this->current.modes[mode] != enable) || (this->pending.modes[mode] != enable)) {
-      this->pending.modes[mode] = enable;
-      if (mode == ModeEcono) {
-        this->pending.demand_control = this->get_demand_control();  // shares D7 with demand control
-      }
-      this->pending.mode_states[mode].set_staged();
+  if (mode < DaikinSpecialModesCount) {
+    if ((this->current.special_modes[mode] != enable) || (this->pending.special_modes[mode] != enable)) {
+      this->pending.special_modes[mode] = enable;
+      this->pending.special_mode_states[mode].set_staged();
+      this->trigger_cycle();
+    }
+  } else if (mode == ModeEcono) {
+    if ((this->current.demand_econo.econo != enable) || (this->pending.demand_econo.econo != enable)) {
+      this->pending.demand_econo.econo = enable;
+      this->pending.demand_econo.demand = this->get_demand_control();  // shares D7 with demand control
+      this->pending.demand_econo_state.set_staged();
       this->trigger_cycle();
     }
   }
@@ -270,10 +274,10 @@ void DaikinS21::set_mode(const DaikinMode mode, const bool enable) {
  * Set the demand control percentage and trigger a write to the unit if it changed.
  */
 void DaikinS21::set_demand_control(const uint8_t percent) {
-  if ((this->current.demand_control != percent) || (this->pending.demand_control != percent)) {
-    this->pending.demand_control = percent;
-    this->pending.modes[ModeEcono] = this->get_mode(ModeEcono); // shares D7 with econo
-    this->pending.mode_states[ModeEcono].set_staged();
+  if ((this->current.demand_econo.demand != percent) || (this->pending.demand_econo.demand != percent)) {
+    this->pending.demand_econo.econo = this->get_mode(ModeEcono); // shares D7 with econo
+    this->pending.demand_econo.demand = percent;
+    this->pending.demand_econo_state.set_staged();
     this->trigger_cycle();
   }
 }
@@ -297,8 +301,10 @@ void DaikinS21::add_debug_query(std::string_view query_str) {
  * Get the enable value of the specified mode
  */
 bool DaikinS21::get_mode(const DaikinMode mode) const {
-  if (mode < DaikinModeCount) {
-    return this->pending.mode_states[mode].is_active() ? this->current.modes[mode] : this->pending.modes[mode];
+  if (mode < DaikinSpecialModesCount) {
+    return this->pending.special_mode_states[mode].is_active() ? this->current.special_modes[mode] : this->pending.special_modes[mode];
+  } else if (mode == ModeEcono) {
+    return this->pending.demand_econo_state.is_active() ? this->current.demand_econo.econo : this->pending.demand_econo.econo;
   }
   return false;
 }
@@ -411,8 +417,8 @@ void DaikinS21::ready_state_machine() {
     // Populate pending state caches with current values so change detection on future commands works
     this->pending.climate = this->current.climate;
     this->pending.swing_mode = this->current.swing_mode;
-    this->pending.modes = this->current.modes;
-    this->pending.demand_control = this->current.demand_control;
+    this->pending.special_modes = this->current.special_modes;
+    this->pending.demand_econo = this->current.demand_econo;
 
     // Schedule any user specified debug queries, done last so as to not duplicate automatically added queries
     for (auto &query : this->queries | std::views::filter(DaikinQuery::IsDebug)) {
@@ -758,45 +764,45 @@ void DaikinS21::handle_serial_idle() {
     return;
   }
 
-  if (std::ranges::any_of(this->pending.mode_states, [](const auto& state){ return state.is_staged(); })) {
-    static const auto special_modes_mask = ModeBitset().set().reset(ModeEcono);
-    ModeBitset send_modes{};
-    for (int i = 0; i < DaikinModeCount; i++) {
-      send_modes[i] = (this->pending.mode_states[i].is_staged());
+  if (std::ranges::any_of(this->pending.special_mode_states, [](const auto& state){ return state.is_staged(); })) {
+    DaikinSpecialModes send_modes{};
+    for (int i = 0; i < send_modes.size(); i++) {
+      send_modes[i] = (this->pending.special_mode_states[i].is_staged());
     }
-    if ((send_modes & special_modes_mask).any()) {
-      if (this->get_mode(ModePowerful)) {
-        payload[0] |= 0b00000010;
-      }
-      if (this->get_mode(ModeComfort)) {
-        payload[0] |= 0b01000000;
-      }
-      if (this->get_mode(ModeQuiet)) {
-        payload[0] |= 0b10000000;
-      }
-      if (this->get_mode(ModeStreamer)) {
-        payload[1] |= 0b10000000;
-      }
-      if (this->get_mode(ModeSensorLED)) {
-        payload[3] |= 0b00000100;
-      }
-      if (this->get_mode(ModeMotionSensor)) {
-        payload[3] |= 0b00001000;
-      }
-      this->send_command(StateCommand::SpecialModes, payload);
-      for (int i = 0; i < DaikinModeCount; i++) {
-        if (special_modes_mask[i] && (this->pending.mode_states[i].is_staged())) {
-          this->pending.mode_states[i].set_confirm_ms(cycle_interval);
-        }
-      }
-    } else {
-      payload[0] += 100 - this->get_demand_control();
-      if (this->get_mode(ModeEcono)) {
-        payload[1] |= 0b00000010;
-      }
-      this->send_command(StateCommand::DemandAndEcono, payload);
-      this->pending.mode_states[ModeEcono].set_confirm_ms(cycle_interval);
+    if (this->get_mode(ModePowerful)) {
+      payload[0] |= 0b00000010;
     }
+    if (this->get_mode(ModeComfort)) {
+      payload[0] |= 0b01000000;
+    }
+    if (this->get_mode(ModeQuiet)) {
+      payload[0] |= 0b10000000;
+    }
+    if (this->get_mode(ModeStreamer)) {
+      payload[1] |= 0b10000000;
+    }
+    if (this->get_mode(ModeSensorLED)) {
+      payload[3] |= 0b00000100;
+    }
+    if (this->get_mode(ModeMotionSensor)) {
+      payload[3] |= 0b00001000;
+    }
+    this->send_command(StateCommand::SpecialModes, payload);
+    for (int i = 0; i < send_modes.size(); i++) {
+      if (send_modes[i]) {
+        this->pending.special_mode_states[i].set_confirm_ms(cycle_interval);
+      }
+    }
+    return;
+  }
+
+  if (this->pending.demand_econo_state.is_staged()) {
+    payload[0] += 100 - this->pending.demand_econo.demand;
+    if (this->pending.demand_econo.econo) {
+      payload[1] |= 0b00000010;
+    }
+    this->send_command(StateCommand::DemandAndEcono, payload);
+    this->pending.demand_econo_state.set_confirm_ms(cycle_interval);
     return;
   }
 
@@ -825,13 +831,10 @@ void DaikinS21::handle_serial_idle() {
     // resolve pending commands
     this->pending.climate_state.check_confirm(this->pending.climate == this->current.climate);
     this->pending.swing_mode_state.check_confirm(this->pending.swing_mode == this->current.swing_mode);
-    for (int i = 0; i < DaikinModeCount; i++) {
-      bool confirmed = (this->pending.modes[i] == this->current.modes[i]);
-      if (i == ModeEcono) {
-        confirmed = confirmed && this->pending.demand_control == this->current.demand_control;
-      }
-      this->pending.mode_states[i].check_confirm(confirmed);
+    for (int i = 0; i < this->pending.special_mode_states.size(); i++) {
+      this->pending.special_mode_states[i].check_confirm(this->pending.special_modes[i] == this->current.special_modes[i]);
     }
+    this->pending.demand_econo_state.check_confirm(this->pending.demand_econo == this->current.demand_econo);
 
     // signal there's fresh data to consumers
     this->update_callbacks.call();
@@ -876,17 +879,17 @@ void DaikinS21::handle_state_swing_or_humidity(const std::span<const uint8_t> pa
 }
 
 void DaikinS21::handle_state_special_modes(const std::span<const uint8_t> payload) {
-  this->current.modes[ModePowerful] =     (payload[0] & 0b00000010);  // highest precedence, if this query is working there's no need to check powerful_source
-  this->current.modes[ModeComfort] =      (payload[0] & 0b01000000);
-  this->current.modes[ModeQuiet] =        (payload[0] & 0b10000000);
-  this->current.modes[ModeStreamer] =     (payload[1] & 0b10000000);
-  this->current.modes[ModeSensorLED] =    (payload[3] & 0b00000100);
-  this->current.modes[ModeMotionSensor] = (payload[3] & 0b00001000);
+  this->current.special_modes[ModePowerful] =     (payload[0] & 0b00000010);  // highest precedence, if this query is working there's no need to check powerful_source
+  this->current.special_modes[ModeComfort] =      (payload[0] & 0b01000000);
+  this->current.special_modes[ModeQuiet] =        (payload[0] & 0b10000000);
+  this->current.special_modes[ModeStreamer] =     (payload[1] & 0b10000000);
+  this->current.special_modes[ModeSensorLED] =    (payload[3] & 0b00000100);
+  this->current.special_modes[ModeMotionSensor] = (payload[3] & 0b00001000);
 }
 
 void DaikinS21::handle_state_demand_and_econo(const std::span<const uint8_t> payload) {
-  this->current.demand_control = 100 - (payload[0] - '0');
-  this->current.modes[ModeEcono] =        (payload[1] == '2');
+  this->current.demand_econo.demand = 100 - (payload[0] - '0');
+  this->current.demand_econo.econo = (payload[1] == '2');
 }
 
 /** Coarser than EnvironmentQuery::InsideTemperature and EnvironmentQuery::OutsideTemperature. Added if those queries fail. */
@@ -1006,7 +1009,7 @@ void DaikinS21::handle_env_unit_state(const std::span<const uint8_t> payload) {
     this->active = this->unit_state.active(); // used to refine climate action
   }
   if (this->support.powerful_source == PowerfulSource::UnitState) {
-    this->current.modes[ModePowerful] = this->unit_state.powerful();  // if G6 is unsupported we can still read out powerful set by remote
+    this->current.special_modes[ModePowerful] = this->unit_state.powerful();  // if G6 is unsupported we can still read out powerful set by remote
   }
 }
 
@@ -1117,7 +1120,8 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
     // something went terribly wrong, try to reinitialize communications
     this->pending.climate_state = {};
     this->pending.swing_mode_state = {};
-    std::ranges::fill(this->pending.mode_states, CommandState());
+    std::ranges::fill(this->pending.special_mode_states, CommandState());
+    this->pending.demand_econo_state = {};
     this->current_command = {};
     this->start_cycle();
   } else {

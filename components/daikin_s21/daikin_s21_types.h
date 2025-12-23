@@ -90,18 +90,25 @@ class CommandState {
 };
 
 enum DaikinMode : uint8_t {
-  ModePowerful,       // maximum output (20 minute timeout), mutaully exclusive with comfort/quiet/econo
-  ModeComfort,        // fan angle depends on heating/cooling action
-  ModeQuiet,          // outdoor unit fan/compressor limit
-  ModeStreamer,       // electron emitter decontamination
-  ModeSensorLED,      // motion sensor LED control
-  ModeMotionSensor,   // "intelligent eye" PIR occupancy setpoint offset
-  ModeEcono,          // limits demand for power consumption
-  // just for bitset sizing
-  DaikinModeCount,
+  ModePowerful,     // maximum output (20 minute timeout), mutaully exclusive with comfort/quiet/econo
+  ModeComfort,      // fan angle depends on heating/cooling action
+  ModeQuiet,        // outdoor unit fan/compressor limit
+  ModeStreamer,     // electron emitter decontamination
+  ModeSensorLED,    // motion sensor LED control
+  ModeMotionSensor, // "intelligent eye" PIR occupancy setpoint offset
+  ModeEcono,        // limits demand for power consumption
+  DaikinModeCount,  // for mode array sizing
 };
 
-using ModeBitset = std::bitset<DaikinModeCount>;
+inline constexpr auto DaikinSpecialModesCount = ModeMotionSensor + 1;
+using DaikinSpecialModes = std::bitset<DaikinSpecialModesCount>;
+
+struct DaikinDemandEcono {
+  uint8_t demand{100};
+  bool econo{};
+
+  constexpr bool operator==(const DaikinDemandEcono &other) const = default;
+};
 
 /**
  * Possible sources of active flag.
