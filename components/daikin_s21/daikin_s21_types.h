@@ -115,6 +115,7 @@ enum DaikinMode : uint8_t {
 };
 
 inline constexpr auto DaikinSpecialModesCount = ModeMotionSensor + 1;
+using DaikinSpecialModes = std::bitset<DaikinSpecialModesCount>;
 
 struct DaikinDemandEcono {
   uint8_t demand{100};

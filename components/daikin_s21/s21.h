@@ -174,7 +174,7 @@ class DaikinS21 : public PollingComponent {
   // settings
   CommandState<DaikinClimateSettings> climate{};
   CommandState<climate::ClimateSwingMode> swing_mode{};
-  std::array<CommandState<bool>, DaikinSpecialModesCount> special_modes{};
+  CommandState<DaikinSpecialModes> special_modes{};
   CommandState<DaikinDemandEcono> demand_econo{};
 
   // current values
@@ -185,12 +185,12 @@ class DaikinS21 : public PollingComponent {
   uint16_t fan_rpm_setpoint{};  // not supported
   uint16_t fan_rpm{};
   uint16_t compressor_rpm{};
-  uint8_t humidity{50};
-  uint8_t demand_pull{};
   int16_t swing_vertical_angle_setpoint{};  // not supported
   int16_t swing_vertical_angle{};
   uint16_t ir_counter{};
   uint16_t power_consumption{};
+  uint8_t humidity{50};
+  uint8_t demand_pull{};
   climate::ClimateAction action_reported = climate::CLIMATE_ACTION_OFF; // raw readout
   climate::ClimateAction action = climate::CLIMATE_ACTION_OFF; // corrected at end of cycle
   uint8_t outdoor_capacity{};
