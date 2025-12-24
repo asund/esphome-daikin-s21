@@ -5,7 +5,6 @@
 #include "daikin_s21_climate.h"
 #include "../daikin_s21_fan_modes.h"
 #include "../s21.h"
-#include "../utils.h"
 
 using namespace esphome;
 

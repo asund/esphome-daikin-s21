@@ -1,4 +1,3 @@
-#include "../utils.h"
 #include "daikin_s21_switch.h"
 
 namespace esphome::daikin_s21 {

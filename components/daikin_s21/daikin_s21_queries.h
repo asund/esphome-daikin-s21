@@ -35,7 +35,7 @@ namespace StateQuery {
   inline constexpr std::string_view OutdoorCapacity{"FT"};
   inline constexpr std::string_view V3OptionalFeatures{"FU00"};
   inline constexpr std::string_view AllowedTemperatureRange{"FU02"};
-  // FU04
+  inline constexpr std::string_view Uptime{"FU04"};
   inline constexpr std::string_view ModelName{"FU05"};
   inline constexpr std::string_view ProductionInformation{"FU15"};
   inline constexpr std::string_view ProductionOrder{"FU25"};

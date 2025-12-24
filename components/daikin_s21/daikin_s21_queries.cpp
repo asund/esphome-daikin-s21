@@ -32,7 +32,7 @@ void DaikinQuery::set_value(std::span<const uint8_t> payload) {
     }
     if (dest == nullptr) {
       ESP_LOGI(TAG, "result buffer failed to allocate %" PRI_SV ": %s", PRI_SV_ARGS(this->command), hex_repr(payload).c_str());
-      payload = payload.subspan(0, this->buffer.internal.size());
+      payload = payload.first(this->buffer.internal.size());
       dest = this->buffer.internal.data();
     } else {
       this->buffer.external = dest;

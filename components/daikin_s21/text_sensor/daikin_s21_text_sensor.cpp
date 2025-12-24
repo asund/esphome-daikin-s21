@@ -27,6 +27,9 @@ void DaikinS21TextSensor::loop() {
     if (this->software_version_sensor_ != nullptr) {
       this->software_version_sensor_->publish_state(this->get_parent()->get_software_version());
     }
+    if (this->model_sensor_ != nullptr) {
+      this->model_sensor_->publish_state(this->get_parent()->get_model_name());
+    }
     this->statics_done = true;
   }
   // update all debug sensors
@@ -45,6 +48,8 @@ void DaikinS21TextSensor::set_debug_query_sensors(std::vector<text_sensor::TextS
 
 void DaikinS21TextSensor::dump_config() {
   ESP_LOGCONFIG(TAG, "Daikin S21 Text Sensor:");
+  LOG_TEXT_SENSOR("  ", "Software Version", this->software_version_sensor_);
+  LOG_TEXT_SENSOR("  ", "Model", this->model_sensor_);
   for (const auto sensor : this->sensors) {
     LOG_TEXT_SENSOR("  ", sensor->get_name().c_str(), sensor);
   }

@@ -10,6 +10,7 @@ from esphome.const import (
     CONF_ENTITY_CATEGORY,
     CONF_ICON,
     CONF_ID,
+    CONF_MODEL,
     CONF_NAME,
     ENTITY_CATEGORY_DIAGNOSTIC,
     ICON_BUG,
@@ -38,6 +39,12 @@ CONFIG_SCHEMA = (
             entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
         ),
     })
+    .extend({
+        cv.Optional(CONF_MODEL): text_sensor.text_sensor_schema(
+            icon=ICON_TEXT,
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        ),
+    })
     .extend({cv.Optional(CONF_QUERIES): cv.ensure_list(cv.string, cv.Length(min=1, max=5))})
 )
 
@@ -48,6 +55,7 @@ async def to_code(config):
 
     sensors = (
         (CONF_SOFTWARE_VERSION, var.set_software_version_sensor),
+        (CONF_MODEL, var.set_model_sensor),
     )
     for key, func in sensors:
         if key in config:
