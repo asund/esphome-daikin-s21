@@ -64,19 +64,17 @@ class DaikinS21 : public PollingComponent {
 
   // value accessors
   bool is_ready() { return this->ready.all(); }
-  auto get_climate_settings() const { return this->pending.climate_state.is_active() ? this->current.climate : this->pending.climate; }
-  auto get_climate_mode() const { return this->current.climate.mode; }
+  auto get_climate() const { return this->climate.value(); }
   auto get_climate_action() const { return this->action; }
-  auto get_swing_mode() const { return this->pending.swing_mode_state.is_active() ? this->current.swing_mode : this->pending.swing_mode; }
-  auto get_temp_setpoint() const { return this->current.climate.setpoint; }
-  auto get_demand_control() const { return this->pending.demand_econo_state.is_active() ? this->current.demand_econo.demand : this->pending.demand_econo.demand; }
+  auto get_swing_mode() const { return this->swing_mode.value(); }
+  auto get_demand_control() const { return this->demand_econo.value().demand; }
   auto get_temp_inside() const { return this->temp_inside; }
   auto get_temp_target() const { return this->temp_target; }
   auto get_temp_outside() const { return this->temp_outside; }
   auto get_temp_coil() const { return this->temp_coil; }
-  auto get_fan_rpm_setpoint() const { return this->current.fan_rpm_setpoint; }
+  auto get_fan_rpm_setpoint() const { return this->fan_rpm_setpoint; }
   auto get_fan_rpm() const { return this->fan_rpm; }
-  auto get_swing_vertical_angle_setpoint() const { return this->current.swing_vertical_angle_setpoint; }
+  auto get_swing_vertical_angle_setpoint() const { return this->swing_vertical_angle_setpoint; }
   auto get_swing_vertical_angle() const { return this->swing_vertical_angle; }
   auto get_ir_counter() const { return this->ir_counter; }
   auto get_power_consumption() const { return this->power_consumption; }
@@ -174,35 +172,22 @@ class DaikinS21 : public PollingComponent {
   uint32_t cycle_time_ms{};
 
   // settings
-  struct {
-    DaikinClimateSettings climate{};
-    climate::ClimateSwingMode swing_mode{climate::CLIMATE_SWING_OFF};
-    DaikinSpecialModes special_modes{};
-    DaikinDemandEcono demand_econo{};
-    uint16_t fan_rpm_setpoint{};
-    int16_t swing_vertical_angle_setpoint{};
-  } current{};
-
-  struct {
-    DaikinClimateSettings climate{};
-    CommandState climate_state{};
-    climate::ClimateSwingMode swing_mode{};
-    CommandState swing_mode_state{};
-    DaikinSpecialModes special_modes{};
-    std::array<CommandState, DaikinSpecialModesCount> special_mode_states{};
-    DaikinDemandEcono demand_econo{};
-    CommandState demand_econo_state{};
-  } pending{};
+  CommandState<DaikinClimateSettings> climate{};
+  CommandState<climate::ClimateSwingMode> swing_mode{};
+  std::array<CommandState<bool>, DaikinSpecialModesCount> special_modes{};
+  CommandState<DaikinDemandEcono> demand_econo{};
 
   // current values
   DaikinC10 temp_inside{};
   DaikinC10 temp_target{};
   DaikinC10 temp_outside{};
   DaikinC10 temp_coil{};
+  uint16_t fan_rpm_setpoint{};  // not supported
   uint16_t fan_rpm{};
   uint16_t compressor_rpm{};
   uint8_t humidity{50};
   uint8_t demand_pull{};
+  int16_t swing_vertical_angle_setpoint{};  // not supported
   int16_t swing_vertical_angle{};
   uint16_t ir_counter{};
   uint16_t power_consumption{};

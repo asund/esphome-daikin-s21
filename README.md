@@ -159,6 +159,13 @@ I'd prefer if we use this just to confirm a query works and then add proper
 support, rather than trying to interpret the string via HA. Open an issue with
 details if you want a sensor added.
 
+### Number ###
+
+v2 protocol units may support (see debug log output for detection results):
+
+* Demand Control (unverified)
+  30%-100% of power output. As a reference point, Econo lies around 70%.
+
 ## Limitations
 
 **NOTE:** Currently there's a serious issue when using the Arduino framework.
@@ -504,6 +511,11 @@ text_sensor:
     # raw case-sensitive query monitoring for debugging
     # queries:
     #   - RK
+
+number:
+  - platform: daikin_s21
+    demand:
+      name: Demand
 ```
 
 Here is an example of how daikin_s21 can be used with inverted UART pins

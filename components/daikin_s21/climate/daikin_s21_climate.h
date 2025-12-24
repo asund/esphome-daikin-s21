@@ -46,7 +46,7 @@ class DaikinS21Climate : public climate::Climate,
 
   sensor::Sensor *temperature_sensor_{};
   sensor::Sensor *humidity_sensor_{};
-  DaikinC10 unit_setpoint{};
+  DaikinC10 unit_setpoint{TEMPERATURE_INVALID};
   DaikinC10 max_cool_temperature{};
   DaikinC10 min_cool_temperature{};
   DaikinC10 max_heat_temperature{};

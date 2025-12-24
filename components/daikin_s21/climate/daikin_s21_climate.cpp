@@ -55,7 +55,7 @@ void DaikinS21Climate::setup() {
   this->target_temperature = NAN;
   // enable event driven updates
   this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); }); // enable update events from DaikinS21
-  // allow loop() to execute once to capture the current state (change detection on update requires a "previous" state)
+  this->disable_loop(); // wait for updates
 }
 
 /**
@@ -66,7 +66,7 @@ void DaikinS21Climate::setup() {
  * Publishes any state changes to Home Assistant.
  */
 void DaikinS21Climate::loop() {
-  const auto reported_climate = this->get_parent()->get_climate_settings();
+  const auto reported_climate = this->get_parent()->get_climate();
   const auto reported_swing = this->get_parent()->get_swing_mode();
   bool do_publish = false;
   bool update_unit_setpoint = false;
@@ -76,8 +76,8 @@ void DaikinS21Climate::loop() {
   const float current_humidity = this->get_current_humidity();
   if ((this->mode != reported_climate.mode) ||
       (this->action != this->get_parent()->get_climate_action()) ||
-      (std::isnan(current_temperature) || (this->current_temperature != current_temperature)) ||
-      (std::isnan(current_humidity) || (this->current_humidity != current_humidity)) || // TODO check nan equality rules, ensure state is set with just updated humid
+      (std::isnan(this->current_temperature) != std::isnan(current_temperature)) || (this->current_temperature != current_temperature) || // differ in nan-ness or value
+      (std::isnan(this->current_humidity) != std::isnan(current_humidity)) || (this->current_humidity != current_humidity) ||
       (this->swing_mode != reported_swing) ||
       (string_to_daikin_fan_mode(this->get_custom_fan_mode()) != reported_climate.fan)) {
     this->mode = reported_climate.mode;
@@ -91,6 +91,11 @@ void DaikinS21Climate::loop() {
 
   // Update target temperature (user's desire) and unit setpoint (after offset)
   if (is_setpoint_mode(mode)) {
+    // Initialize setpoint so chenge detection can work
+    if (this->unit_setpoint == TEMPERATURE_INVALID) {
+      this->unit_setpoint = reported_climate.setpoint;
+    }
+
     // Update target temperature
     if (std::isfinite(this->target_temperature) == false) {
       // Initialize target temperature if needed using stored setpoint
@@ -113,12 +118,13 @@ void DaikinS21Climate::loop() {
     // Recalculate the unit setpoint if the target temperature changed or it's time to recheck
     if (update_unit_setpoint || this->is_free_run() || this->check_setpoint) {
       this->check_setpoint = false;
+      update_unit_setpoint = false; // Reuse this flag to mean the setpoint has been updated and should be sent
       const auto new_unit_setpoint = this->calc_s21_setpoint(); // in setpoint mode, calculated won't be invalid
       if (DaikinC10::diff(reported_climate.setpoint, new_unit_setpoint) >= SETPOINT_STEP) {
         if (this->use_temperature_sensor()) {
           ESP_LOGD(TAG, "Temperature from external sensor: %.1f Offset: %.1f",
               current_temperature,
-              this->get_parent()->get_temp_inside() - this->temperature_sensor_degc()); // todo can do this in C10 space then float
+              (this->get_parent()->get_temp_inside() - this->temperature_sensor_degc()).f_degc());
         }
         ESP_LOGI(TAG, "Reference offset changed, updating setpoint");
         this->unit_setpoint = new_unit_setpoint;
@@ -126,9 +132,10 @@ void DaikinS21Climate::loop() {
       }
     }
   } else {
-    // Not a setpoint mode, clear it if set and publish
+    // Not a setpoint mode, clear them and publish
     if (std::isfinite(this->target_temperature)) {
       this->target_temperature = NAN;
+      this->unit_setpoint = TEMPERATURE_INVALID;
       do_publish = true;
     }
   }
@@ -342,6 +349,7 @@ void DaikinS21Climate::control(const climate::ClimateCall &call) {
   }
   this->unit_setpoint = this->calc_s21_setpoint();
   this->set_s21_climate();
+  this->get_parent()->set_swing_mode(this->swing_mode);
   this->publish_state();
 }
 
@@ -373,7 +381,6 @@ void DaikinS21Climate::set_s21_climate() {
       LOG_STR_ARG(climate::climate_swing_mode_to_string(this->swing_mode)));
 
   this->get_parent()->set_climate_settings({this->mode, string_to_daikin_fan_mode(this->get_custom_fan_mode()), this->unit_setpoint});
-  this->get_parent()->set_swing_mode(this->swing_mode);
   this->save_setpoint(this->target_temperature);
 }
 
