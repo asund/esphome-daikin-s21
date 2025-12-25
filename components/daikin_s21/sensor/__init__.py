@@ -25,6 +25,7 @@ from .. import (
     daikin_s21_ns,
     CONF_S21_ID,
     S21_PARENT_SCHEMA,
+    ICON_VERTICAL_SWING,
 )
 
 DaikinS21Sensor = daikin_s21_ns.class_("DaikinS21Sensor", cg.PollingComponent)
@@ -79,7 +80,7 @@ CONFIG_SCHEMA = (
         ),
         cv.Optional(CONF_SWING_VERTICAL_ANGLE): sensor.sensor_schema(
             unit_of_measurement=UNIT_DEGREES,
-            icon="mdi:pan-vertical",
+            icon=ICON_VERTICAL_SWING,
             accuracy_decimals=0,
             state_class=STATE_CLASS_MEASUREMENT,
         ),

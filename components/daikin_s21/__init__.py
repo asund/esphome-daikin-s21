@@ -28,6 +28,7 @@ ICON_ECONO = "mdi:leaf"
 ICON_POWERFUL = "mdi:arm-flex"
 ICON_QUIET = "mdi:volume-minus"
 ICON_STREAMER = "mdi:creation"
+ICON_VERTICAL_SWING = "mdi:pan-vertical"
 
 daikin_s21_ns = cg.esphome_ns.namespace("daikin_s21")
 DaikinS21 = daikin_s21_ns.class_("DaikinS21", cg.PollingComponent)

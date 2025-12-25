@@ -65,6 +65,10 @@ downstream of Daikin's reported temperature precision and relatively broad
 control loop hysteresis, so it's far from ideal but can compensate for a
 difference in temperature between the unit and your space.
 
+### Select
+
+* Vertical swing setpoint (v2+, untested)
+
 ### Sensor
 
 Sensors in ESPHome are geared more towards a periodic ADC value that can be
@@ -148,7 +152,7 @@ Additional binary sensors:
 As always, actual support may vary.
 
 * Software Version (v2+)
-* Model Name (v3.40+)
+* Model Name (v3.40+, untested)
 
 If you've read the Faikout wiki you'll see many more queries available than
 what this project supports. I've added a text_sensor component to read these
@@ -380,7 +384,11 @@ climate:
     # max_heat_temperature: 30  # maximum setpoint when heat or heat_cool
     # min_heat_temperature: 10 # minimum setpoint when heat
 
-# Optional additional sensors.
+select:
+  - platform: daikin_s21
+    vertical_swing:
+      name: Vertical Swing
+
 sensor:
   - platform: daikin_s21
     update_interval: 0s

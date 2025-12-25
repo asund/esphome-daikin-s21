@@ -30,6 +30,7 @@ class DaikinS21 : public PollingComponent {
   void set_swing_mode(climate::ClimateSwingMode swing);
   void set_mode(DaikinMode mode, bool enable);
   void set_demand_control(uint8_t percent);
+  void set_vertical_swing_mode(DaikinVerticalSwingMode swing);
 
   enum ReadoutRequest {
     // binary sensor
@@ -47,6 +48,8 @@ class DaikinS21 : public PollingComponent {
     ReadoutIRCounter,
     ReadoutPowerConsumption,
     ReadoutOutdoorCapacity,
+    // select
+    ReadoutVerticalSwingMode,
     // multiple components
     ReadoutPowerful,
     ReadoutSpecialModes,
@@ -78,6 +81,7 @@ class DaikinS21 : public PollingComponent {
   auto get_swing_vertical_angle() const { return this->swing_vertical_angle; }
   auto get_ir_counter() const { return this->ir_counter; }
   auto get_power_consumption() const { return this->power_consumption; }
+  auto get_vertical_swing_mode() const { return this->vertical_swing_mode.value(); }
   auto get_outdoor_capacity() const { return this->outdoor_capacity; }
   auto get_compressor_frequency() const { return this->compressor_rpm; }
   auto get_humidity() const { return this->humidity; }
@@ -143,6 +147,7 @@ class DaikinS21 : public PollingComponent {
   void handle_state_model_code_v2(std::span<const uint8_t> payload);
   void handle_state_ir_counter(std::span<const uint8_t> payload);
   void handle_state_power_consumption(std::span<const uint8_t> payload);
+  void handle_vertical_swing_mode(std::span<const uint8_t> payload);
   void handle_state_outdoor_capacity(std::span<const uint8_t> payload);
   void handle_state_model_name(std::span<const uint8_t> payload);
   void handle_env_power_on_off(std::span<const uint8_t> payload);
@@ -178,6 +183,7 @@ class DaikinS21 : public PollingComponent {
   CommandState<climate::ClimateSwingMode> swing_mode{};
   CommandState<DaikinSpecialModes> special_modes{};
   CommandState<DaikinDemandEcono> demand_econo{};
+  CommandState<DaikinVerticalSwingMode> vertical_swing_mode{};
 
   // current values
   DaikinC10 temp_inside{};

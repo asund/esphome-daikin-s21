@@ -30,7 +30,7 @@ namespace StateQuery {
   inline constexpr std::string_view ITELC{"FN"};
   inline constexpr std::string_view FP{"FP"};
   inline constexpr std::string_view FQ{"FQ"};
-  inline constexpr std::string_view LouvreAngleSetpoint{"FR"};
+  inline constexpr std::string_view VerticalSwingMode{"FR"};
   inline constexpr std::string_view FS{"FS"};
   inline constexpr std::string_view OutdoorCapacity{"FT"};
   inline constexpr std::string_view V3OptionalFeatures{"FU00"};
@@ -115,7 +115,7 @@ namespace StateCommand {
   inline constexpr std::string_view DemandAndEcono{"D7"};
   // DH
   inline constexpr std::string_view DJ{"DJ"};
-  inline constexpr std::string_view LouvreAngleSetpoint{"DR"};
+  inline constexpr std::string_view VerticalSwingMode{"DR"};
 }
 
 /**
