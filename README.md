@@ -145,10 +145,10 @@ Additional binary sensors:
 
 ### Text Sensor
 
-There's not a lot of string data available in protocol v0 units. v2 protocol
-units may support:
+As always, actual support may vary.
 
-* Software Version
+* Software Version (v2+)
+* Model Name (v3.40+)
 
 If you've read the Faikout wiki you'll see many more queries available than
 what this project supports. I've added a text_sensor component to read these
@@ -508,6 +508,8 @@ text_sensor:
   - platform: daikin_s21
     software_version:
       name: Software Version
+    model:
+      name: Model
     # raw case-sensitive query monitoring for debugging
     # queries:
     #   - RK

@@ -5,7 +5,6 @@
 #include "daikin_s21_climate.h"
 #include "../daikin_s21_fan_modes.h"
 #include "../s21.h"
-#include "../utils.h"
 
 using namespace esphome;
 
@@ -372,13 +371,11 @@ float DaikinS21Climate::get_current_humidity() const {
  */
 void DaikinS21Climate::set_s21_climate() {
   // Command new settings
-  ESP_LOGI(TAG, "Controlling S21 climate:");
-  ESP_LOGI(TAG, "  Mode: %s  Setpoint: %.1f (s21: %.1f)  Fan: %s  Swing: %s",
+  ESP_LOGI(TAG, "Controlling:  Mode: %s  Setpoint: %.1f (s21: %.1f)  Fan: %s",
       LOG_STR_ARG(climate::climate_mode_to_string(this->mode)),
       this->target_temperature,
       this->unit_setpoint.f_degc(),
-      LOG_STR_ARG(this->get_custom_fan_mode()),
-      LOG_STR_ARG(climate::climate_swing_mode_to_string(this->swing_mode)));
+      LOG_STR_ARG(this->get_custom_fan_mode()));
 
   this->get_parent()->set_climate_settings({this->mode, string_to_daikin_fan_mode(this->get_custom_fan_mode()), this->unit_setpoint});
   this->save_setpoint(this->target_temperature);

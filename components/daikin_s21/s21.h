@@ -85,6 +85,7 @@ class DaikinS21 : public PollingComponent {
   auto get_unit_state() const { return this->unit_state; }
   auto get_system_state() const { return this->system_state; }
   auto get_software_version() const { return this->software_version.data(); }
+  auto get_model_name() const { return this->model_name.data(); }
   bool get_active() const { return this->active; }
   bool get_serial_error() const { return this->serial_error; }
   bool get_mode(DaikinMode mode) const;
@@ -143,6 +144,7 @@ class DaikinS21 : public PollingComponent {
   void handle_state_ir_counter(std::span<const uint8_t> payload);
   void handle_state_power_consumption(std::span<const uint8_t> payload);
   void handle_state_outdoor_capacity(std::span<const uint8_t> payload);
+  void handle_state_model_name(std::span<const uint8_t> payload);
   void handle_env_power_on_off(std::span<const uint8_t> payload);
   void handle_env_indoor_unit_mode(std::span<const uint8_t> payload);
   void handle_env_temperature_setpoint(std::span<const uint8_t> payload);
@@ -193,17 +195,18 @@ class DaikinS21 : public PollingComponent {
   uint8_t demand_pull{};
   climate::ClimateAction action_reported = climate::CLIMATE_ACTION_OFF; // raw readout
   climate::ClimateAction action = climate::CLIMATE_ACTION_OFF; // corrected at end of cycle
-  uint8_t outdoor_capacity{};
   DaikinUnitState unit_state{};
   DaikinSystemState system_state{};
   bool active{};      // actively using the compressor
   bool serial_error{};
 
-  // protocol support
+  // protocol support and other static values
   ProtocolVersion protocol_version{ProtocolUndetected};
   DaikinModel modelV0{ModelUnknown};
   DaikinModel modelV2{ModelUnknown};
   std::array<char, 8+1> software_version{};
+  std::array<char, 22+1> model_name{"unknown"};
+  uint8_t outdoor_capacity{};
 
   struct {
     // for alternate readout

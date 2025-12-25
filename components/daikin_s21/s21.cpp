@@ -160,6 +160,7 @@ DaikinS21::DaikinS21(DaikinSerial * const serial)
     // {StateQuery::FS, &DaikinS21::handle_nop}, // unknown
     {StateQuery::OutdoorCapacity, &DaikinS21::handle_state_outdoor_capacity}, // unconfirmed, outdoor unit capacity?
     {StateQuery::V3OptionalFeatures, &DaikinS21::handle_nop, true},
+    {StateQuery::ModelName, &DaikinS21::handle_state_model_name, true},
     // {StateQuery::FV, &DaikinS21::handle_nop}, // unknown
     {StateQuery::NewProtocol, &DaikinS21::handle_nop, true},  // protocol version detect
     // {EnvironmentQuery::PowerOnOff, &DaikinS21::handle_env_power_on_off}, // redundant
@@ -512,6 +513,9 @@ void DaikinS21::check_ready_protocol_detection() {
     if (this->protocol_version >= ProtocolVersion(3)) {
       this->enable_query(StateQuery::V3OptionalFeatures);
       // todo many more
+    }
+    if (this->protocol_version >= ProtocolVersion(3,40)) {
+      this->enable_query(StateQuery::ModelName);
     }
     this->enable_query(EnvironmentQuery::InsideTemperature);
     if (this->readout_requests[ReadoutTemperatureCoil]) {
@@ -906,6 +910,16 @@ void DaikinS21::handle_state_outdoor_capacity(const std::span<const uint8_t> pay
   this->outdoor_capacity = bytes_to_num(payload);
 }
 
+void DaikinS21::handle_state_model_name(std::span<const uint8_t> payload) {
+  if (payload.size() >= 22) {
+    payload = payload.first(22);
+    const auto end = std::ranges::find(payload, ' ');
+    payload = { payload.begin(), end };
+    std::ranges::copy(payload, this->model_name.begin());
+    this->model_name[payload.size()] = 0;
+  }
+}
+
 /** Inferior to StateQuery::Basic */
 void DaikinS21::handle_env_power_on_off(const std::span<const uint8_t> payload) {
   const bool active = payload[0] == '1';
@@ -1159,7 +1173,7 @@ void DaikinS21::dump_state() {
     const auto &v3_features = this->get_query(StateQuery::V3OptionalFeatures);
     auto v3_features_value = v3_features.value();
     if (v3_features_value.size() >= 5) {
-      v3_features_value = v3_features_value.subspan(0,5);
+      v3_features_value = v3_features_value.first(5);
     }
     ESP_LOGD(TAG, " G2: %s  GK: %s  GU00: %s  ActiveSrc: %s  PowerfulSrc: %s",
         (v0_features.success() ? hex_repr : str_repr)(v0_features.value()).c_str(),
