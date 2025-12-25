@@ -64,13 +64,13 @@ void DaikinQuery::ack(const std::span<const uint8_t> payload) {
 /**
  * Handles a NAK response
  */
-void DaikinQuery::nak() {
+void DaikinQuery::nak(const std::span<const uint8_t> payload /*= nak_value*/) {
   this->naks++;
   if (this->failed()) {
     // query failed, disable
     ESP_LOGW(TAG, "disabling %" PRI_SV " as unsupported", PRI_SV_ARGS(this->command));
     this->enabled = false;
-    this->set_value(nak_value);
+    this->set_value(payload);
   }
 }
 
