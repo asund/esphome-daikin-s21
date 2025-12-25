@@ -59,19 +59,70 @@ inline constexpr DaikinC10 SETPOINT_STEP{1.0F}; // Daikin setpoint granularity
 inline constexpr DaikinC10 TEMPERATURE_STEP{0.5F}; // Daikin temperature sensor granularity
 inline constexpr DaikinC10 TEMPERATURE_INVALID{DaikinC10::nan_sentinel}; // NaN
 
-enum DaikinMode : uint8_t {
-  ModePowerful,       // maximum output (20 minute timeout), mutaully exclusive with comfort/quiet/econo
-  ModeComfort,        // fan angle depends on heating/cooling action
-  ModeQuiet,          // outdoor unit fan/compressor limit
-  ModeStreamer,       // electron emitter decontamination
-  ModeSensorLED,      // motion sensor LED control
-  ModeMotionSensor,   // "intelligent eye" PIR occupancy setpoint offset
-  ModeEcono,          // limits demand for power consumption
-  // just for bitset sizing
-  DaikinModeCount,
+/**
+ * Command states.
+ *
+ * For values that can be commanded by the user, track the progress of applying the setting.
+ * Used to temporarily return the pending value to prevent logic and UI glitches.
+ * @tparam T the type of the setting value sent in a command
+ */
+template<typename T>
+class CommandState {
+  static constexpr uint8_t active_value = std::numeric_limits<uint8_t>::min();
+  static constexpr uint8_t staged_value = std::numeric_limits<uint8_t>::max();
+  uint8_t state{active_value};
+
+ public:
+  // command state tracking
+  constexpr bool staged() const { return this->state == staged_value; } // the pending value should be sent to the unit
+  constexpr void reset() {
+    this->state = active_value;
+    this->pending = this->active;
+  }
+  constexpr void set_confirm_ms(const uint32_t cycle_interval_ms, const uint32_t timeout_ms = 1000) {
+    this->state = std::min(static_cast<int>(timeout_ms / cycle_interval_ms) + 2, staged_value - 1); // +2 for truncation and short first cycle
+  }
+
+  // values
+  T pending{};
+  T active{};
+
+  constexpr const T& value() const { return (this->state == active_value) ? this->active : this->pending; }
+  constexpr void stage(const T& value) {
+    this->pending = value;
+    this->state = staged_value;
+  }
+  constexpr void check_confirm() {
+    if ((this->state != active_value) && (this->staged() == false)) {
+      if (this->pending == this->active) {
+        this->state = active_value;
+      } else {
+        this->state--;
+      }
+    }
+  }
 };
 
-using ModeBitset = std::bitset<DaikinModeCount>;
+enum DaikinMode : uint8_t {
+  ModePowerful,     // maximum output (20 minute timeout), mutaully exclusive with comfort/quiet/econo
+  ModeComfort,      // fan angle depends on heating/cooling action
+  ModeQuiet,        // outdoor unit fan/compressor limit
+  ModeStreamer,     // electron emitter decontamination
+  ModeSensorLED,    // motion sensor LED control
+  ModeMotionSensor, // "intelligent eye" PIR occupancy setpoint offset
+  ModeEcono,        // limits demand for power consumption
+  DaikinModeCount,  // for mode array sizing
+};
+
+inline constexpr auto DaikinSpecialModesCount = ModeMotionSensor + 1;
+using DaikinSpecialModes = std::bitset<DaikinSpecialModesCount>;
+
+struct DaikinDemandEcono {
+  uint8_t demand{100};
+  bool econo{};
+
+  constexpr bool operator==(const DaikinDemandEcono &other) const = default;
+};
 
 /**
  * Possible sources of active flag.
@@ -121,9 +172,8 @@ class DaikinSystemState {
 
 struct DaikinClimateSettings {
   climate::ClimateMode mode{climate::CLIMATE_MODE_OFF};
-  DaikinC10 setpoint{23};
-  climate::ClimateSwingMode swing{climate::CLIMATE_SWING_OFF};
   DaikinFanMode fan{DaikinFanMode::Auto};
+  DaikinC10 setpoint{23};
 
   constexpr bool operator==(const DaikinClimateSettings &other) const = default;
 };

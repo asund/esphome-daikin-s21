@@ -11,10 +11,8 @@ void DaikinS21Switch::setup() {
 }
 
 void DaikinS21Switch::loop() {
-  const auto now = millis();
   for (auto mode_switch : this->mode_switches_) {
-    if ((mode_switch != nullptr) && timestamp_passed(now, mode_switch->next_publish_ms)) {
-      mode_switch->next_publish_ms = now;
+    if (mode_switch != nullptr) {
       mode_switch->publish_state(this->get_parent()->get_mode(mode_switch->mode));
     }
   }
@@ -32,7 +30,6 @@ void DaikinS21Switch::dump_config() {
 }
 
 void DaikinS21SwitchMode::write_state(bool state) {
-  this->next_publish_ms = millis() + (this->get_parent()->get_cycle_interval_ms() * 2) + 1000;
   this->get_parent()->set_mode(this->mode, state);
   this->publish_state(state);
 }

@@ -64,7 +64,7 @@ void DaikinS21Sensor::publish_sensors() {
     this->humidity_sensor_->publish_state(this->get_parent()->get_humidity());
   }
   if (this->demand_sensor_ != nullptr) {
-    this->demand_sensor_->publish_state(this->get_parent()->get_demand());
+    this->demand_sensor_->publish_state(this->get_parent()->get_demand_pull());
   }
   if (this->ir_counter_sensor_ != nullptr) {
     this->ir_counter_sensor_->publish_state(this->get_parent()->get_ir_counter());
