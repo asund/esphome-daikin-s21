@@ -124,6 +124,16 @@ struct DaikinDemandEcono {
   constexpr bool operator==(const DaikinDemandEcono &other) const = default;
 };
 
+enum class DaikinVerticalSwingMode : uint8_t {
+  Off = 0,
+  Top = 1,
+  Upper = 2,
+  Middle = 3,
+  Lower = 4,
+  Bottom = 5,
+  On,
+};
+
 /**
  * Possible sources of active flag.
  */

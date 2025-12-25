@@ -122,6 +122,45 @@ const char * powerful_source_to_string(const PowerfulSource source) {
 }
 
 /**
+ * Apply the characteristics of a new vertical swing mode to a climate swing mode
+ */
+void apply_vertical_swing_mode(const DaikinVerticalSwingMode vertical_swing, climate::ClimateSwingMode &swing) {
+  if (vertical_swing == DaikinVerticalSwingMode::On) {
+    if (swing == climate::CLIMATE_SWING_OFF) {
+      swing = climate::CLIMATE_SWING_VERTICAL;
+    } else if (swing == climate::CLIMATE_SWING_HORIZONTAL) {
+      swing = climate::CLIMATE_SWING_BOTH;
+    }
+  } else {
+    if (swing == climate::CLIMATE_SWING_VERTICAL) {
+      swing = climate::CLIMATE_SWING_OFF;
+    } else if (swing == climate::CLIMATE_SWING_BOTH) {
+      swing = climate::CLIMATE_SWING_HORIZONTAL;
+    }
+  }
+}
+
+/**
+ * Apply the characteristics of a new climate swing mode to a vertical swing mode
+ */
+void apply_swing_mode(const climate::ClimateSwingMode swing, DaikinVerticalSwingMode &vertical_swing) {
+  switch (swing) {
+    case climate::CLIMATE_SWING_OFF:
+    case climate::CLIMATE_SWING_HORIZONTAL:
+      if (vertical_swing == DaikinVerticalSwingMode::On) { // don't overwrite discrete steps
+        vertical_swing = DaikinVerticalSwingMode::Off;
+      }
+      break;
+    case climate::CLIMATE_SWING_VERTICAL:
+    case climate::CLIMATE_SWING_BOTH:
+      vertical_swing = DaikinVerticalSwingMode::On;
+      break;
+    default:
+      break;
+  }
+}
+
+/**
  * Convert reversed ASCII number to an integer
  *
  * @param bytes ASCII bytes of format <ones><tens><hundreds[><neg/pos>,<thousands>]
@@ -157,6 +196,7 @@ DaikinS21::DaikinS21(DaikinSerial * const serial)
     // {StateQuery::ITELC, &DaikinS21::handle_nop},  // unknown, daikin intelligent touch controller?
     // {StateQuery::FP, &DaikinS21::handle_nop}, // unknown
     // {StateQuery::FQ, &DaikinS21::handle_nop}, // unknown
+    {StateQuery::VerticalSwingMode, &DaikinS21::handle_vertical_swing_mode},
     // {StateQuery::FS, &DaikinS21::handle_nop}, // unknown
     {StateQuery::OutdoorCapacity, &DaikinS21::handle_state_outdoor_capacity}, // unconfirmed, outdoor unit capacity?
     {StateQuery::V3OptionalFeatures, &DaikinS21::handle_nop, true},
@@ -236,14 +276,14 @@ void DaikinS21::dump_config() {
  * Set the climate settings bundle and trigger a write to the unit.
  */
 void DaikinS21::set_climate_settings(const DaikinClimateSettings climate) {
-  if (this->climate.value() != climate) {
+  if (this->get_climate() != climate) {
     this->climate.stage(climate);
     this->trigger_cycle();
   }
 }
 
 void DaikinS21::set_swing_mode(const climate::ClimateSwingMode swing) {
-  if (this->swing_mode.value() != swing) {
+  if (this->get_swing_mode() != swing) {
     this->swing_mode.stage(swing);
     this->trigger_cycle();
   }
@@ -272,8 +312,18 @@ void DaikinS21::set_mode(const DaikinMode mode, const bool enable) {
  * Set the demand control percentage and trigger a write to the unit if it changed.
  */
 void DaikinS21::set_demand_control(const uint8_t percent) {
-  if (this->demand_econo.value().demand != percent) {
+  if (this->get_demand_control() != percent) {
     this->demand_econo.stage({ percent, this->get_mode(ModeEcono) });  // shares D7 with econo, stage complete command
+    this->trigger_cycle();
+  }
+}
+
+/**
+ * Set the vertical swing mode and trigger a write to the unit if it changed.
+ */
+void DaikinS21::set_vertical_swing_mode(DaikinVerticalSwingMode swing) {
+  if (this->get_vertical_swing_mode() != swing) {
+    this->vertical_swing_mode.stage(swing);
     this->trigger_cycle();
   }
 }
@@ -415,6 +465,7 @@ void DaikinS21::ready_state_machine() {
     this->swing_mode.reset();
     this->special_modes.reset();
     this->demand_econo.reset();
+    this->vertical_swing_mode.reset();
 
     // Schedule any user specified debug queries, done last so as to not duplicate automatically added queries
     for (auto &query : this->queries | std::views::filter(DaikinQuery::IsDebug)) {
@@ -505,6 +556,9 @@ void DaikinS21::check_ready_protocol_detection() {
       this->enable_query(StateQuery::V2OptionalFeatures);
       if (this->readout_requests[ReadoutPowerConsumption]) {
         this->enable_query(StateQuery::PowerConsumption);
+      }
+      if (this->readout_requests[DaikinS21::ReadoutVerticalSwingMode]) {
+        this->enable_query(StateQuery::VerticalSwingMode);
       }
       if (this->readout_requests[ReadoutOutdoorCapacity]) {
         this->enable_query(StateQuery::OutdoorCapacity);
@@ -760,6 +814,10 @@ void DaikinS21::handle_serial_idle() {
     }
     this->send_command(StateCommand::LouvreSwingMode, payload);
     this->swing_mode.set_confirm_ms(cycle_interval);
+    // keep vertical swing mode in sync
+    this->vertical_swing_mode.pending = this->get_vertical_swing_mode();
+    apply_swing_mode(this->swing_mode.pending, this->vertical_swing_mode.pending);
+    this->vertical_swing_mode.set_confirm_ms(cycle_interval);
     return;
   }
 
@@ -797,6 +855,21 @@ void DaikinS21::handle_serial_idle() {
     return;
   }
 
+  if (this->vertical_swing_mode.staged()) {
+    if (this->vertical_swing_mode.pending == DaikinVerticalSwingMode::On) {
+      payload[0] = '?';
+    } else {
+      payload[0] += static_cast<uint8_t>(this->vertical_swing_mode.pending);
+    }
+    this->send_command(StateCommand::VerticalSwingMode, payload);
+    this->vertical_swing_mode.set_confirm_ms(cycle_interval);
+    // keep regular swing mode state in sync
+    this->swing_mode.pending = this->get_swing_mode();
+    apply_vertical_swing_mode(this->vertical_swing_mode.pending, this->swing_mode.pending);
+    this->swing_mode.set_confirm_ms(cycle_interval);
+    return;
+  }
+
   // Periodic query cycle
   if (this->active_query < this->queries.end()) {
     this->serial.send_frame(this->active_query->command);  // query cycle underway, continue
@@ -824,6 +897,7 @@ void DaikinS21::handle_serial_idle() {
     this->swing_mode.check_confirm();
     this->special_modes.check_confirm();
     this->demand_econo.check_confirm();
+    this->vertical_swing_mode.check_confirm();
 
     // signal there's fresh data to consumers
     this->update_callbacks.call();
@@ -865,6 +939,8 @@ void DaikinS21::handle_state_error_status(const std::span<const uint8_t> payload
 
 void DaikinS21::handle_state_swing_or_humidity(const std::span<const uint8_t> payload) {
   this->swing_mode.active = daikin_to_climate_swing_mode(payload[0]);
+  // keep vertical swing mode in sync
+  apply_swing_mode(this->swing_mode.active, this->vertical_swing_mode.active);
 }
 
 void DaikinS21::handle_state_special_modes(const std::span<const uint8_t> payload) {
@@ -906,6 +982,16 @@ void DaikinS21::handle_state_power_consumption(const std::span<const uint8_t> pa
   this->power_consumption = bytes_to_num(payload, 16);
 }
 
+void DaikinS21::handle_vertical_swing_mode(const std::span<const uint8_t> payload) {
+  if (payload[0] == '?') {
+    this->vertical_swing_mode.active = DaikinVerticalSwingMode::On;
+  } else {
+    this->vertical_swing_mode.active = static_cast<DaikinVerticalSwingMode>(payload[0] - '0');
+  }
+  // keep regular swing mode in sync
+  apply_vertical_swing_mode(this->vertical_swing_mode.active, this->swing_mode.active);
+}
+
 void DaikinS21::handle_state_outdoor_capacity(const std::span<const uint8_t> payload) {
   this->outdoor_capacity = bytes_to_num(payload);
 }
@@ -944,6 +1030,8 @@ void DaikinS21::handle_env_temperature_setpoint(const std::span<const uint8_t> p
 /** Same info as StateQuery::SwingOrHumidity */
 void DaikinS21::handle_env_swing_mode(const std::span<const uint8_t> payload) {
   this->swing_mode.active = daikin_to_climate_swing_mode(payload[0]);
+  // keep vertical swing mode in sync
+  apply_swing_mode(this->swing_mode.active, this->vertical_swing_mode.active);
 }
 
 /** Better info than StateQuery::Basic (reports silent) */
@@ -1121,6 +1209,7 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
     this->swing_mode.reset();
     this->special_modes.reset();
     this->demand_econo.reset();
+    this->vertical_swing_mode.reset();
     this->current_command = {};
     this->start_cycle();
   } else {
