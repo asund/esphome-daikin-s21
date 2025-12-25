@@ -27,6 +27,9 @@ void DaikinS21TextSensor::loop() {
     if (this->software_version_sensor_ != nullptr) {
       this->software_version_sensor_->publish_state(this->get_parent()->get_software_version());
     }
+    if (this->software_revision_sensor_ != nullptr) {
+      this->software_revision_sensor_->publish_state(this->get_parent()->get_software_revision());
+    }
     if (this->model_sensor_ != nullptr) {
       this->model_sensor_->publish_state(this->get_parent()->get_model_name());
     }

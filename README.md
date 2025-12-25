@@ -151,8 +151,9 @@ Additional binary sensors:
 
 As always, actual support may vary.
 
-* Software Version (v2+)
 * Model Name (v3.40+, untested)
+* Software Revision (v3+)
+* Software Version (v2+)
 
 If you've read the Faikout wiki you'll see many more queries available than
 what this project supports. I've added a text_sensor component to read these
@@ -514,10 +515,12 @@ binary_sensor:
 
 text_sensor:
   - platform: daikin_s21
-    software_version:
-      name: Software Version
     model:
       name: Model
+    software_revision:
+      name: Software Revision
+    software_version:
+      name: Software Version
     # raw case-sensitive query monitoring for debugging
     # queries:
     #   - RK

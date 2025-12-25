@@ -26,25 +26,19 @@ from .. import (
 DaikinS21TextSensor = daikin_s21_ns.class_("DaikinS21TextSensor", cg.Component)
 
 CONF_QUERIES = "queries"
+CONF_SOFTWARE_REVISION = "software_revision"
 CONF_SOFTWARE_VERSION = "software_version"
 ICON_TEXT = "mdi:text"
+
+DIAG_TEXT_SCHEMA = text_sensor.text_sensor_schema(icon=ICON_TEXT, entity_category=ENTITY_CATEGORY_DIAGNOSTIC)
 
 CONFIG_SCHEMA = (
     cv.COMPONENT_SCHEMA
     .extend({cv.GenerateID(): cv.declare_id(DaikinS21TextSensor)})
     .extend(S21_PARENT_SCHEMA)
-    .extend({
-        cv.Optional(CONF_SOFTWARE_VERSION): text_sensor.text_sensor_schema(
-            icon=ICON_TEXT,
-            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
-        ),
-    })
-    .extend({
-        cv.Optional(CONF_MODEL): text_sensor.text_sensor_schema(
-            icon=ICON_TEXT,
-            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
-        ),
-    })
+    .extend({cv.Optional(CONF_MODEL): DIAG_TEXT_SCHEMA})
+    .extend({cv.Optional(CONF_SOFTWARE_REVISION): DIAG_TEXT_SCHEMA})
+    .extend({cv.Optional(CONF_SOFTWARE_VERSION): DIAG_TEXT_SCHEMA})
     .extend({cv.Optional(CONF_QUERIES): cv.ensure_list(cv.string, cv.Length(min=1, max=5))})
 )
 
@@ -54,8 +48,9 @@ async def to_code(config):
     await cg.register_parented(var, config[CONF_S21_ID])
 
     sensors = (
-        (CONF_SOFTWARE_VERSION, var.set_software_version_sensor),
         (CONF_MODEL, var.set_model_sensor),
+        (CONF_SOFTWARE_REVISION, var.set_software_revision_sensor),
+        (CONF_SOFTWARE_VERSION, var.set_software_version_sensor),
     )
     for key, func in sensors:
         if key in config:

@@ -68,8 +68,8 @@ namespace StateQuery {
   // FX71
   // FX81
   inline constexpr std::string_view NewProtocol{"FY00"};
-  // FY10
-  // FY20
+  inline constexpr std::string_view SoftwareRevision{"FY10"};
+  inline constexpr std::string_view V3Model{"FY20"};
 } // namespace StateQuery
 
 namespace EnvironmentQuery {

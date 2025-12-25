@@ -203,6 +203,8 @@ DaikinS21::DaikinS21(DaikinSerial * const serial)
     {StateQuery::ModelName, &DaikinS21::handle_state_model_name, true},
     // {StateQuery::FV, &DaikinS21::handle_nop}, // unknown
     {StateQuery::NewProtocol, &DaikinS21::handle_nop, true},  // protocol version detect
+    {StateQuery::SoftwareRevision, &DaikinS21::handle_state_software_revision, true},
+    {StateQuery::V3Model, &DaikinS21::handle_state_model_v3, true}, // unknown/unconfirmed
     // {EnvironmentQuery::PowerOnOff, &DaikinS21::handle_env_power_on_off}, // redundant
     // {EnvironmentQuery::IndoorUnitMode, &DaikinS21::handle_env_indoor_unit_mode}, // redundant
     // {EnvironmentQuery::TemperatureSetpoint, &DaikinS21::handle_env_temperature_setpoint},  // redundant
@@ -277,6 +279,10 @@ void DaikinS21::dump_config() {
  */
 void DaikinS21::set_climate_settings(const DaikinClimateSettings climate) {
   if (this->get_climate() != climate) {
+    ESP_LOGD(TAG, "Mode: %s  Setpoint: %.1f  Fan: %s",
+      LOG_STR_ARG(climate::climate_mode_to_string(climate.mode)),
+      climate.setpoint.f_degc(),
+      LOG_STR_ARG(daikin_fan_mode_to_cstr(climate.fan)));
     this->climate.stage(climate);
     this->trigger_cycle();
   }
@@ -566,7 +572,8 @@ void DaikinS21::check_ready_protocol_detection() {
     }
     if (this->protocol_version >= ProtocolVersion(3)) {
       this->enable_query(StateQuery::V3OptionalFeatures);
-      // todo many more
+      this->enable_query(StateQuery::SoftwareRevision);
+      this->enable_query(StateQuery::V3Model);
     }
     if (this->protocol_version >= ProtocolVersion(3,40)) {
       this->enable_query(StateQuery::ModelName);
@@ -1006,6 +1013,18 @@ void DaikinS21::handle_state_model_name(std::span<const uint8_t> payload) {
   }
 }
 
+void DaikinS21::handle_state_software_revision(std::span<const uint8_t> payload) {
+  if (payload.size() >= 8) {
+    std::ranges::copy_n(payload.begin(), 8, this->software_revision.begin());
+  }
+}
+
+void DaikinS21::handle_state_model_v3(std::span<const uint8_t> payload) {
+  if (payload.size() >= 4) {
+    this->modelV3 = bytes_to_num(payload, 16);
+  }
+}
+
 /** Inferior to StateQuery::Basic */
 void DaikinS21::handle_env_power_on_off(const std::span<const uint8_t> payload) {
   const bool active = payload[0] == '1';
@@ -1228,20 +1247,22 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
 }
 
 void DaikinS21::dump_state() {
-  ESP_LOGD(TAG, "Ready: %lX  Protocol: %" PRIu8 ".%" PRIu8 "  ModelV0: %04" PRIX16 "  ModelV2: %04" PRIX16,
+  ESP_LOGD(TAG, "Ready: %lX  Protocol: %" PRIu8 ".%" PRIu8 "  ModelV0: %04" PRIX16 "  ModelV2: %04" PRIX16 "  ModelV3: %04" PRIX16,
       this->ready.to_ulong(),
       this->protocol_version.major,
       this->protocol_version.minor,
       this->modelV0,
-      this->modelV2);
+      this->modelV2,
+      this->modelV3);
   if (this->debug) {
     const auto &old_proto = this->get_query(StateQuery::OldProtocol);
     const auto &new_proto = this->get_query(StateQuery::NewProtocol);
     const auto &misc_version = this->get_query(MiscQuery::Version);
-    ESP_LOGD(TAG, " G8: %s  GY00: %s  Ver: %s",
+    ESP_LOGD(TAG, " G8: %s  GY00: %s  Ver: %s  Rev: %s",
         str_repr(old_proto.value()).c_str(),
         str_repr(new_proto.value()).c_str(),
-        this->software_version.data());
+        this->software_version.data(),
+        this->software_revision.data());
   }
   ESP_LOGD(TAG, "  Fan: %c  VSwing: %c  HSwing: %c  MI: %c  Humid: %c  Dehumid: %c",
       this->support.fan ? 'Y' : 'N',
