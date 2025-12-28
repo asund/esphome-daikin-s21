@@ -68,8 +68,8 @@ namespace StateQuery {
   // FX71
   // FX81
   inline constexpr std::string_view NewProtocol{"FY00"};
-  // FY10
-  // FY20
+  inline constexpr std::string_view SoftwareRevision{"FY10"};
+  inline constexpr std::string_view V3Model{"FY20"};
 } // namespace StateQuery
 
 namespace EnvironmentQuery {
@@ -129,8 +129,8 @@ class DaikinQuery {
   static inline constexpr uint8_t nak_value[] = {'N','A','K'};
 
  public:
-  constexpr DaikinQuery(const std::string_view command = "", const handler_fn handler = nullptr, const bool is_static = false)
-    : command(command), handler(handler), is_static(is_static), size(std::size(unscheduled_value))
+  constexpr DaikinQuery(const std::string_view command = "", const handler_fn handler = nullptr, const uint8_t response_length = 0, const bool is_static = false)
+    : command(command), handler(handler), is_static(is_static), size(std::size(unscheduled_value)), response_length(response_length)
   {
     static_assert(std::size(unscheduled_value) <= sizeof(this->buffer.internal));
     std::ranges::copy(unscheduled_value, this->buffer.internal.begin());
@@ -157,7 +157,7 @@ class DaikinQuery {
   // actions
   void clear();
   void ack(std::span<const uint8_t> payload);
-  void nak();
+  void nak(std::span<const uint8_t> payload = nak_value);
 
   // state
   std::string_view command{};
@@ -177,6 +177,7 @@ class DaikinQuery {
  public:
   uint8_t enabled :1{};
   uint8_t is_debug :1{};
+  uint8_t response_length{};  // for higher level validation
 };
 
 } // namespace esphome::daikin_s21

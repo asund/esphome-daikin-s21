@@ -25,27 +25,39 @@ functionality of a Daikin unit.
 **NOTE:** Daikin's support for depth of unit control varies wildly over thier
 product line. Your unit could have a lot of features that are exposed via the
 IR remote but offer only basic control over the S21 wired bus. There's not much
-this project can do for you if this is the case. ESPHome doesn't yet offer an
-easy way for the unit to dynamically enable components based on feature
-detection. You're best bet at the moment is to include components you'd like to
-use and then remove them later if not supported.
+this project can do for you if this is the case. As an example, I'm unable to
+enable Powerful mode on my own device. ESPHome doesn't yet offer an easy way
+for the unit to dynamically enable components based on feature detection, so
+your best bet at the moment is to include components you'd like to use and
+remove them later if not supported. With newer features I could have more
+development to do (I can't test locally), so if something should be working
+based on the queries available and the protocol version of your unit don't
+hesitate to reach out.
+
+## Control
 
 ### Climate
+
+The main control interface. Supported features:
+
 * Setpoint temperature.
 * Climate modes OFF, HEAT_COOL, COOL, HEAT, FAN_ONLY and DRY. The list is
-  configurable in case your unit doesn't support them all.
-* Climate action reporting. See what your unit is trying to do, e.g.
-  reporting either heating, cooling or idle while in HEAT_COOL mode.
+  configurable in case your unit doesn't support them all or you otherwise want
+  to restrict the ones available.
+* Climate action reporting.
 * Fan modes auto, silent and 1-5.
 * Swing modes off, horizontal, vertical, and both. These can also be restricted
   to a specified list.
-* Optional humidity reporting from an internal or external sensor.
-* Limits for commanded setpoints. Defaults should work fine, but if your
-  unit is different they can be overridden.
+* Optional external temperature and humidity reporting and use in an secondary
+  control loop. You can use a sensor placed in your living space to get a
+  better reflection of the temperature you feel.
+* Limits for internally commanded setpoints. Defaults should work fine, but if
+  your unit is different they can be overridden.
 
-Daikin's modes don't neatly fit into the discrete preset category modelled by
-ESPHome as they function more like mode modifiers. Switches are provided
-for individual control of these modifiers instead of climate presets.
+Daikin's modes don't neatly fit into the discrete "preset" category modelled by
+ESPHome as they function more like mode modifiers. Switches are provided for
+individual control of these modifiers instead of climate presets. The only one
+that's exclusive is Powerful, but I felt the interface should be uniform.
 
 The standard Daikin control loop has a few deficiencies:
 * The setpoint value has 1.0°C granularity.
@@ -53,57 +65,36 @@ The standard Daikin control loop has a few deficiencies:
 * The current temperature sensor is located in the unit, in most cases
   a wall unit placed higher in a room. This reading doesn't always reflect
   the temperature felt by occupants.
+* It will overshoot the setpoint to try to account for this (see your
+  service manual for details).
 
 Because of these, the climate component implements a separate loop on top of
 the Daikin internal one. An external temperature sensor can be used to provide
 a more accurate and precise reference and an offset applied to the internal
 Daikin setpoint. The internal temperature sensor can also be used for this
 functionality to drive the coarse setpoint around the more granular
-temperature sensor. The rate at which this secondary loop runs must be
-configured with the update interval when using this mode. All of this is
-downstream of Daikin's reported temperature precision and relatively broad
+temperature sensor. The rate at which this secondary loop runs can be
+configured with the component update interval when using this mode. All of this
+is downstream of Daikin's reported temperature precision and relatively broad
 control loop hysteresis, so it's far from ideal but can compensate for a
-difference in temperature between the unit and your space.
+difference in temperature between the unit and your space. Keep in mind the
+unit will overshoot, so you may have to add an offset when picking a setpoint.
 
 ### Select
 
-* Vertical swing setpoint (v2+, untested)
-
-### Sensor
-
-Sensors in ESPHome are geared more towards a periodic ADC value that can be
-filtered as necessary. The values read from the Daikin unit are pre-processed
-and won't normally require averaging filters and the like. The sensor component
-supports a configurable update interval that will publish the current values
-at a chosen rate. To make this reporting more responsive, the user can set this
-value to zero and every update from the unit, interesting or not, will be
-published. To reduce spam, please configure a delta filter on your sensors and
-only changes will be published over the network. See the example configuration.
-
-* Inside temperature (usually measured at indoor air handler return)
-* Outside temperature (outside exchanger)
-* Coil temperature (indoor air handler's coil)
-* Target temperature (internal setpoint, modified by special modes)
-* Fan speed (inside blower)
-* Vertical swing angle (directional flap)
-* Compressor frequency (outside exchanger)
-* Humidity (not supported on all units, can report a consistent 50% if
-  not present)
-* Unit's demand from outside exchanger
-
-v2+ protocol units may also support:
-
-* IR counter that increments when the remote is used (untested)
-* Total power consumption in kWh (untested)
-* Outdoor unit capacity in indoor units (unverified)
+* Vertical swing setpoint. v2+ may support this. Preset values can be selected
+  for the vertical louvre, including the standard on and off for the varrying
+  setting.
 
 ### Switch
 
-Mode toggle switches for protocol v2+. Even if these modes are supported some
-units don't seem to be able to be set via the S21 interface, so a parallel set
-of binary sensors are offered as a read only indication of modes set via the IR
-remote. There's no point in having both the switch and binary sensor active at
-the same time.
+Mode toggle switches for protocol v2+. As a reminder: even if these modes are
+supported by your unit, they are not necessarily supported via the S21
+interface. In some cases support exists for reading the current value set by
+the IR remote. If this is true for you, a parallel set of binary sensors are
+offered as a read only indication. Use those instead if that's the case.
+There's no point in having both the switch and corresponding binary sensor
+active at the same time.
 
 * Powerful Mode
 * Comfort Mode
@@ -113,15 +104,56 @@ the same time.
 * Sensor Mode (unverified)
 * Econo Mode
 
+In the Faikout code some units appear to select the brightness of the unit LEDs
+via a combination of the motion sensor and LED bits. Let me know if this is the
+case for you and I can try to implement better control.
+
+### Number
+
+* Demand Control (v2+, unverified). Select from 30%-100% of power output. As a
+  reference point, Econo limits this to around 70%.
+
+## Feedback
+
+### Sensor
+
+Sensors in ESPHome are geared more towards a periodic ADC value that can be
+filtered as necessary. The values read from the Daikin unit are pre-processed
+and won't normally require averaging filters and the like. The sensor component
+supports a configurable update interval that will publish the current values
+at a chosen rate. To make this reporting more responsive, the user can set this
+value to zero and every update from the unit, interesting or not, will be
+published. To reduce spam when doing this, please configure a delta filter on
+your sensors and only changes will be published over the network. See the
+example configuration.
+
+* Inside temperature, usually measured at indoor air handler return.
+* Outside temperature from the exchanger.
+* Coil temperature of indoor air handler.
+* Target temperature (internal setpoint, modified by special modes). This is
+  not the user setpoint and not that interesting to me but may be useful for
+  your automations.
+* Fan speed of inside blower.
+* Vertical swing angle of louvre. This uses Daikin's reference frame.
+* Compressor frequency of the outside exchanger.
+* Humidity. Not supported on all units, can report a consistent 50% or 0% if
+  not present.
+* Unit's demand from outside exchanger.
+
+v2+ protocol units may also support:
+
+* IR counter that increments when the remote is used.
+* Total power consumption in kWh.
+* Outdoor unit capacity in indoor units.
+
 ### Binary Sensor
 
 Mode indicators that mirror the switches above for units and modes that don't
-support setting via S21. On one unit comfort, quiet and sensor control wasn't
-supported, but these binary sensors can be used to see the value set via the IR
-remote. There's no point in having both the switch and binary sensor active at
-the same time.
+support setting via S21. There's no point in having both the switch and
+corresponding binary sensor active at he same time.
 
-* Powerful Mode (can pull from unit state bitfield, see note below)
+* Powerful Mode. Can pull from unit state bitfield when the primary query is
+  unsupported. See the note about the bitfield and support for it below.
 * Comfort Mode
 * Quiet Mode
 * Streamer Mode
@@ -145,14 +177,15 @@ logs can let me blacklist your model and let others avoid this.
 
 Additional binary sensors:
 
-* Serial error (always OK if working, developer use)
+* Serial error. Always OK if working, this is mainly for developer use.
 
 ### Text Sensor
 
 As always, actual support may vary.
 
-* Software Version (v2+)
 * Model Name (v3.40+, untested)
+* Software Revision (v3+)
+* Software Version (v2+)
 
 If you've read the Faikout wiki you'll see many more queries available than
 what this project supports. I've added a text_sensor component to read these
@@ -162,13 +195,6 @@ looks interesting you can see the value change over time in Home Assistant.
 I'd prefer if we use this just to confirm a query works and then add proper
 support, rather than trying to interpret the string via HA. Open an issue with
 details if you want a sensor added.
-
-### Number ###
-
-v2 protocol units may support (see debug log output for detection results):
-
-* Demand Control (unverified)
-  30%-100% of power output. As a reference point, Econo lies around 70%.
 
 ## Limitations
 
@@ -184,13 +210,13 @@ this writing, independent UART pin inversion control also wasn't possible.
   documentation for supported wired remotes and their feature sets to confirm.
 * This code has only been tested on ESP32 pico and ESP32-S3. It compiles for
   ESP8266.
-* Tested with 4MXL36TVJU outdoor unit and CTXS07LVJU, FTXS12LVJU, FTXS15LVJU
-  indoor units.
+* Tested with my 4MXL36TVJU outdoor unit and CTXS07LVJU, FTXS12LVJU, FTXS15LVJU
+  indoor units. These are protocol v0.
 * Presence detection is limited to mode configuration. I haven't found a way to
   detect the state of the sensor and expose a motion detector sensor. If you're
   handy with electronics, the PIR sensor output can be wired to a spare GPIO
   and used that way.
-* Does not interact with the indoor units schedules (do that with HA instead).
+* Does not interact with the indoor units schedules. Do that with HA instead.
 * Higher protocol versions have limited support for their features due to the
   equipment available to me, though I'm happy to try to work with you.
 * Daikin's internal R&D departments must be a bit chaotic. The latest models
@@ -268,7 +294,7 @@ Vcc on the dev board.
 
 ## Contributing
 
-If you can write C++, great. Even if you're more of a YAML writer and user,
+If you can write C++, great. Even if you're more of a YAML writer or user,
 your assistance with this project would be helpful. Here are some possible
 ways:
 
@@ -293,6 +319,8 @@ ways:
   byteswapped if we don't otherwise use them so unknown static fields may
   appear reversed compared to that project. Please verify this when
   contributing.
+* Check the discussions section on Github for things that may not be in this
+  readme yet.
 
 See existing issues, open a new one or post in the discussions section with
 your findings. Thanks.
@@ -307,17 +335,17 @@ See the configuration example below. This feature seems designed for the
 one-to-many case, whereas this system is more of a many-to-one configuration.
 Locally I have two configuration template files, one for indoor only units and
 one for a single indoor unit with an outdoor unit subdevice. If I can find a
-better solution I'll update the example.
+better solution I'll update the example. You can also use this feature to hide
+away a bunch of stats in a subdevice and leave the primary interface clean.
 
 When using an external temperature sensor as a room reference instead of the
-internal Daikin value (which may be misleading due to placement of the unit)
-it's recommended to change the target_temperature step to 0.5°C to reflect the
-granularity of the alternate control loop provided. The default is 1.0°C to
-match Daikin's internal granularity.
+internal Daikin value it's recommended to change the target_temperature step
+to 0.5°C to reflect the granularity of the alternate control loop provided.
+The default is 1.0°C to match Daikin's internal granularity.
 
 ```yaml
 esphome:
-  min_version: "2025.11"
+  min_version: "2025.12"
   devices:
     - id: daikin_outdoor
       name: "Daikin Compressor"
@@ -514,10 +542,12 @@ binary_sensor:
 
 text_sensor:
   - platform: daikin_s21
-    software_version:
-      name: Software Version
     model:
       name: Model
+    software_revision:
+      name: Software Revision
+    software_version:
+      name: Software Version
     # raw case-sensitive query monitoring for debugging
     # queries:
     #   - RK

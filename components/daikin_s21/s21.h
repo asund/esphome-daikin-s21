@@ -89,6 +89,7 @@ class DaikinS21 : public PollingComponent {
   auto get_unit_state() const { return this->unit_state; }
   auto get_system_state() const { return this->system_state; }
   auto get_software_version() const { return this->software_version.data(); }
+  auto get_software_revision() const { return this->software_revision.data(); }
   auto get_model_name() const { return this->model_name.data(); }
   bool get_active() const { return this->active; }
   bool get_serial_error() const { return this->serial_error; }
@@ -150,6 +151,8 @@ class DaikinS21 : public PollingComponent {
   void handle_vertical_swing_mode(std::span<const uint8_t> payload);
   void handle_state_outdoor_capacity(std::span<const uint8_t> payload);
   void handle_state_model_name(std::span<const uint8_t> payload);
+  void handle_state_software_revision(std::span<const uint8_t> payload);
+  void handle_state_model_v3(std::span<const uint8_t> payload);
   void handle_env_power_on_off(std::span<const uint8_t> payload);
   void handle_env_indoor_unit_mode(std::span<const uint8_t> payload);
   void handle_env_temperature_setpoint(std::span<const uint8_t> payload);
@@ -210,7 +213,9 @@ class DaikinS21 : public PollingComponent {
   ProtocolVersion protocol_version{ProtocolUndetected};
   DaikinModel modelV0{ModelUnknown};
   DaikinModel modelV2{ModelUnknown};
-  std::array<char, 8+1> software_version{};
+  DaikinModel modelV3{ModelUnknown};
+  std::array<char, 8+1> software_version{"unknown"};
+  std::array<char, 8+1> software_revision{"unknown"};
   std::array<char, 22+1> model_name{"unknown"};
   uint8_t outdoor_capacity{};
 

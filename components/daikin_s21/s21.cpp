@@ -179,58 +179,59 @@ DaikinS21::DaikinS21(DaikinSerial * const serial)
   // this is done in the constructor so debug queries are only ever added to this list
   // see https://github.com/revk/ESP32-Faikout/wiki/S21-Protocol for documentation
   this->queries = {
-    {StateQuery::Basic, &DaikinS21::handle_state_basic},
-    {StateQuery::OptionalFeatures, &DaikinS21::handle_nop, true},
-    // {StateQuery::OnOffTimer},  // unused, use home assistant for scheduling
-    {StateQuery::ErrorStatus, &DaikinS21::handle_state_error_status},
-    {StateQuery::SwingOrHumidity, &DaikinS21::handle_state_swing_or_humidity},
-    {StateQuery::SpecialModes, &DaikinS21::handle_state_special_modes},
-    {StateQuery::DemandAndEcono, &DaikinS21::handle_state_demand_and_econo},
-    {StateQuery::OldProtocol, &DaikinS21::handle_nop, true},  // protocol version detect
-    {StateQuery::InsideOutsideTemperatures, &DaikinS21::handle_state_inside_outside_temperature},
-    // {StateQuery::FB, &DaikinS21::handle_nop}, // unknown
-    {StateQuery::ModelCode, &DaikinS21::handle_state_model_code_v2, true},
-    {StateQuery::IRCounter, &DaikinS21::handle_state_ir_counter},
-    {StateQuery::V2OptionalFeatures, &DaikinS21::handle_nop, true},
-    {StateQuery::PowerConsumption, &DaikinS21::handle_state_power_consumption},
-    // {StateQuery::ITELC, &DaikinS21::handle_nop},  // unknown, daikin intelligent touch controller?
-    // {StateQuery::FP, &DaikinS21::handle_nop}, // unknown
-    // {StateQuery::FQ, &DaikinS21::handle_nop}, // unknown
-    {StateQuery::VerticalSwingMode, &DaikinS21::handle_vertical_swing_mode},
-    // {StateQuery::FS, &DaikinS21::handle_nop}, // unknown
-    {StateQuery::OutdoorCapacity, &DaikinS21::handle_state_outdoor_capacity}, // unconfirmed, outdoor unit capacity?
-    {StateQuery::V3OptionalFeatures, &DaikinS21::handle_nop, true},
-    {StateQuery::ModelName, &DaikinS21::handle_state_model_name, true},
+    {StateQuery::Basic, &DaikinS21::handle_state_basic, 4},
+    {StateQuery::OptionalFeatures, &DaikinS21::handle_nop, 4, true},
+    // {StateQuery::OnOffTimer, &DaikinS21::handle_nop, 4},  // unused, use home assistant for scheduling
+    {StateQuery::ErrorStatus, &DaikinS21::handle_state_error_status, 4},
+    {StateQuery::SwingOrHumidity, &DaikinS21::handle_state_swing_or_humidity, 4},
+    {StateQuery::SpecialModes, &DaikinS21::handle_state_special_modes, 4},
+    {StateQuery::DemandAndEcono, &DaikinS21::handle_state_demand_and_econo, 4},
+    {StateQuery::OldProtocol, &DaikinS21::handle_nop, 4, true},  // protocol version detect
+    {StateQuery::InsideOutsideTemperatures, &DaikinS21::handle_state_inside_outside_temperature, 4},
+    // {StateQuery::FB, &DaikinS21::handle_nop, 4}, // unknown
+    {StateQuery::ModelCode, &DaikinS21::handle_state_model_code_v2, 4, true},
+    {StateQuery::IRCounter, &DaikinS21::handle_state_ir_counter, 4},
+    {StateQuery::V2OptionalFeatures, &DaikinS21::handle_nop, 4, true},
+    {StateQuery::PowerConsumption, &DaikinS21::handle_state_power_consumption, 4},
+    // {StateQuery::ITELC, &DaikinS21::handle_nop, 4},  // unknown, daikin intelligent touch controller?
+    // {StateQuery::FP, &DaikinS21::handle_nop, 4}, // unknown
+    // {StateQuery::FQ, &DaikinS21::handle_nop, 4}, // unknown
+    {StateQuery::VerticalSwingMode, &DaikinS21::handle_vertical_swing_mode, 4},
+    // {StateQuery::FS, &DaikinS21::handle_nop, 4}, // unknown
+    {StateQuery::OutdoorCapacity, &DaikinS21::handle_state_outdoor_capacity, 4},
+    {StateQuery::V3OptionalFeatures, &DaikinS21::handle_nop, 32, true},
+    {StateQuery::ModelName, &DaikinS21::handle_state_model_name, 32, true},
     // {StateQuery::FV, &DaikinS21::handle_nop}, // unknown
-    {StateQuery::NewProtocol, &DaikinS21::handle_nop, true},  // protocol version detect
-    // {EnvironmentQuery::PowerOnOff, &DaikinS21::handle_env_power_on_off}, // redundant
-    // {EnvironmentQuery::IndoorUnitMode, &DaikinS21::handle_env_indoor_unit_mode}, // redundant
-    // {EnvironmentQuery::TemperatureSetpoint, &DaikinS21::handle_env_temperature_setpoint},  // redundant
-    // {EnvironmentQuery::OnTimerSetting}, // unused, unsupported
-    // {EnvironmentQuery::OffTimerSetting},  // unused, unsupported
-    // {EnvironmentQuery::SwingMode, &DaikinS21::handle_env_swing_mode},  // redundant
-    {EnvironmentQuery::FanMode, &DaikinS21::handle_env_fan_mode},
-    {EnvironmentQuery::InsideTemperature, &DaikinS21::handle_env_inside_temperature},
-    {EnvironmentQuery::LiquidTemperature, &DaikinS21::handle_env_liquid_temperature},
-    // {EnvironmentQuery::FanSpeedSetpoint, &DaikinS21::handle_env_fan_speed_setpoint},  // not supported yet, can translate DaikinFanMode to RPM
-    {EnvironmentQuery::FanSpeed, &DaikinS21::handle_env_fan_speed},
-    // {EnvironmentQuery::LouvreAngleSetpoint, &DaikinS21::handle_env_vertical_swing_angle_setpoint},  // not supported yet
-    {EnvironmentQuery::VerticalSwingAngle, &DaikinS21::handle_env_vertical_swing_angle},
-    // {EnvironmentQuery::RW, &DaikinS21::handle_nop},  // unknown, "00" for me
-    {EnvironmentQuery::TargetTemperature, &DaikinS21::handle_env_target_temperature},
-    {EnvironmentQuery::OutsideTemperature, &DaikinS21::handle_env_outside_temperature},
-    {EnvironmentQuery::IndoorFrequencyCommandSignal, &DaikinS21::handle_env_indoor_frequency_command_signal},
-    {EnvironmentQuery::CompressorFrequency, &DaikinS21::handle_env_compressor_frequency},
-    {EnvironmentQuery::IndoorHumidity, &DaikinS21::handle_env_indoor_humidity},
-    {EnvironmentQuery::CompressorOnOff, &DaikinS21::handle_env_compressor_on_off},
-    // {EnvironmentQuery::CompressorOnOff}, // redundant
-    {EnvironmentQuery::UnitState, &DaikinS21::handle_env_unit_state},
-    {EnvironmentQuery::SystemState, &DaikinS21::handle_env_system_state},
-    // {EnvironmentQuery::Rz52, &DaikinS21::handle_nop},  // unknown, "40"for me
-    // {EnvironmentQuery::Rz72, &DaikinS21::handle_nop},  // unknown, "23" for me
-    {MiscQuery::Model, &DaikinS21::handle_misc_model_v0, true}, // some sort of model? always "3E53" for me, regardless of head unit -- outdoor unit?
-    {MiscQuery::Version, &DaikinS21::handle_nop, true}, // purportedly another version, always "00C0" for me
-    {MiscQuery::SoftwareVersion, &DaikinS21::handle_misc_software_version, true},
+    {StateQuery::NewProtocol, &DaikinS21::handle_nop, 4, true},  // protocol version detect
+    {StateQuery::SoftwareRevision, &DaikinS21::handle_state_software_revision, 32, true},
+    {StateQuery::V3Model, &DaikinS21::handle_state_model_v3, 4, true}, // unknown/unconfirmed
+    // {EnvironmentQuery::PowerOnOff, &DaikinS21::handle_env_power_on_off, 1}, // redundant
+    // {EnvironmentQuery::IndoorUnitMode, &DaikinS21::handle_env_indoor_unit_mode, 1}, // redundant
+    // {EnvironmentQuery::TemperatureSetpoint, &DaikinS21::handle_env_temperature_setpoint, 4},  // redundant
+    // {EnvironmentQuery::OnTimerSetting, &DaikinS21::handle_nop}, // unused, unsupported
+    // {EnvironmentQuery::OffTimerSetting, &DaikinS21::handle_nop},  // unused, unsupported
+    // {EnvironmentQuery::SwingMode, &DaikinS21::handle_env_swing_mode, 2},  // redundant
+    {EnvironmentQuery::FanMode, &DaikinS21::handle_env_fan_mode, 1},
+    {EnvironmentQuery::InsideTemperature, &DaikinS21::handle_env_inside_temperature, 4},
+    {EnvironmentQuery::LiquidTemperature, &DaikinS21::handle_env_liquid_temperature, 4},
+    // {EnvironmentQuery::FanSpeedSetpoint, &DaikinS21::handle_env_fan_speed_setpoint, 3},  // not supported yet, can translate DaikinFanMode to RPM
+    {EnvironmentQuery::FanSpeed, &DaikinS21::handle_env_fan_speed, 3},
+    // {EnvironmentQuery::LouvreAngleSetpoint, &DaikinS21::handle_env_vertical_swing_angle_setpoint, 4},  // not supported yet
+    {EnvironmentQuery::VerticalSwingAngle, &DaikinS21::handle_env_vertical_swing_angle, 4},
+    // {EnvironmentQuery::RW, &DaikinS21::handle_nop, 2},  // unknown, "00" for me
+    {EnvironmentQuery::TargetTemperature, &DaikinS21::handle_env_target_temperature, 4},
+    {EnvironmentQuery::OutsideTemperature, &DaikinS21::handle_env_outside_temperature, 4},
+    {EnvironmentQuery::IndoorFrequencyCommandSignal, &DaikinS21::handle_env_indoor_frequency_command_signal, 3},
+    {EnvironmentQuery::CompressorFrequency, &DaikinS21::handle_env_compressor_frequency, 3},
+    {EnvironmentQuery::IndoorHumidity, &DaikinS21::handle_env_indoor_humidity, 3},
+    {EnvironmentQuery::CompressorOnOff, &DaikinS21::handle_env_compressor_on_off, 1},
+    {EnvironmentQuery::UnitState, &DaikinS21::handle_env_unit_state, 2},
+    {EnvironmentQuery::SystemState, &DaikinS21::handle_env_system_state, 2},
+    // {EnvironmentQuery::Rz52, &DaikinS21::handle_nop, 0},  // unknown, "40"for me
+    // {EnvironmentQuery::Rz72, &DaikinS21::handle_nop, 0},  // unknown, "23" for me
+    {MiscQuery::Model, &DaikinS21::handle_misc_model_v0, 0, true}, // some sort of model? always "3E53" for me, regardless of head unit -- outdoor unit?
+    {MiscQuery::Version, &DaikinS21::handle_nop, 0, true}, // purportedly another version, always "00C0" for me
+    {MiscQuery::SoftwareVersion, &DaikinS21::handle_misc_software_version, 0, true},
   };
 }
 
@@ -277,6 +278,10 @@ void DaikinS21::dump_config() {
  */
 void DaikinS21::set_climate_settings(const DaikinClimateSettings climate) {
   if (this->get_climate() != climate) {
+    ESP_LOGD(TAG, "Mode: %s  Setpoint: %.1f  Fan: %s",
+      LOG_STR_ARG(climate::climate_mode_to_string(climate.mode)),
+      climate.setpoint.f_degc(),
+      LOG_STR_ARG(daikin_fan_mode_to_cstr(climate.fan)));
     this->climate.stage(climate);
     this->trigger_cycle();
   }
@@ -479,14 +484,12 @@ void DaikinS21::check_ready_protocol_detection() {
   static constexpr uint8_t old_version_1[] = {'0','1',0,0};
   static constexpr uint8_t old_version_2or3[] = {'0','2',0,0};
   static constexpr uint8_t old_version_31plus[] = {'0','2','0','0'};
-  static constexpr uint8_t new_version_unsupported[] = {'G',0,0,0,0,0}; // can be returned when unsupported, query string included in the payload
   const auto &old_proto = this->get_query(StateQuery::OldProtocol);
   const auto &new_proto = this->get_query(StateQuery::NewProtocol);
-  const bool new_proto_red_herring = new_proto.success() && std::ranges::equal(new_proto.value(), new_version_unsupported);
 
   this->protocol_version = ProtocolUndetected;
   // Check availability first, both protocol indicators were enabled on init so skip to the chase
-  if (old_proto.success() && (new_proto.failed() || new_proto_red_herring)) {
+  if (old_proto.success() && new_proto.failed()) {
     if (std::ranges::equal(old_proto.value(), old_version_0)) {
       this->protocol_version = ProtocolVersion(0);
     } else if (std::ranges::equal(old_proto.value(), old_version_1)) {
@@ -566,7 +569,8 @@ void DaikinS21::check_ready_protocol_detection() {
     }
     if (this->protocol_version >= ProtocolVersion(3)) {
       this->enable_query(StateQuery::V3OptionalFeatures);
-      // todo many more
+      this->enable_query(StateQuery::SoftwareRevision);
+      this->enable_query(StateQuery::V3Model);
     }
     if (this->protocol_version >= ProtocolVersion(3,40)) {
       this->enable_query(StateQuery::ModelName);
@@ -997,13 +1001,20 @@ void DaikinS21::handle_state_outdoor_capacity(const std::span<const uint8_t> pay
 }
 
 void DaikinS21::handle_state_model_name(std::span<const uint8_t> payload) {
-  if (payload.size() >= 22) {
-    payload = payload.first(22);
-    const auto end = std::ranges::find(payload, ' ');
-    payload = { payload.begin(), end };
-    std::ranges::copy(payload, this->model_name.begin());
-    this->model_name[payload.size()] = 0;
-  }
+  payload = payload.first(22);
+  const auto end = std::ranges::find(payload, ' ');
+  payload = { payload.begin(), end };
+  std::ranges::copy(payload, this->model_name.begin());
+  this->model_name[payload.size()] = 0;
+}
+
+void DaikinS21::handle_state_software_revision(std::span<const uint8_t> payload) {
+  std::ranges::copy_n(payload.begin(), 8, this->software_revision.begin());
+  this->software_revision[8] = 0;
+}
+
+void DaikinS21::handle_state_model_v3(std::span<const uint8_t> payload) {
+  this->modelV3 = bytes_to_num(payload, 16);
 }
 
 /** Inferior to StateQuery::Basic */
@@ -1120,6 +1131,7 @@ void DaikinS21::handle_misc_software_version(std::span<const uint8_t> payload) {
   }
   if (payload.size() <= (this->software_version.size()-1)) {
     std::ranges::reverse_copy(payload, this->software_version.begin());
+    this->software_version[payload.size()] = 0;
   }
 }
 
@@ -1160,13 +1172,18 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
                     hex_repr(payload).c_str());
         }
         // decode payload
-        if (this->active_query->handler != nullptr) {
-          std::invoke(this->active_query->handler, this, payload);
+        if ((this->active_query->response_length != 0) && (payload.size() != this->active_query->response_length)) {
+          ESP_LOGW(TAG, "Unexpected payload length for %" PRI_SV " (%s)", this->active_query->command, hex_repr(payload).c_str());
+          this->active_query->nak(payload);
         } else {
-          ESP_LOGD(TAG, "Unhandled command: %s", hex_repr(response).c_str());
+          if (this->active_query->handler == nullptr) {
+            ESP_LOGI(TAG, "Unhandled command: %s", hex_repr(response).c_str());
+          } else {
+            std::invoke(this->active_query->handler, this, payload);
+          }
+          // save a copy of the payload
+          this->active_query->ack(payload);
         }
-        // save a copy of the payload
-        this->active_query->ack(payload);
       } else {
         // nothing yet to do when a command is accepted
       }
@@ -1228,20 +1245,22 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
 }
 
 void DaikinS21::dump_state() {
-  ESP_LOGD(TAG, "Ready: %lX  Protocol: %" PRIu8 ".%" PRIu8 "  ModelV0: %04" PRIX16 "  ModelV2: %04" PRIX16,
+  ESP_LOGD(TAG, "Ready: %lX  Protocol: %" PRIu8 ".%" PRIu8 "  ModelV0: %04" PRIX16 "  ModelV2: %04" PRIX16 "  ModelV3: %04" PRIX16,
       this->ready.to_ulong(),
       this->protocol_version.major,
       this->protocol_version.minor,
       this->modelV0,
-      this->modelV2);
+      this->modelV2,
+      this->modelV3);
   if (this->debug) {
     const auto &old_proto = this->get_query(StateQuery::OldProtocol);
     const auto &new_proto = this->get_query(StateQuery::NewProtocol);
     const auto &misc_version = this->get_query(MiscQuery::Version);
-    ESP_LOGD(TAG, " G8: %s  GY00: %s  Ver: %s",
+    ESP_LOGD(TAG, " G8: %s  GY00: %s  Ver: %s  Rev: %s",
         str_repr(old_proto.value()).c_str(),
         str_repr(new_proto.value()).c_str(),
-        this->software_version.data());
+        this->software_version.data(),
+        this->software_revision.data());
   }
   ESP_LOGD(TAG, "  Fan: %c  VSwing: %c  HSwing: %c  MI: %c  Humid: %c  Dehumid: %c",
       this->support.fan ? 'Y' : 'N',
