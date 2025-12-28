@@ -1174,7 +1174,7 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
         // decode payload
         if ((this->active_query->response_length != 0) && (payload.size() != this->active_query->response_length)) {
           ESP_LOGW(TAG, "Unexpected payload length for %" PRI_SV " (%s)", this->active_query->command, hex_repr(payload).c_str());
-          this->active_query->nak();
+          this->active_query->nak(payload);
         } else {
           if (this->active_query->handler == nullptr) {
             ESP_LOGI(TAG, "Unhandled command: %s", hex_repr(response).c_str());
