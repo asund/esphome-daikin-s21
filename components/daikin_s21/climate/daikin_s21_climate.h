@@ -10,6 +10,17 @@
 
 namespace esphome::daikin_s21 {
 
+class DaikinSetpointMode {
+ public:
+  ESPPreferenceObject setpoint_pref{};
+  DaikinC10 offset{};
+  DaikinC10 min{};
+  DaikinC10 max{};
+
+  void save_setpoint(DaikinC10 value);
+  DaikinC10 load_setpoint();
+};
+
 class DaikinS21Climate : public climate::Climate,
                          public PollingComponent,
                          public Parented<DaikinS21> {
@@ -24,10 +35,7 @@ class DaikinS21Climate : public climate::Climate,
   void set_supported_swing_modes(climate::ClimateSwingModeMask swing_modes);
   void set_temperature_reference_sensor(sensor::Sensor *sensor) { this->temperature_sensor_ = sensor; }
   void set_humidity_reference_sensor(sensor::Sensor *sensor);
-  void set_max_cool_temperature(DaikinC10 temperature) { this->max_cool_temperature = temperature; };
-  void set_min_cool_temperature(DaikinC10 temperature) { this->min_cool_temperature = temperature; };
-  void set_max_heat_temperature(DaikinC10 temperature) { this->max_heat_temperature = temperature; };
-  void set_min_heat_temperature(DaikinC10 temperature) { this->min_heat_temperature = temperature; };
+  void set_setpoint_mode_config(climate::ClimateMode mode, DaikinC10 offset, DaikinC10 min, DaikinC10 max);
 
  protected:
   climate::ClimateTraits traits_{};
@@ -38,23 +46,19 @@ class DaikinS21Climate : public climate::Climate,
   bool use_temperature_sensor();
   DaikinC10 temperature_sensor_degc();
   DaikinC10 get_current_temperature();
-  DaikinC10 calc_s21_setpoint();
-  void save_setpoint(DaikinC10 value);
-  DaikinC10 load_setpoint();
+  bool calc_unit_setpoint();
   float get_current_humidity() const;
   void set_s21_climate();
 
   sensor::Sensor *temperature_sensor_{};
   sensor::Sensor *humidity_sensor_{};
   DaikinC10 unit_setpoint{TEMPERATURE_INVALID};
-  DaikinC10 max_cool_temperature{};
-  DaikinC10 min_cool_temperature{};
-  DaikinC10 max_heat_temperature{};
-  DaikinC10 min_heat_temperature{};
   bool check_setpoint{};
-  ESPPreferenceObject auto_setpoint_pref;
-  ESPPreferenceObject cool_setpoint_pref;
-  ESPPreferenceObject heat_setpoint_pref;
+
+  DaikinSetpointMode* get_setpoint_mode_params(climate::ClimateMode mode);
+  DaikinSetpointMode heat_cool_params{};
+  DaikinSetpointMode cool_params{};
+  DaikinSetpointMode heat_params{};
 };
 
 } // namespace esphome::daikin_s21

@@ -42,36 +42,23 @@ CONF_IR_COUNTER = "ir_counter"
 CONF_POWER_CONSUMPTION = "power_consumption"
 CONF_OUTDOOR_CAPACITY = "outdoor_capacity"
 
+TEMPERATURE_SENSOR_SCHEMA = sensor.sensor_schema(
+    unit_of_measurement=UNIT_CELSIUS,
+    accuracy_decimals=1,
+    device_class=DEVICE_CLASS_TEMPERATURE,
+    state_class=STATE_CLASS_MEASUREMENT,
+)
+
 CONFIG_SCHEMA = (
     cv.COMPONENT_SCHEMA
     .extend({cv.GenerateID(): cv.declare_id(DaikinS21Sensor)})
     .extend(cv.polling_component_schema("10s"))
     .extend(S21_PARENT_SCHEMA)
     .extend({
-        cv.Optional(CONF_INSIDE_TEMP): sensor.sensor_schema(
-            unit_of_measurement=UNIT_CELSIUS,
-            accuracy_decimals=1,
-            device_class=DEVICE_CLASS_TEMPERATURE,
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_TARGET_TEMP): sensor.sensor_schema(
-            unit_of_measurement=UNIT_CELSIUS,
-            accuracy_decimals=1,
-            device_class=DEVICE_CLASS_TEMPERATURE,
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_OUTSIDE_TEMP): sensor.sensor_schema(
-            unit_of_measurement=UNIT_CELSIUS,
-            accuracy_decimals=1,
-            device_class=DEVICE_CLASS_TEMPERATURE,
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_COIL_TEMP): sensor.sensor_schema(
-            unit_of_measurement=UNIT_CELSIUS,
-            accuracy_decimals=1,
-            device_class=DEVICE_CLASS_TEMPERATURE,
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
+        cv.Optional(CONF_INSIDE_TEMP): TEMPERATURE_SENSOR_SCHEMA,
+        cv.Optional(CONF_TARGET_TEMP): TEMPERATURE_SENSOR_SCHEMA,
+        cv.Optional(CONF_OUTSIDE_TEMP): TEMPERATURE_SENSOR_SCHEMA,
+        cv.Optional(CONF_COIL_TEMP): TEMPERATURE_SENSOR_SCHEMA,
         cv.Optional(CONF_FAN_SPEED): sensor.sensor_schema(
             unit_of_measurement=UNIT_REVOLUTIONS_PER_MINUTE,
             icon=ICON_FAN,

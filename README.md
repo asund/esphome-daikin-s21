@@ -17,6 +17,17 @@ A big thanks to:
   protocol control debugging.
 * The users of this project who have contributed, tested or offered feedback.
 
+## Recent Changes
+
+A short changelog of sorts, I'll keep things here where a user might encounter
+breaking or significant changes.
+
+* Configuration schema for the climate component (specidically the unit
+  temperature range limits) has changed to organize them by mode as well as
+  adding a temperature offset to be applied when commanding the unit. Update
+  your configurations to the new schema (see example) if your project now fails
+  to compile.
+
 ## Features
 
 The S21 platform provides a few ESPhome component types that expose the
@@ -51,8 +62,14 @@ The main control interface. Supported features:
 * Optional external temperature and humidity reporting and use in an secondary
   control loop. You can use a sensor placed in your living space to get a
   better reflection of the temperature you feel.
-* Limits for internally commanded setpoints. Defaults should work fine, but if
-  your unit is different they can be overridden.
+* Optional setpoint mode (HEAT_COOL, COOL, HEAT) configuration:
+  * Offset to apply to commanded value. If you find your unit adequately
+    conditions your living space, Daikin's control loop will overshoot the
+    setpoint. It can also not achieve the desired setpoint based on the space
+    and reference sensor placement. e.g. One of my rooms is 1.0C less than the
+    target temperature at a steady state so I add a +1.0C offset here.
+  * Range limits for values sent to the unit. Defaults should work fine, but if
+    your unit is different they can be overridden.
 
 Daikin's modes don't neatly fit into the discrete "preset" category modelled by
 ESPHome as they function more like mode modifiers. Switches are provided for
@@ -64,9 +81,8 @@ The standard Daikin control loop has a few deficiencies:
 * The current temperature feedback value has 0.5°C granularity.
 * The current temperature sensor is located in the unit, in most cases
   a wall unit placed higher in a room. This reading doesn't always reflect
-  the temperature felt by occupants.
-* It will overshoot the setpoint to try to account for this (see your
-  service manual for details).
+  the temperature felt by occupants. It will overshoot the setpoint to try to
+  account for this (see your service manual for details).
 
 Because of these, the climate component implements a separate loop on top of
 the Daikin internal one. An external temperature sensor can be used to provide
@@ -78,7 +94,8 @@ configured with the component update interval when using this mode. All of this
 is downstream of Daikin's reported temperature precision and relatively broad
 control loop hysteresis, so it's far from ideal but can compensate for a
 difference in temperature between the unit and your space. Keep in mind the
-unit will overshoot, so you may have to add an offset when picking a setpoint.
+unit will overshoot, so you may want to configure an offset for the mode based
+on a measured reference value.
 
 ### Select
 
@@ -405,12 +422,19 @@ climate:
     # humidity_sensor: room_humidity  # External, see homeassistant sensor below
     # or leave unconfigured if unsupported to omit reporting
     # update_interval: 60s # Interval used to adjust the unit's setpoint using reference sensor
-    # Daikin internal supported temperature range setpoints, used to prevent sending out of range values to the unit.
-    # Defaults should be fine unless your unit differs (see your manual):
-    # max_cool_temperature: 32 # maximum setpoint when cool
-    # min_cool_temperature: 18  # minimum setpoint when cool or heat_cool
-    # max_heat_temperature: 30  # maximum setpoint when heat or heat_cool
-    # min_heat_temperature: 10 # minimum setpoint when heat
+    # Mode specific temperature parameters:
+    # heat_cool_mode:
+    #   offset: 0           # offset to apply to unit setpoint in this mode
+    #   min_temperature: 18 # minimum temperature to be sent to the unit in this mode, default probably fine
+    #   max_temperature: 30 # maximum temperature to be sent to the unit in this mode, default probably fine
+    # cool_mode:
+    #   offset: 0
+    #   min_temperature: 18
+    #   max_temperature: 32
+    # heat_mode:
+    #   offset: 0
+    #   min_temperature: 10
+    #   max_temperature: 30
 
 select:
   - platform: daikin_s21

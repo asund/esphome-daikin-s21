@@ -49,8 +49,6 @@ class DaikinC10 {
   constexpr DaikinC10 operator*(const DaikinC10 &arg) const { return this->value * arg.value; }
   constexpr DaikinC10 operator/(const DaikinC10 &arg) const { return this->value / arg.value; }
 
-  static DaikinC10 diff(const DaikinC10 &a, const DaikinC10 &b) { return std::abs(a.value - b.value); }
-
  private:
   int16_t value{};
 };
