@@ -6,7 +6,13 @@ import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import climate, sensor
 from esphome.const import (
+    CONF_COOL_MODE,
+    CONF_HEAT_MODE,
+    CONF_HEAT_COOL_MODE,
     CONF_HUMIDITY_SENSOR,
+    CONF_MAX_TEMPERATURE,
+    CONF_MIN_TEMPERATURE,
+    CONF_OFFSET,
     CONF_SENSOR,
     CONF_SUPPORTED_MODES,
     CONF_SUPPORTED_SWING_MODES,
@@ -30,10 +36,11 @@ SUPPORTED_CLIMATE_MODES_OPTIONS = {
     "DRY": climate.ClimateMode.CLIMATE_MODE_DRY,
 }
 
-CONF_MAX_COOL_TEMPERATURE = "max_cool_temperature"
-CONF_MIN_COOL_TEMPERATURE = "min_cool_temperature"
-CONF_MAX_HEAT_TEMPERATURE = "max_heat_temperature"
-CONF_MIN_HEAT_TEMPERATURE = "min_heat_temperature"
+CONFIG_MODE_SCHEMA = cv.Schema({
+    cv.Optional(CONF_OFFSET, default="0"): cv.temperature,
+    cv.Optional(CONF_MAX_TEMPERATURE, default="30"): cv.temperature,
+    cv.Optional(CONF_MIN_TEMPERATURE, default="18"): cv.temperature,
+})
 
 CONFIG_SCHEMA = (
     climate.climate_schema(DaikinS21Climate)
@@ -44,10 +51,9 @@ CONFIG_SCHEMA = (
         cv.Optional(CONF_HUMIDITY_SENSOR): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_SUPPORTED_MODES, default=list(SUPPORTED_CLIMATE_MODES_OPTIONS)): cv.ensure_list(cv.enum(SUPPORTED_CLIMATE_MODES_OPTIONS, upper=True)),
         cv.Optional(CONF_SUPPORTED_SWING_MODES, default=list(climate.CLIMATE_SWING_MODES)): cv.ensure_list(cv.enum(climate.CLIMATE_SWING_MODES, upper=True)),
-        cv.Optional(CONF_MAX_COOL_TEMPERATURE, default="32"): cv.temperature,
-        cv.Optional(CONF_MIN_COOL_TEMPERATURE, default="18"): cv.temperature,
-        cv.Optional(CONF_MAX_HEAT_TEMPERATURE, default="30"): cv.temperature,
-        cv.Optional(CONF_MIN_HEAT_TEMPERATURE, default="10"): cv.temperature,
+        cv.Optional(CONF_HEAT_COOL_MODE, default={}): CONFIG_MODE_SCHEMA,
+        cv.Optional(CONF_COOL_MODE, default={CONF_MAX_TEMPERATURE:"32", CONF_MIN_TEMPERATURE:"18"}): CONFIG_MODE_SCHEMA,
+        cv.Optional(CONF_HEAT_MODE, default={CONF_MAX_TEMPERATURE:"30", CONF_MIN_TEMPERATURE:"10"}): CONFIG_MODE_SCHEMA,
     })
 )
 
@@ -74,7 +80,10 @@ async def to_code(config):
     if len(config[CONF_SUPPORTED_SWING_MODES]) > 1: # don't generate code if just OFF, leave empty to avoid UI clutter
         cg.add(var.set_supported_swing_modes(config[CONF_SUPPORTED_SWING_MODES]))
 
-    cg.add(var.set_max_cool_temperature(config[CONF_MAX_COOL_TEMPERATURE]))
-    cg.add(var.set_min_cool_temperature(config[CONF_MIN_COOL_TEMPERATURE]))
-    cg.add(var.set_max_heat_temperature(config[CONF_MAX_HEAT_TEMPERATURE]))
-    cg.add(var.set_min_heat_temperature(config[CONF_MIN_HEAT_TEMPERATURE]))
+    setpoint_modes = (
+        (climate.ClimateMode.CLIMATE_MODE_HEAT_COOL, config[CONF_HEAT_COOL_MODE]),
+        (climate.ClimateMode.CLIMATE_MODE_COOL, config[CONF_COOL_MODE]),
+        (climate.ClimateMode.CLIMATE_MODE_HEAT, config[CONF_HEAT_MODE]),
+    )
+    for mode, cfg in setpoint_modes:
+        cg.add(var.set_setpoint_mode_config(mode, cfg[CONF_OFFSET], cfg[CONF_MIN_TEMPERATURE], cfg[CONF_MAX_TEMPERATURE]))
