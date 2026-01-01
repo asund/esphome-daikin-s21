@@ -10,11 +10,11 @@ void DaikinS21Select::setup() {
 }
 
 void DaikinS21Select::loop() {
-  if (this->swing_select_ != nullptr) {
+  if (this->vertical_swing_select_ != nullptr) {
     const auto current = static_cast<size_t>(this->get_parent()->get_vertical_swing_mode());
-    const auto index = this->swing_select_->active_index();
+    const auto index = this->vertical_swing_select_->active_index();
     if ((index.has_value() == false) || (index.value() != current)) {
-      this->swing_select_->publish_state(current);
+      this->vertical_swing_select_->publish_state(current);
     }
   }
 
@@ -23,12 +23,12 @@ void DaikinS21Select::loop() {
 
 void DaikinS21Select::dump_config() {
   ESP_LOGCONFIG(TAG, "Daikin S21 Select:");
-  if (swing_select_ != nullptr) {
-    LOG_SELECT("  ", "Vertical Swing", this->swing_select_);
+  if (vertical_swing_select_ != nullptr) {
+    LOG_SELECT("  ", "Vertical Swing", this->vertical_swing_select_);
   }
 }
 
-void DaikinS21SelectSwing::control(const size_t index) {
+void DaikinS21SelectVerticalSwing::control(const size_t index) {
   this->get_parent()->set_vertical_swing_mode(static_cast<DaikinVerticalSwingMode>(index));
   this->publish_state(index);
 }

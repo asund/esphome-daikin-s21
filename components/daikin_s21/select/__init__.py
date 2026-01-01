@@ -17,7 +17,7 @@ from .. import (
 )
 
 DaikinS21Select = daikin_s21_ns.class_("DaikinS21Select", cg.Component)
-DaikinS21SelectSwing = daikin_s21_ns.class_("DaikinS21SelectSwing", select.Select)
+DaikinS21SelectVerticalSwing = daikin_s21_ns.class_("DaikinS21SelectVerticalSwing", select.Select)
 DaikinS21VerticalSwingMode = daikin_s21_ns.enum("DaikinVerticalSwingMode")
 
 SWING_MODES = {
@@ -38,7 +38,7 @@ CONFIG_SCHEMA = (
     .extend(S21_PARENT_SCHEMA)
     .extend({
         cv.Optional(CONF_VERTICAL_SWING): select.select_schema(
-            DaikinS21SelectSwing,
+            DaikinS21SelectVerticalSwing,
             icon=ICON_VERTICAL_SWING,
         ).extend(S21_PARENT_SCHEMA),
     })
@@ -50,7 +50,7 @@ async def to_code(config):
     await cg.register_parented(var, config[CONF_S21_ID])
 
     selects = (
-        (CONF_VERTICAL_SWING, var.set_swing_select, list(SWING_MODES.keys())),
+        (CONF_VERTICAL_SWING, var.set_vertical_swing_select, list(SWING_MODES.keys())),
     )
     for key, func, options in selects:
         if key in config:
