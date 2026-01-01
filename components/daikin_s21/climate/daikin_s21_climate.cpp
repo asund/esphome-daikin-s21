@@ -3,7 +3,6 @@
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 #include "daikin_s21_climate.h"
-#include "../daikin_s21_fan_modes.h"
 #include "../s21.h"
 
 using namespace esphome;
@@ -66,7 +65,7 @@ void DaikinS21Climate::setup() {
   std::vector<const char *> supported_fan_mode_strings{fan_strings.begin(), fan_strings.end()};
   this->traits_.set_supported_custom_fan_modes(supported_fan_mode_strings);
   // ensure optionals are populated with defaults
-  this->set_custom_fan_mode_(daikin_fan_mode_to_cstr(DaikinFanMode::Auto));
+  this->set_custom_fan_mode_(daikin_fan_mode_to_cstr(DaikinFanAuto));
   // initialize setpoint, will be loaded from preferences or unit shortly
   this->target_temperature = NAN;
   // enable event driven updates
@@ -209,6 +208,7 @@ void DaikinS21Climate::set_supported_modes(const climate::ClimateModeMask modes)
  */
 void DaikinS21Climate::set_supported_swing_modes(const climate::ClimateSwingModeMask swing_modes) {
   this->traits_.set_supported_swing_modes(swing_modes);
+  this->get_parent()->request_readout(DaikinS21::ReadoutSwingHumidty);
 }
 
 /**

@@ -5,8 +5,8 @@
 #include <functional>
 #include <limits>
 #include <type_traits>
+#include <utility>
 #include "esphome/components/climate/climate.h"
-#include "daikin_s21_fan_modes.h"
 
 namespace esphome::daikin_s21 {
 
@@ -101,6 +101,59 @@ class CommandState {
   }
 };
 
+using EncodingString = std::pair<uint8_t, const char *>;
+
+enum DaikinFanMode : uint8_t {
+  DaikinFanAuto,
+  DaikinFanSilent,
+  DaikinFan1,
+  DaikinFan2,
+  DaikinFan3,
+  DaikinFan4,
+  DaikinFan5,
+  DaikinFanModeCount, // for array sizing
+};
+
+inline constexpr std::array<EncodingString, DaikinFanModeCount> supported_daikin_fan_modes = {{
+  {'A', "Auto"},
+  {'B', "Silent"},
+  {'3', "1"},
+  {'4', "2"},
+  {'5', "3"},
+  {'6', "4"},
+  {'7', "5"},
+}};
+
+constexpr const char * daikin_fan_mode_to_cstr(const DaikinFanMode mode) {
+  return std::get<const char *>(supported_daikin_fan_modes[mode]);
+}
+
+DaikinFanMode string_to_daikin_fan_mode(std::string_view mode);
+
+struct DaikinClimateSettings {
+  climate::ClimateMode mode{climate::CLIMATE_MODE_OFF};
+  DaikinFanMode fan{DaikinFanAuto};
+  DaikinC10 setpoint{23};
+
+  constexpr bool operator==(const DaikinClimateSettings &other) const = default;
+};
+
+enum DaikinHumidityMode : uint8_t {
+  DaikinHumidityOff,
+  DaikinHumidityLow,
+  DaikinHumidityStandard,
+  DaikinHumidityHigh,
+  DaikinHumidityContinuous,
+  DaikinHumidityModeCount,  // for array sizing
+};
+
+struct DaikinSwingHumiditySettings {
+  climate::ClimateSwingMode swing{climate::ClimateSwingMode::CLIMATE_SWING_OFF};
+  DaikinHumidityMode humidity{DaikinHumidityOff};
+
+  constexpr bool operator==(const DaikinSwingHumiditySettings &other) const = default;
+};
+
 enum DaikinMode : uint8_t {
   ModePowerful,     // maximum output (20 minute timeout), mutaully exclusive with comfort/quiet/econo
   ModeComfort,      // fan angle depends on heating/cooling action
@@ -122,34 +175,37 @@ struct DaikinDemandEcono {
   constexpr bool operator==(const DaikinDemandEcono &other) const = default;
 };
 
-enum class DaikinVerticalSwingMode : uint8_t {
-  Off = 0,
-  Top = 1,
-  Upper = 2,
-  Middle = 3,
-  Lower = 4,
-  Bottom = 5,
-  On,
+enum DaikinVerticalSwingMode : uint8_t {
+  DaikinVerticalSwingOff,
+  DaikinVerticalSwingTop,
+  DaikinVerticalSwingUpper,
+  DaikinVerticalSwingMiddle,
+  DaikinVerticalSwingLower,
+  DaikinVerticalSwingBottom,
+  DaikinVerticalSwingOn,
+  DaikinVerticalSwingModeCount, // for array sizing
 };
 
 /**
  * Possible sources of active flag.
  */
-enum class ActiveSource : uint8_t {
-  Unknown,
-  CompressorOnOff,  // directly read from query
-  UnitState,        // interpreted from unit state bitfield
-  Unsupported,      // hardcoded to active
+enum ActiveSource : uint8_t {
+  ActiveSourceUnknown,
+  ActiveSourceCompressorOnOff,  // directly read from query
+  ActiveSourceUnitState,        // interpreted from unit state bitfield
+  ActiveSourceUnsupported,      // hardcoded to active
+  ActiveSourceCount,            // for array sizing
 };
 
 /**
  * Possible sources of powerful flag.
  */
-enum class PowerfulSource : uint8_t {
-  Unknown,
-  SpecialModes, // directly read from query
-  UnitState,    // interpreted from unit state bitfield
-  Disabled,
+enum PowerfulSource : uint8_t {
+  PowerfulSourceUnknown,
+  PowerfulSourceSpecialModes, // directly read from query
+  PowerfulSourceUnitState,    // interpreted from unit state bitfield
+  PowerfulSourceDisabled,
+  PowerfulSourceCount,        // for array sizing
 };
 
 /**
@@ -176,14 +232,6 @@ class DaikinSystemState {
   constexpr bool defrost() const { return (this->raw & 0x08) != 0; }
   constexpr bool multizone_conflict() const { return (this->raw & 0x20) != 0; }
   uint8_t raw{};
-};
-
-struct DaikinClimateSettings {
-  climate::ClimateMode mode{climate::CLIMATE_MODE_OFF};
-  DaikinFanMode fan{DaikinFanMode::Auto};
-  DaikinC10 setpoint{23};
-
-  constexpr bool operator==(const DaikinClimateSettings &other) const = default;
 };
 
 // MiscQuery::Model or StateQuery::ModelCode responses, reversed ascii hex (these are byte swapped from controller response)

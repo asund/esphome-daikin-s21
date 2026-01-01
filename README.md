@@ -103,6 +103,12 @@ on a measured reference value.
   for the vertical louvre, including the standard on and off for the varrying
   setting.
 
+* Humidity setpoint. v2+ may support this. The operation of this isn't well
+  understood. There may be protocol sequencing work required to maintain
+  control in the desired mode. If you have an "Ururu Sarara" unit and want to
+  help, please post your findings in the discussions section. For now the
+  setting is sent to the unit when changed in HA and nothing else done.
+
 ### Switch
 
 Mode toggle switches for protocol v2+. As a reminder: even if these modes are
@@ -438,6 +444,8 @@ climate:
 
 select:
   - platform: daikin_s21
+    humidity:
+      name: Humidity
     vertical_swing:
       name: Vertical Swing
 

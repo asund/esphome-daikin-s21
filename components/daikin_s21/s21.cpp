@@ -11,7 +11,7 @@ namespace esphome::daikin_s21 {
 
 static const char *const TAG = "daikin_s21";
 
-uint8_t climate_mode_to_daikin(const climate::ClimateMode mode) {
+constexpr uint8_t climate_mode_to_s21(const climate::ClimateMode mode) {
   switch (mode) {
       break;
     case climate::CLIMATE_MODE_HEAT:
@@ -30,7 +30,7 @@ uint8_t climate_mode_to_daikin(const climate::ClimateMode mode) {
   }
 }
 
-climate::ClimateMode daikin_to_climate_mode(const uint8_t mode) {
+constexpr climate::ClimateMode s21_to_climate_mode(const uint8_t mode) {
   switch (mode) {
     case '2': // dry
       return climate::CLIMATE_MODE_DRY;
@@ -48,7 +48,19 @@ climate::ClimateMode daikin_to_climate_mode(const uint8_t mode) {
   }
 }
 
-climate::ClimateAction daikin_to_climate_action(const uint8_t action) {
+constexpr DaikinFanMode s21_to_fan_mode(const uint8_t mode) {
+  const auto iter = std::ranges::find(supported_daikin_fan_modes, mode, [](const auto &elem){ return std::get<uint8_t>(elem); });
+  if (iter != std::ranges::end(supported_daikin_fan_modes)) {
+    return static_cast<DaikinFanMode>(std::ranges::distance(std::begin(supported_daikin_fan_modes), iter));
+  }
+  return DaikinFanAuto;
+}
+
+constexpr uint8_t fan_mode_to_s21(const DaikinFanMode mode) {
+  return std::get<uint8_t>(supported_daikin_fan_modes[mode]);
+}
+
+constexpr climate::ClimateAction s21_to_climate_action(const uint8_t action) {
   switch (action) {
     case '2': // dry
       return climate::CLIMATE_ACTION_DRYING;
@@ -66,7 +78,7 @@ climate::ClimateAction daikin_to_climate_action(const uint8_t action) {
   }
 }
 
-climate::ClimateSwingMode daikin_to_climate_swing_mode(const uint8_t mode) {
+constexpr climate::ClimateSwingMode s21_to_climate_swing_mode(const uint8_t mode) {
   switch (mode) {
     case '1':
       return climate::CLIMATE_SWING_VERTICAL;
@@ -79,7 +91,7 @@ climate::ClimateSwingMode daikin_to_climate_swing_mode(const uint8_t mode) {
   }
 }
 
-uint8_t climate_swing_mode_to_daikin(const climate::ClimateSwingMode mode) {
+constexpr uint8_t climate_swing_mode_to_s21(const climate::ClimateSwingMode mode) {
   switch (mode) {
     case climate::CLIMATE_SWING_BOTH:
       return '7';
@@ -93,39 +105,67 @@ uint8_t climate_swing_mode_to_daikin(const climate::ClimateSwingMode mode) {
   }
 }
 
-const char * active_source_to_string(const ActiveSource source) {
-  switch (source) {
-    case ActiveSource::CompressorOnOff:
-      return "Rg";
-    case ActiveSource::UnitState:
-      return "unit state";
-    case ActiveSource::Unsupported:
-      return "assumed on";
-    case ActiveSource::Unknown:
-    default:
-      return "undetected";
+static constexpr std::array<EncodingString, DaikinHumidityModeCount> humidity_modes = {{
+  {'0', "Off"},
+  {0x3A, "Low"},
+  {0x3B, "Standard"},
+  {0x3C, "High"},
+  {0xFF, "Continuous"},
+}};
+
+constexpr DaikinHumidityMode s21_to_humidity_mode(const uint8_t mode) {
+  const auto iter = std::ranges::find(humidity_modes, mode, [](const auto &elem){ return std::get<uint8_t>(elem); });
+  if (iter != std::ranges::end(humidity_modes)) {
+    return static_cast<DaikinHumidityMode>(std::ranges::distance(std::begin(humidity_modes), iter));
   }
+  return DaikinHumidityOff;
 }
 
-const char * powerful_source_to_string(const PowerfulSource source) {
-  switch (source) {
-    case PowerfulSource::SpecialModes:
-      return "G6";
-    case PowerfulSource::UnitState:
-      return "unit state";
-    case PowerfulSource::Disabled:
-      return "disabled";
-    case PowerfulSource::Unknown:
-    default:
-      return "undetected";
-  }
+constexpr uint8_t humidity_mode_to_s21(const DaikinHumidityMode mode) {
+  return std::get<uint8_t>(humidity_modes[mode]);
 }
+
+static constexpr std::array<EncodingString, DaikinVerticalSwingModeCount> vertical_swing_modes = {{
+  {'0', "Off"},
+  {'1', "Top"},
+  {'2', "Upper"},
+  {'3', "Middle"},
+  {'4', "Lower"},
+  {'5', "Bottom"},
+  {'?', "On"},
+}};
+
+constexpr DaikinVerticalSwingMode s21_to_vertical_swing_mode(const uint8_t mode) {
+  const auto iter = std::ranges::find(vertical_swing_modes, mode, [](const auto &elem){ return std::get<uint8_t>(elem); });
+  if (iter != std::ranges::end(vertical_swing_modes)) {
+    return static_cast<DaikinVerticalSwingMode>(std::ranges::distance(std::begin(vertical_swing_modes), iter));
+  }
+  return DaikinVerticalSwingOff;
+}
+
+constexpr uint8_t vertical_swing_mode_to_s21(const DaikinVerticalSwingMode mode) {
+  return std::get<uint8_t>(vertical_swing_modes[mode]);
+}
+
+static constexpr std::array<const char *, ActiveSourceCount> active_source_strings = {{
+  "Rg",
+  "RzB2",
+  "assumed on",
+  "undetected",
+}};
+
+static constexpr std::array<const char *, PowerfulSourceCount> powerful_source_strings = {{
+  "G6",
+  "RzB2",
+  "disabled",
+  "undetected",
+}};
 
 /**
  * Apply the characteristics of a new vertical swing mode to a climate swing mode
  */
 void apply_vertical_swing_mode(const DaikinVerticalSwingMode vertical_swing, climate::ClimateSwingMode &swing) {
-  if (vertical_swing == DaikinVerticalSwingMode::On) {
+  if (vertical_swing == DaikinVerticalSwingOn) {
     if (swing == climate::CLIMATE_SWING_OFF) {
       swing = climate::CLIMATE_SWING_VERTICAL;
     } else if (swing == climate::CLIMATE_SWING_HORIZONTAL) {
@@ -147,13 +187,13 @@ void apply_swing_mode(const climate::ClimateSwingMode swing, DaikinVerticalSwing
   switch (swing) {
     case climate::CLIMATE_SWING_OFF:
     case climate::CLIMATE_SWING_HORIZONTAL:
-      if (vertical_swing == DaikinVerticalSwingMode::On) { // don't overwrite discrete steps
-        vertical_swing = DaikinVerticalSwingMode::Off;
+      if (vertical_swing == DaikinVerticalSwingOn) { // don't overwrite discrete steps
+        vertical_swing = DaikinVerticalSwingOff;
       }
       break;
     case climate::CLIMATE_SWING_VERTICAL:
     case climate::CLIMATE_SWING_BOTH:
-      vertical_swing = DaikinVerticalSwingMode::On;
+      vertical_swing = DaikinVerticalSwingOn;
       break;
     default:
       break;
@@ -183,7 +223,7 @@ DaikinS21::DaikinS21(DaikinSerial * const serial)
     {StateQuery::OptionalFeatures, &DaikinS21::handle_nop, 4, true},
     // {StateQuery::OnOffTimer, &DaikinS21::handle_nop, 4},  // unused, use home assistant for scheduling
     {StateQuery::ErrorStatus, &DaikinS21::handle_state_error_status, 4},
-    {StateQuery::SwingOrHumidity, &DaikinS21::handle_state_swing_or_humidity, 4},
+    {StateQuery::SwingHumidityModes, &DaikinS21::handle_state_swing_humidity_modes, 4},
     {StateQuery::SpecialModes, &DaikinS21::handle_state_special_modes, 4},
     {StateQuery::DemandAndEcono, &DaikinS21::handle_state_demand_and_econo, 4},
     {StateQuery::OldProtocol, &DaikinS21::handle_nop, 4, true},  // protocol version detect
@@ -289,7 +329,14 @@ void DaikinS21::set_climate_settings(const DaikinClimateSettings climate) {
 
 void DaikinS21::set_swing_mode(const climate::ClimateSwingMode swing) {
   if (this->get_swing_mode() != swing) {
-    this->swing_mode.stage(swing);
+    this->swing_humidity.stage({ swing, this->swing_humidity.value().humidity }); // shares D6 with humidity, stage complete command
+    this->trigger_cycle();
+  }
+}
+
+void DaikinS21::set_humidity_mode(const DaikinHumidityMode humidity) {
+  if (this->swing_humidity.value().humidity != humidity) {
+    this->swing_humidity.stage({ this->get_swing_mode(), humidity }); // shares D6 with swing, stage complete command
     this->trigger_cycle();
   }
 }
@@ -467,7 +514,7 @@ void DaikinS21::ready_state_machine() {
   if (this->is_ready()) {
     // Populate pending state caches with current values so change detection on future commands works
     this->climate.reset();
-    this->swing_mode.reset();
+    this->swing_humidity.reset();
     this->special_modes.reset();
     this->demand_econo.reset();
     this->vertical_swing_mode.reset();
@@ -530,7 +577,9 @@ void DaikinS21::check_ready_protocol_detection() {
     if (this->readout_requests[ReadoutErrorStatus]) {
       this->enable_query(StateQuery::ErrorStatus);
     }
-    this->enable_query(StateQuery::SwingOrHumidity);
+    if (this->readout_requests[ReadoutSwingHumidty]) {
+      this->enable_query(StateQuery::SwingHumidityModes);
+    }
     this->enable_query(EnvironmentQuery::FanMode);
     if (this->readout_requests[ReadoutFanSpeed]) {
       this->enable_query(EnvironmentQuery::FanSpeed);
@@ -714,30 +763,30 @@ void DaikinS21::check_ready_model_detection() {
 void DaikinS21::check_ready_active_source() {
   const auto &compressor_on_off = this->get_query(EnvironmentQuery::CompressorOnOff); // always enabled
   if (compressor_on_off.success()) {
-    this->support.active_source = ActiveSource::CompressorOnOff;
+    this->support.active_source = ActiveSourceCompressorOnOff;
   } else if (compressor_on_off.failed()) {
     auto &unit_state = this->get_query(EnvironmentQuery::UnitState);
     if (unit_state.success()) {
-      this->support.active_source = ActiveSource::UnitState;
+      this->support.active_source = ActiveSourceUnitState;
     } else if (unit_state.failed()) {
-      this->support.active_source = ActiveSource::Unsupported;
+      this->support.active_source = ActiveSourceUnsupported;
     } else if (unit_state.enabled == false) {
       if (this->support.unit_system_state_queries) {
         this->readout_requests.set(ReadoutUnitStateBits);
         unit_state.enabled = true;
       } else {
-        this->support.active_source = ActiveSource::Unsupported;
+        this->support.active_source = ActiveSourceUnsupported;
       }
     }
-    if (this->support.active_source == ActiveSource::Unsupported) {
+    if (this->support.active_source == ActiveSourceUnsupported) {
       this->support.unit_system_state_queries = false;  // unit state is assumed to be supported, if it isn't then correct the record
       this->active = true;  // always active, reported action will follow unit
     }
   }
   // check if complete and handle results if so
-  this->ready[ReadyActiveSource] = (this->support.active_source != ActiveSource::Unknown);
+  this->ready[ReadyActiveSource] = (this->support.active_source != ActiveSourceUnknown);
   if (this->ready[ReadyActiveSource]) {
-    ESP_LOGD(TAG, "Active source is %s", active_source_to_string(this->support.active_source));
+    ESP_LOGD(TAG, "Active source is %s", LOG_STR_ARG(active_source_strings[this->support.active_source]));
   }
 }
 
@@ -748,32 +797,32 @@ void DaikinS21::check_ready_powerful_source() {
   if (this->readout_requests[ReadoutPowerful]) {
     const auto &special_modes = this->get_query(StateQuery::SpecialModes);  // enabled when requested and protocol >= 2
     if (special_modes.success()) {
-      this->support.powerful_source = PowerfulSource::SpecialModes;
+      this->support.powerful_source = PowerfulSourceSpecialModes;
     } else if (special_modes.failed() || (this->protocol_version < ProtocolVersion(2))) {
       auto &unit_state = this->get_query(EnvironmentQuery::UnitState);
       if (unit_state.success()) {
-        this->support.powerful_source = PowerfulSource::UnitState;
+        this->support.powerful_source = PowerfulSourceUnitState;
       } else if (unit_state.failed()) {
-        this->support.powerful_source = PowerfulSource::Disabled;
+        this->support.powerful_source = PowerfulSourceDisabled;
       } else if (unit_state.enabled == false) {
         if (this->support.unit_system_state_queries) {
           this->readout_requests.set(ReadoutUnitStateBits);
           unit_state.enabled = true;
         } else {
-          this->support.powerful_source = PowerfulSource::Disabled;
+          this->support.powerful_source = PowerfulSourceDisabled;
         }
       }
-      if (this->support.powerful_source == PowerfulSource::Disabled) {
+      if (this->support.powerful_source == PowerfulSourceDisabled) {
         this->support.unit_system_state_queries = false;  // unit state is assumed to be supported, if it isn't then correct the record
       }
     }
   } else {
-    this->support.powerful_source = PowerfulSource::Disabled;
+    this->support.powerful_source = PowerfulSourceDisabled;
   }
   // check if complete and handle results if so
-  this->ready[ReadyPowerfulSource] = (this->support.powerful_source != PowerfulSource::Unknown);
+  this->ready[ReadyPowerfulSource] = (this->support.powerful_source != PowerfulSourceUnknown);
   if (this->ready[ReadyPowerfulSource]) {
-    ESP_LOGD(TAG, "Powerful source is %s", powerful_source_to_string(this->support.powerful_source));
+    ESP_LOGD(TAG, "Powerful source is %s", LOG_STR_ARG(powerful_source_strings[this->support.powerful_source]));
   }
 }
 
@@ -801,28 +850,29 @@ void DaikinS21::handle_serial_idle() {
   const auto cycle_interval = this->get_cycle_interval_ms();
   if (this->climate.staged()) {
     payload[0] = (this->climate.pending.mode == climate::CLIMATE_MODE_OFF) ? '0' : '1'; // power
-    payload[1] = climate_mode_to_daikin(this->climate.pending.mode);
+    payload[1] = climate_mode_to_s21(this->climate.pending.mode);
     if (this->climate.pending.setpoint == TEMPERATURE_INVALID) {
       payload[2] = 0x80;
     } else {
       payload[2] = (static_cast<int16_t>(this->climate.pending.setpoint) / 5) + 28;
     }
-    payload[3] = static_cast<char>(this->climate.pending.fan);
+    payload[3] = fan_mode_to_s21(this->climate.pending.fan);
     this->send_command(StateCommand::PowerModeTempFan, payload);
     this->climate.set_confirm_ms(cycle_interval, 10*1000);  // longer timeout needed for mode changes
     return;
   }
 
-  if (this->swing_mode.staged()) {
-    payload[0] = climate_swing_mode_to_daikin(this->swing_mode.pending);
-    if (this->swing_mode.pending != climate::CLIMATE_SWING_OFF) {
+  if (this->swing_humidity.staged()) {
+    payload[0] = climate_swing_mode_to_s21(this->swing_humidity.pending.swing);
+    if (this->swing_humidity.pending.swing != climate::CLIMATE_SWING_OFF) {
       payload[1] = '?';
     }
-    this->send_command(StateCommand::LouvreSwingMode, payload);
-    this->swing_mode.set_confirm_ms(cycle_interval);
+    payload[2] = humidity_mode_to_s21(this->swing_humidity.pending.humidity);
+    this->send_command(StateCommand::SwingHumidityModes, payload);
+    this->swing_humidity.set_confirm_ms(cycle_interval);
     // keep vertical swing mode in sync
     this->vertical_swing_mode.pending = this->get_vertical_swing_mode();
-    apply_swing_mode(this->swing_mode.pending, this->vertical_swing_mode.pending);
+    apply_swing_mode(this->swing_humidity.pending.swing, this->vertical_swing_mode.pending);
     this->vertical_swing_mode.set_confirm_ms(cycle_interval);
     return;
   }
@@ -862,17 +912,13 @@ void DaikinS21::handle_serial_idle() {
   }
 
   if (this->vertical_swing_mode.staged()) {
-    if (this->vertical_swing_mode.pending == DaikinVerticalSwingMode::On) {
-      payload[0] = '?';
-    } else {
-      payload[0] += static_cast<uint8_t>(this->vertical_swing_mode.pending);
-    }
+    payload[0] = vertical_swing_mode_to_s21(this->vertical_swing_mode.pending);
     this->send_command(StateCommand::VerticalSwingMode, payload);
     this->vertical_swing_mode.set_confirm_ms(cycle_interval);
     // keep regular swing mode state in sync
-    this->swing_mode.pending = this->get_swing_mode();
-    apply_vertical_swing_mode(this->vertical_swing_mode.pending, this->swing_mode.pending);
-    this->swing_mode.set_confirm_ms(cycle_interval);
+    this->swing_humidity.pending.swing = this->get_swing_mode();
+    apply_vertical_swing_mode(this->vertical_swing_mode.pending, this->swing_humidity.pending.swing);
+    this->swing_humidity.set_confirm_ms(cycle_interval);
     return;
   }
 
@@ -900,7 +946,7 @@ void DaikinS21::handle_serial_idle() {
 
     // resolve pending commands
     this->climate.check_confirm();
-    this->swing_mode.check_confirm();
+    this->swing_humidity.check_confirm();
     this->special_modes.check_confirm();
     this->demand_econo.check_confirm();
     this->vertical_swing_mode.check_confirm();
@@ -925,8 +971,8 @@ void DaikinS21::handle_state_basic(const std::span<const uint8_t> payload) {
     this->climate.active.mode = climate::CLIMATE_MODE_OFF;
     this->action_reported = climate::CLIMATE_ACTION_OFF;
   } else {
-    this->climate.active.mode = daikin_to_climate_mode(payload[1]);
-    this->action_reported = daikin_to_climate_action(payload[1]);
+    this->climate.active.mode = s21_to_climate_mode(payload[1]);
+    this->action_reported = s21_to_climate_action(payload[1]);
   }
   if (payload[2] == 0x80) {
     this->climate.active.setpoint = TEMPERATURE_INVALID;
@@ -935,7 +981,7 @@ void DaikinS21::handle_state_basic(const std::span<const uint8_t> payload) {
   }
   // silent fan mode not reported here so prefer RG if present
   if (this->support.fan_mode_query == false) {
-    this->climate.active.fan = static_cast<daikin_s21::DaikinFanMode>(payload[3]);
+    this->climate.active.fan = s21_to_fan_mode(payload[3]);
   }
 }
 
@@ -943,10 +989,11 @@ void DaikinS21::handle_state_error_status(const std::span<const uint8_t> payload
   this->serial_error = (payload[2] & 0b00010000);
 }
 
-void DaikinS21::handle_state_swing_or_humidity(const std::span<const uint8_t> payload) {
-  this->swing_mode.active = daikin_to_climate_swing_mode(payload[0]);
+void DaikinS21::handle_state_swing_humidity_modes(const std::span<const uint8_t> payload) {
+  this->swing_humidity.active.swing = s21_to_climate_swing_mode(payload[0]);
+  this->swing_humidity.active.humidity = s21_to_humidity_mode(payload[2]);
   // keep vertical swing mode in sync
-  apply_swing_mode(this->swing_mode.active, this->vertical_swing_mode.active);
+  apply_swing_mode(this->swing_humidity.active.swing, this->vertical_swing_mode.active);
 }
 
 void DaikinS21::handle_state_special_modes(const std::span<const uint8_t> payload) {
@@ -989,13 +1036,9 @@ void DaikinS21::handle_state_power_consumption(const std::span<const uint8_t> pa
 }
 
 void DaikinS21::handle_vertical_swing_mode(const std::span<const uint8_t> payload) {
-  if (payload[0] == '?') {
-    this->vertical_swing_mode.active = DaikinVerticalSwingMode::On;
-  } else {
-    this->vertical_swing_mode.active = static_cast<DaikinVerticalSwingMode>(payload[0] - '0');
-  }
+  this->vertical_swing_mode.active = s21_to_vertical_swing_mode(payload[0]);
   // keep regular swing mode in sync
-  apply_vertical_swing_mode(this->vertical_swing_mode.active, this->swing_mode.active);
+  apply_vertical_swing_mode(this->vertical_swing_mode.active, this->swing_humidity.active.swing);
 }
 
 void DaikinS21::handle_state_outdoor_capacity(const std::span<const uint8_t> payload) {
@@ -1030,8 +1073,8 @@ void DaikinS21::handle_env_indoor_unit_mode(const std::span<const uint8_t> paylo
     this->climate.active.mode = climate::CLIMATE_MODE_OFF;
     this->action_reported = climate::CLIMATE_ACTION_OFF;
   } else {
-    this->climate.active.mode = daikin_to_climate_mode(payload[1]);
-    this->action_reported = daikin_to_climate_action(payload[1]);
+    this->climate.active.mode = s21_to_climate_mode(payload[1]);
+    this->action_reported = s21_to_climate_action(payload[1]);
   }
 }
 
@@ -1040,16 +1083,16 @@ void DaikinS21::handle_env_temperature_setpoint(const std::span<const uint8_t> p
   this->climate.active.setpoint = bytes_to_num(payload) * 10;  // whole degrees C
 }
 
-/** Same info as StateQuery::SwingOrHumidity */
+/** Same info as StateQuery::SwingHumidityModes */
 void DaikinS21::handle_env_swing_mode(const std::span<const uint8_t> payload) {
-  this->swing_mode.active = daikin_to_climate_swing_mode(payload[0]);
+  this->swing_humidity.active.swing = s21_to_climate_swing_mode(payload[0]);
   // keep vertical swing mode in sync
-  apply_swing_mode(this->swing_mode.active, this->vertical_swing_mode.active);
+  apply_swing_mode(this->swing_humidity.active.swing, this->vertical_swing_mode.active);
 }
 
 /** Better info than StateQuery::Basic (reports silent) */
 void DaikinS21::handle_env_fan_mode(const std::span<const uint8_t> payload) {
-  this->climate.active.fan = static_cast<daikin_s21::DaikinFanMode>(payload[0]);
+  this->climate.active.fan = s21_to_fan_mode(payload[0]);
 }
 
 void DaikinS21::handle_env_inside_temperature(const std::span<const uint8_t> payload) {
@@ -1105,10 +1148,10 @@ void DaikinS21::handle_env_compressor_on_off(const std::span<const uint8_t> payl
 
 void DaikinS21::handle_env_unit_state(const std::span<const uint8_t> payload) {
   this->unit_state = bytes_to_num(payload, 16);
-  if (this->support.active_source == ActiveSource::UnitState) {
+  if (this->support.active_source == ActiveSourceUnitState) {
     this->active = this->unit_state.active(); // used to refine climate action
   }
-  if (this->support.powerful_source == PowerfulSource::UnitState) {
+  if (this->support.powerful_source == PowerfulSourceUnitState) {
     this->special_modes.active[ModePowerful] = this->unit_state.powerful();  // if G6 is unsupported we can still read out powerful set by remote
   }
 }
@@ -1225,7 +1268,7 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
   if (result == DaikinSerial::Result::Error) {
     // something went terribly wrong, try to reinitialize communications
     this->climate.reset();
-    this->swing_mode.reset();
+    this->swing_humidity.reset();
     this->special_modes.reset();
     this->demand_econo.reset();
     this->vertical_swing_mode.reset();
@@ -1289,19 +1332,17 @@ void DaikinS21::dump_state() {
         (v0_features.success() ? hex_repr : str_repr)(v0_features.value()).c_str(),
         (v2_features.success() ? hex_repr : str_repr)(v2_features.value()).c_str(),
         (v3_features.success() ? hex_repr : str_repr)(v3_features_value).c_str(),
-        active_source_to_string(this->support.active_source),
-        powerful_source_to_string(this->support.powerful_source));
+        LOG_STR_ARG(active_source_strings[this->support.active_source]),
+        LOG_STR_ARG(powerful_source_strings[this->support.powerful_source]));
   }
   ESP_LOGD(TAG, "Mode: %s  Action: %s  Demand: %" PRIu8,
       LOG_STR_ARG(climate::climate_mode_to_string(this->get_climate().mode)),
       LOG_STR_ARG(climate::climate_action_to_string(this->get_climate_action())),
       this->get_demand_pull());
-  if (this->support.fan || this->support.swing) {
-    ESP_LOGD(TAG, "Fan: %s (%" PRIu16 " RPM)  Swing: %s",
-        LOG_STR_ARG(daikin_fan_mode_to_cstr(this->get_climate().fan)),
-        this->fan_rpm,
-        LOG_STR_ARG(climate::climate_swing_mode_to_string(this->get_swing_mode())));
-  }
+  ESP_LOGD(TAG, "Fan: %s (%" PRIu16 " RPM)  Swing: %s",
+      LOG_STR_ARG(daikin_fan_mode_to_cstr(this->get_climate().fan)),
+      this->fan_rpm,
+      LOG_STR_ARG(climate::climate_swing_mode_to_string(this->get_swing_mode())));
   ESP_LOGD(TAG, "Setpoint: %.1fC  Target: %.1fC  Inside: %.1fC  Coil: %.1fC  Humid: %" PRIu8 "%%",
       this->get_climate().setpoint.f_degc(),
       this->get_temp_target().f_degc(),

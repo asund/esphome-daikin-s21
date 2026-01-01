@@ -5,7 +5,6 @@
 #include "esphome/core/component.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/preferences.h"
-#include "../daikin_s21_fan_modes.h"
 #include "../daikin_s21_types.h"
 
 namespace esphome::daikin_s21 {

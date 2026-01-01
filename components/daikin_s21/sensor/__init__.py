@@ -15,6 +15,7 @@ from esphome.const import (
     UNIT_REVOLUTIONS_PER_MINUTE,
     ICON_COUNTER,
     ICON_FAN,
+    ICON_WATER_PERCENT,
     DEVICE_CLASS_ENERGY,
     DEVICE_CLASS_HUMIDITY,
     DEVICE_CLASS_TEMPERATURE,
@@ -78,7 +79,7 @@ CONFIG_SCHEMA = (
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional(CONF_HUMIDITY): sensor.sensor_schema(
-            unit_of_measurement=UNIT_PERCENT,
+            unit_of_measurement=ICON_WATER_PERCENT,
             accuracy_decimals=0,
             device_class=DEVICE_CLASS_HUMIDITY,
             state_class=STATE_CLASS_MEASUREMENT,
