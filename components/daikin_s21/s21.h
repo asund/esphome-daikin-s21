@@ -34,6 +34,7 @@ class DaikinS21 : public PollingComponent {
 
   enum ReadoutRequest {
     // binary sensor
+    ReadoutErrorStatus,
     ReadoutUnitStateBits,
     ReadoutSystemStateBits,
     // sensor

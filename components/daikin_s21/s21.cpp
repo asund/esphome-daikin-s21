@@ -527,7 +527,9 @@ void DaikinS21::check_ready_protocol_detection() {
     // >= ProtocolVersion(0)
     this->enable_query(StateQuery::Basic);
     this->enable_query(StateQuery::OptionalFeatures);
-    this->enable_query(StateQuery::ErrorStatus);
+    if (this->readout_requests[ReadoutErrorStatus]) {
+      this->enable_query(StateQuery::ErrorStatus);
+    }
     this->enable_query(StateQuery::SwingOrHumidity);
     this->enable_query(EnvironmentQuery::FanMode);
     if (this->readout_requests[ReadoutFanSpeed]) {
@@ -665,7 +667,7 @@ void DaikinS21::check_ready_sensor_readout() {
     // enable coarse fallback query if any sensor query failed
     const bool alt = inside.failed() ||
                     (this->readout_requests[ReadoutTemperatureOutside] && outside.failed()) ||
-                    (this->readout_requests[ReadoutHumidity] && (this->support.humidify || this->support.dehumidify) && humidity.failed()); // only enable for humidity's sake if declared to be supported
+                    (this->readout_requests[ReadoutHumidity] && humidity.failed());
     if (alt) {
       this->enable_query(StateQuery::InsideOutsideTemperatures);
     }
@@ -969,7 +971,7 @@ void DaikinS21::handle_state_inside_outside_temperature(const std::span<const ui
   if ((this->support.outside_temperature_query == false) && (payload[1] != 0xFF)) { // danijelt reports 0xFF when unsupported
     this->temp_outside = (payload[1] - 128) * 5; // 1 degree
   }
-  if ((this->support.humidity_query == false) && (this->support.humidify || this->support.dehumidify) && ((payload[2] - '0') <= 100)) {  // Some units report 0xFF when unsupported
+  if ((this->support.humidity_query == false) && ((payload[2] - '0') <= 100)) {  // Some units report 0xFF when unsupported
     this->humidity = payload[2] - '0';  // 5% granularity
   }
 }
@@ -1300,14 +1302,12 @@ void DaikinS21::dump_state() {
         this->fan_rpm,
         LOG_STR_ARG(climate::climate_swing_mode_to_string(this->get_swing_mode())));
   }
-  ESP_LOGD(TAG, "Setpoint: %.1fC  Target: %.1fC  Inside: %.1fC  Coil: %.1fC",
+  ESP_LOGD(TAG, "Setpoint: %.1fC  Target: %.1fC  Inside: %.1fC  Coil: %.1fC  Humid: %" PRIu8 "%%",
       this->get_climate().setpoint.f_degc(),
       this->get_temp_target().f_degc(),
       this->get_temp_inside().f_degc(),
-      this->get_temp_coil().f_degc());
-  if (this->support.humidify || this->support.dehumidify) {
-    ESP_LOGD(TAG, "Humid: %" PRIu8 "%%", this->get_humidity());
-  }
+      this->get_temp_coil().f_degc(),
+      this->get_humidity());
   ESP_LOGD(TAG, "Cycle Time: %" PRIu32 "ms  UnitState: %" PRIX8 "  SysState: %02" PRIX8,
       this->cycle_time_ms,
       this->unit_state.raw,

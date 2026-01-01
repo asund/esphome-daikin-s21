@@ -198,7 +198,7 @@ void DaikinS21Climate::dump_config() {
  *
  * @note Modifies traits, call during setup only
  */
-void DaikinS21Climate::set_supported_modes(climate::ClimateModeMask modes) {
+void DaikinS21Climate::set_supported_modes(const climate::ClimateModeMask modes) {
   this->traits_.set_supported_modes(modes);
 }
 
@@ -207,7 +207,7 @@ void DaikinS21Climate::set_supported_modes(climate::ClimateModeMask modes) {
  *
  * @note Modifies traits, call during setup only
  */
-void DaikinS21Climate::set_supported_swing_modes(climate::ClimateSwingModeMask swing_modes) {
+void DaikinS21Climate::set_supported_swing_modes(const climate::ClimateSwingModeMask swing_modes) {
   this->traits_.set_supported_swing_modes(swing_modes);
 }
 
