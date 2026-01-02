@@ -22,6 +22,9 @@ A big thanks to:
 A short changelog of sorts, I'll keep things here where a user might encounter
 breaking or significant changes.
 
+* Custom Silent fan mode changed to standard Quiet. Custom Auto also updated to
+  standard Auto to work around validation issue, which results in a nicer icon.
+  Update any automations to specify Quiet instead of Silent.
 * Configuration schema for the climate component (specidically the unit
   temperature range limits) has changed to organize them by mode as well as
   adding a temperature offset to be applied when commanding the unit. Update
@@ -56,7 +59,7 @@ The main control interface. Supported features:
   configurable in case your unit doesn't support them all or you otherwise want
   to restrict the ones available.
 * Climate action reporting.
-* Fan modes auto, silent and 1-5.
+* Fan modes auto, quiet and 1-5.
 * Swing modes off, horizontal, vertical, and both. These can also be restricted
   to a specified list.
 * Optional external temperature and humidity reporting and use in an secondary

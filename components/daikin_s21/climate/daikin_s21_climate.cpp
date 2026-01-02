@@ -61,11 +61,17 @@ void DaikinS21Climate::setup() {
   } else {
     this->traits_.set_visual_current_temperature_step(TEMPERATURE_STEP.f_degc());
   }
-  auto fan_strings = std::views::values(supported_daikin_fan_modes);
-  std::vector<const char *> supported_fan_mode_strings{fan_strings.begin(), fan_strings.end()};
-  this->traits_.set_supported_custom_fan_modes(supported_fan_mode_strings);
+  this->traits_.set_supported_fan_modes({climate::CLIMATE_FAN_AUTO, climate::CLIMATE_FAN_QUIET});
+  const char * custom_strings[] = {
+    std::get<const char *>(supported_daikin_fan_modes[DaikinFan1]),
+    std::get<const char *>(supported_daikin_fan_modes[DaikinFan2]),
+    std::get<const char *>(supported_daikin_fan_modes[DaikinFan3]),
+    std::get<const char *>(supported_daikin_fan_modes[DaikinFan4]),
+    std::get<const char *>(supported_daikin_fan_modes[DaikinFan5]),
+  };
+  this->traits_.set_supported_custom_fan_modes(custom_strings);
   // ensure optionals are populated with defaults
-  this->set_custom_fan_mode_(daikin_fan_mode_to_cstr(DaikinFanAuto));
+  this->set_fan_mode_(climate::CLIMATE_FAN_AUTO);
   // initialize setpoint, will be loaded from preferences or unit shortly
   this->target_temperature = NAN;
   // enable event driven updates
@@ -93,14 +99,15 @@ void DaikinS21Climate::loop() {
       (this->action != this->get_parent()->get_climate_action()) ||
       (std::isnan(this->current_temperature) != std::isnan(current_temperature)) || (this->current_temperature != current_temperature) || // differ in nan-ness or value
       (std::isnan(this->current_humidity) != std::isnan(current_humidity)) || (this->current_humidity != current_humidity) ||
-      (this->swing_mode != reported_swing) ||
-      (string_to_daikin_fan_mode(this->get_custom_fan_mode()) != reported_climate.fan)) {
+      (this->swing_mode != reported_swing)) {
     this->mode = reported_climate.mode;
     this->action = this->get_parent()->get_climate_action();
     this->current_temperature = current_temperature;
     this->current_humidity = current_humidity;
     this->swing_mode = reported_swing;
-    this->set_custom_fan_mode_(daikin_fan_mode_to_cstr(reported_climate.fan));
+    do_publish = true;
+  }
+  if (this->set_daikin_fan_mode(reported_climate.fan)) {
     do_publish = true;
   }
 
@@ -321,8 +328,11 @@ bool DaikinS21Climate::calc_unit_setpoint() {
  * Populates internal state with contained arguments then applies to the unit.
  */
 void DaikinS21Climate::control(const climate::ClimateCall &call) {
-  if (call.get_mode().has_value()) {
+  bool climate_changed = false;
+
+  if (call.get_mode().has_value() && (this->mode != call.get_mode().value())) {
     this->mode = call.get_mode().value();
+    climate_changed = true;
     // If call sets the mode but does not include target, then try to use saved target.
     if (call.get_target_temperature().has_value() == false) {
       if (auto * const mode_params = this->get_setpoint_mode_params(this->mode)) {
@@ -335,20 +345,34 @@ void DaikinS21Climate::control(const climate::ClimateCall &call) {
       }
     }
   }
-  if (call.get_target_temperature().has_value()) {
+
+  if (call.get_target_temperature().has_value() && (this->target_temperature != call.get_target_temperature().value())) {
     this->target_temperature = call.get_target_temperature().value();
+    climate_changed = true;
   }
-  (void)this->calc_unit_setpoint();  // mode and target temperature required
 
-  if (call.has_custom_fan_mode()) {
-    this->set_custom_fan_mode_(call.get_custom_fan_mode());
+  if (climate_changed) {
+    (void)this->calc_unit_setpoint();  // mode and target temperature required
   }
-  this->set_s21_climate();  // mode, unit setpoint and fan required
 
-  if (call.get_swing_mode().has_value()) {
+  if (call.get_fan_mode().has_value()) {
+    if (this->set_fan_mode_(call.get_fan_mode().value())) {
+      climate_changed = true;
+    }
+  } else if (call.has_custom_fan_mode()) {
+    if (this->set_custom_fan_mode_(call.get_custom_fan_mode())) {
+      climate_changed = true;
+    }
+  }
+
+  if (climate_changed) {
+    this->set_s21_climate();  // mode, unit setpoint and fan required
+  }
+
+  if (call.get_swing_mode().has_value() && (this->swing_mode != call.get_swing_mode().value())) {
     this->swing_mode = call.get_swing_mode().value();
+    this->get_parent()->set_swing_mode(this->swing_mode);
   }
-  this->get_parent()->set_swing_mode(this->swing_mode);
 
   // push back to UI
   this->publish_state();
@@ -366,6 +390,28 @@ float DaikinS21Climate::get_current_humidity() const {
   }
 }
 
+DaikinFanMode DaikinS21Climate::get_daikin_fan_mode() const {
+  if (this->fan_mode.has_value()) {
+    if (this->fan_mode.value() == climate::CLIMATE_FAN_QUIET) {
+      return DaikinFanSilent;
+    } else {
+      return DaikinFanAuto;
+    }
+  } else {
+    return string_to_daikin_fan_mode(this->get_custom_fan_mode());
+  }
+}
+
+bool DaikinS21Climate::set_daikin_fan_mode(const DaikinFanMode fan) {
+  if (fan == DaikinFanAuto) {
+    return this->set_fan_mode_(climate::CLIMATE_FAN_AUTO);
+  } else if (fan == DaikinFanSilent) {
+    return this->set_fan_mode_(climate::CLIMATE_FAN_QUIET);
+  } else {
+    return this->set_custom_fan_mode_(daikin_fan_mode_to_cstr(fan));
+  }
+}
+
 /**
  * Apply ESPHome Climate state to the unit.
  *
@@ -373,7 +419,7 @@ float DaikinS21Climate::get_current_humidity() const {
  */
 void DaikinS21Climate::set_s21_climate() {
   // Command new settings
-  this->get_parent()->set_climate_settings({this->mode, string_to_daikin_fan_mode(this->get_custom_fan_mode()), this->unit_setpoint});
+  this->get_parent()->set_climate_settings({this->mode, this->get_daikin_fan_mode(), this->unit_setpoint});
   if (auto * const mode_params = this->get_setpoint_mode_params(this->mode)) {
     mode_params->save_setpoint(this->target_temperature);
   }

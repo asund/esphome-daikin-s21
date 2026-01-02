@@ -236,13 +236,12 @@ class DaikinS21 : public PollingComponent {
     bool swing{};
     bool horiz_swing{};
     char model_info{'?'};
-    bool humidify{};
-    bool dehumidify{};
     bool dry{};
     bool demand{};
     bool powerful{};
     bool econo{};
     bool streamer{};
+    uint8_t s_humd{}; // bitfield of supported humidity modes, see protocol docs
     // unsupported
     bool ac_led{};
     bool laundry{};

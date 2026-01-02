@@ -660,8 +660,12 @@ void DaikinS21::check_ready_optional_features() {
       this->support.swing =         (v0_features[0] & 0b0100);
       this->support.horiz_swing =   (v0_features[0] & 0b1000);
       this->support.model_info =    (v0_features[1] & 0b1000) ? 'N': 'C';
-      this->support.humidify =      (v0_features[3] & 0b0010);
-      this->support.dehumidify =    (v0_features[3] & 0b1000);
+      if (v0_features[3] & 0b0010) {
+        this->support.s_humd |=     0xA5;
+      }
+      if (v0_features[3] & 0b1000) {
+        this->support.s_humd |=     0x92;
+      }
     }
     if (v2_features.success()) {
       this->support.ac_led =        (v2_features[0] & 0b00000001);
@@ -671,9 +675,7 @@ void DaikinS21::check_ready_optional_features() {
       this->support.motion_detect = (v2_features[1] & 0b00001000);
       this->support.ac_japan =      (v2_features[2] & 0b00000001) == 0;
       if ((v2_features[2] & 0b00000010)) { // v2 gates v0
-        // "simple humidify mode available", unknown what this means to us
-        this->support.humidify =    false;
-        this->support.dehumidify =  false;
+        this->support.s_humd =      0x10; // "simple humidify mode available", unknown what this means to us
       }
       if ((v2_features[2] & 0b00000100) == false) { // v2 gates v0
         this->support.fan =         false;
@@ -1307,13 +1309,12 @@ void DaikinS21::dump_state() {
         this->software_version.data(),
         this->software_revision.data());
   }
-  ESP_LOGD(TAG, "  Fan: %c  VSwing: %c  HSwing: %c  MI: %c  Humid: %c  Dehumid: %c",
+  ESP_LOGD(TAG, "  Fan: %c  VSwing: %c  HSwing: %c  MI: %c  Humidify: %02" PRIX8,
       this->support.fan ? 'Y' : 'N',
       this->support.swing ? 'Y' : 'N',
       this->support.horiz_swing ? 'Y' : 'N',
       this->support.model_info,
-      this->support.humidify ? 'Y' : 'N',
-      this->support.dehumidify ? 'Y' : 'N');
+      this->support.s_humd);
   ESP_LOGD(TAG, "  Dry: %c  Demand: %c  Powerful: %c  Econo: %c  Streamer: %c",
       this->support.dry ? 'Y' : 'N',
       this->support.demand ? 'Y' : 'N',

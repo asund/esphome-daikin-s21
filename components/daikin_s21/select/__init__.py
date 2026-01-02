@@ -22,26 +22,6 @@ DaikinS21Select = daikin_s21_ns.class_("DaikinS21Select", cg.Component)
 DaikinS21SelectHumidity = daikin_s21_ns.class_("DaikinS21SelectHumidity", select.Select)
 DaikinS21SelectVerticalSwing = daikin_s21_ns.class_("DaikinS21SelectVerticalSwing", select.Select)
 
-DaikinS21HumidityMode = daikin_s21_ns.enum("DaikinHumidityMode")
-HUMIDITY_MODES = {
-    "Off": DaikinS21HumidityMode.Off,
-    "Low": DaikinS21HumidityMode.Low,
-    "Standard": DaikinS21HumidityMode.Standard,
-    "High": DaikinS21HumidityMode.High,
-    "Continuous": DaikinS21HumidityMode.Continuous,
-}
-
-DaikinS21VerticalSwingMode = daikin_s21_ns.enum("DaikinVerticalSwingMode")
-VERTICAL_SWING_MODES = {
-    "Off": DaikinS21VerticalSwingMode.Off,
-    "Top": DaikinS21VerticalSwingMode.Top,
-    "Upper": DaikinS21VerticalSwingMode.Upper,
-    "Middle": DaikinS21VerticalSwingMode.Middle,
-    "Lower": DaikinS21VerticalSwingMode.Lower,
-    "Bottom": DaikinS21VerticalSwingMode.Bottom,
-    "On": DaikinS21VerticalSwingMode.On,
-}
-
 CONF_VERTICAL_SWING = "vertical_swing"
 
 CONFIG_SCHEMA = (
@@ -66,8 +46,8 @@ async def to_code(config):
     await cg.register_parented(var, config[CONF_S21_ID])
 
     selects = (
-        (CONF_HUMIDITY, var.set_humidity_select, list(HUMIDITY_MODES.keys())),
-        (CONF_VERTICAL_SWING, var.set_vertical_swing_select, list(VERTICAL_SWING_MODES.keys())),
+        (CONF_HUMIDITY, var.set_humidity_select, ["Off", "Low", "Standard", "High", "Continuous"]),
+        (CONF_VERTICAL_SWING, var.set_vertical_swing_select, ["Off", "Top", "Upper", "Middle", "Lower", "Bottom", "On"]),
     )
     for key, func, options in selects:
         if key in config:
