@@ -22,9 +22,9 @@ A big thanks to:
 A short changelog of sorts, I'll keep things here where a user might encounter
 breaking or significant changes.
 
-* Custom Silent fan mode changed to standard Quiet. Custom Auto also updated to
-  standard Auto to work around validation issue, which results in a nicer icon.
-  Update any automations to specify Quiet instead of Silent.
+* Custom Silent fan mode changed to standard Quiet. Custom Automatic was also
+  updated to standard Auto to work around a validation issue, which results in
+  a nicer icon. Update any automations to specify these new mode settings.
 * Configuration schema for the climate component (specidically the unit
   temperature range limits) has changed to organize them by mode as well as
   adding a temperature offset to be applied when commanding the unit. Update

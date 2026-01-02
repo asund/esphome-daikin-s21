@@ -62,14 +62,13 @@ void DaikinS21Climate::setup() {
     this->traits_.set_visual_current_temperature_step(TEMPERATURE_STEP.f_degc());
   }
   this->traits_.set_supported_fan_modes({climate::CLIMATE_FAN_AUTO, climate::CLIMATE_FAN_QUIET});
-  const char * custom_strings[] = {
-    std::get<const char *>(supported_daikin_fan_modes[DaikinFan1]),
-    std::get<const char *>(supported_daikin_fan_modes[DaikinFan2]),
-    std::get<const char *>(supported_daikin_fan_modes[DaikinFan3]),
-    std::get<const char *>(supported_daikin_fan_modes[DaikinFan4]),
-    std::get<const char *>(supported_daikin_fan_modes[DaikinFan5]),
-  };
-  this->traits_.set_supported_custom_fan_modes(custom_strings);
+  this->traits_.set_supported_custom_fan_modes({
+      daikin_fan_mode_to_cstr(DaikinFan1),
+      daikin_fan_mode_to_cstr(DaikinFan2),
+      daikin_fan_mode_to_cstr(DaikinFan3),
+      daikin_fan_mode_to_cstr(DaikinFan4),
+      daikin_fan_mode_to_cstr(DaikinFan5),
+  });
   // ensure optionals are populated with defaults
   this->set_fan_mode_(climate::CLIMATE_FAN_AUTO);
   // initialize setpoint, will be loaded from preferences or unit shortly
@@ -328,8 +327,8 @@ bool DaikinS21Climate::calc_unit_setpoint() {
  * Populates internal state with contained arguments then applies to the unit.
  */
 void DaikinS21Climate::control(const climate::ClimateCall &call) {
+  // DaikinClimateSettings changes
   bool climate_changed = false;
-
   if (call.get_mode().has_value() && (this->mode != call.get_mode().value())) {
     this->mode = call.get_mode().value();
     climate_changed = true;
@@ -345,16 +344,13 @@ void DaikinS21Climate::control(const climate::ClimateCall &call) {
       }
     }
   }
-
   if (call.get_target_temperature().has_value() && (this->target_temperature != call.get_target_temperature().value())) {
     this->target_temperature = call.get_target_temperature().value();
     climate_changed = true;
   }
-
   if (climate_changed) {
     (void)this->calc_unit_setpoint();  // mode and target temperature required
   }
-
   if (call.get_fan_mode().has_value()) {
     if (this->set_fan_mode_(call.get_fan_mode().value())) {
       climate_changed = true;
@@ -364,11 +360,11 @@ void DaikinS21Climate::control(const climate::ClimateCall &call) {
       climate_changed = true;
     }
   }
-
   if (climate_changed) {
     this->set_s21_climate();  // mode, unit setpoint and fan required
   }
 
+  // climate::ClimateSwingMode changes
   if (call.get_swing_mode().has_value() && (this->swing_mode != call.get_swing_mode().value())) {
     this->swing_mode = call.get_swing_mode().value();
     this->get_parent()->set_swing_mode(this->swing_mode);

@@ -78,74 +78,34 @@ constexpr climate::ClimateAction s21_to_climate_action(const uint8_t action) {
   }
 }
 
-constexpr climate::ClimateSwingMode s21_to_climate_swing_mode(const uint8_t mode) {
-  switch (mode) {
-    case '1':
-      return climate::CLIMATE_SWING_VERTICAL;
-    case '2':
-      return climate::CLIMATE_SWING_HORIZONTAL;
-    case '7':
-      return climate::CLIMATE_SWING_BOTH;
-    default:
-      return climate::CLIMATE_SWING_OFF;
-  }
-}
-
-constexpr uint8_t climate_swing_mode_to_s21(const climate::ClimateSwingMode mode) {
-  switch (mode) {
-    case climate::CLIMATE_SWING_BOTH:
-      return '7';
-    case climate::CLIMATE_SWING_VERTICAL:
-      return '1';
-    case climate::CLIMATE_SWING_HORIZONTAL:
-      return '2';
-    case climate::CLIMATE_SWING_OFF:
-    default:
-      return '0';
-  }
-}
-
-static constexpr std::array<EncodingString, DaikinHumidityModeCount> humidity_modes = {{
-  {'0', "Off"},
-  {0x3A, "Low"},
-  {0x3B, "Standard"},
-  {0x3C, "High"},
-  {0xFF, "Continuous"},
+static constexpr std::array<uint8_t, climate::CLIMATE_SWING_HORIZONTAL + 1> climate_swing_encodings = {{
+  '0',  // CLIMATE_SWING_OFF
+  '7',  // CLIMATE_SWING_BOTH
+  '1',  // CLIMATE_SWING_VERTICAL
+  '2',  // CLIMATE_SWING_HORIZONTAL
 }};
+constexpr auto s21_to_climate_swing_mode = encoding_to_enum<climate::ClimateSwingMode, climate::CLIMATE_SWING_HORIZONTAL + 1, climate_swing_encodings>;
+constexpr auto climate_swing_mode_to_s21 = enum_to_encoding_checked<climate::ClimateSwingMode, climate::CLIMATE_SWING_HORIZONTAL + 1, climate_swing_encodings>;
 
-constexpr DaikinHumidityMode s21_to_humidity_mode(const uint8_t mode) {
-  const auto iter = std::ranges::find(humidity_modes, mode, [](const auto &elem){ return std::get<uint8_t>(elem); });
-  if (iter != std::ranges::end(humidity_modes)) {
-    return static_cast<DaikinHumidityMode>(std::ranges::distance(std::begin(humidity_modes), iter));
-  }
-  return DaikinHumidityOff;
-}
-
-constexpr uint8_t humidity_mode_to_s21(const DaikinHumidityMode mode) {
-  return std::get<uint8_t>(humidity_modes[mode]);
-}
-
-static constexpr std::array<EncodingString, DaikinVerticalSwingModeCount> vertical_swing_modes = {{
-  {'0', "Off"},
-  {'1', "Top"},
-  {'2', "Upper"},
-  {'3', "Middle"},
-  {'4', "Lower"},
-  {'5', "Bottom"},
-  {'?', "On"},
+static constexpr std::array<uint8_t, DaikinHumidityModeCount> humidity_mode_encodings = {{
+  '0',
+  0x3A,
+  0x3B,
+  0x3C,
+  0xFF,
 }};
+constexpr auto s21_to_humidity_mode = encoding_to_enum<DaikinHumidityMode, DaikinHumidityModeCount, humidity_mode_encodings>;
 
-constexpr DaikinVerticalSwingMode s21_to_vertical_swing_mode(const uint8_t mode) {
-  const auto iter = std::ranges::find(vertical_swing_modes, mode, [](const auto &elem){ return std::get<uint8_t>(elem); });
-  if (iter != std::ranges::end(vertical_swing_modes)) {
-    return static_cast<DaikinVerticalSwingMode>(std::ranges::distance(std::begin(vertical_swing_modes), iter));
-  }
-  return DaikinVerticalSwingOff;
-}
-
-constexpr uint8_t vertical_swing_mode_to_s21(const DaikinVerticalSwingMode mode) {
-  return std::get<uint8_t>(vertical_swing_modes[mode]);
-}
+static constexpr std::array<uint8_t, DaikinVerticalSwingModeCount> vertical_swing_mode_encodings = {{
+  '0',
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '?',
+}};
+constexpr auto s21_to_vertical_swing_mode = encoding_to_enum<DaikinVerticalSwingMode, DaikinVerticalSwingModeCount, vertical_swing_mode_encodings>;
 
 static constexpr std::array<const char *, ActiveSourceCount> active_source_strings = {{
   "Rg",
@@ -329,13 +289,13 @@ void DaikinS21::set_climate_settings(const DaikinClimateSettings climate) {
 
 void DaikinS21::set_swing_mode(const climate::ClimateSwingMode swing) {
   if (this->get_swing_mode() != swing) {
-    this->swing_humidity.stage({ swing, this->swing_humidity.value().humidity }); // shares D6 with humidity, stage complete command
+    this->swing_humidity.stage({ swing, this->get_humidity_mode() }); // shares D6 with humidity, stage complete command
     this->trigger_cycle();
   }
 }
 
 void DaikinS21::set_humidity_mode(const DaikinHumidityMode humidity) {
-  if (this->swing_humidity.value().humidity != humidity) {
+  if (this->get_humidity_mode() != humidity) {
     this->swing_humidity.stage({ this->get_swing_mode(), humidity }); // shares D6 with swing, stage complete command
     this->trigger_cycle();
   }
@@ -869,7 +829,7 @@ void DaikinS21::handle_serial_idle() {
     if (this->swing_humidity.pending.swing != climate::CLIMATE_SWING_OFF) {
       payload[1] = '?';
     }
-    payload[2] = humidity_mode_to_s21(this->swing_humidity.pending.humidity);
+    payload[2] = humidity_mode_encodings[this->swing_humidity.pending.humidity];
     this->send_command(StateCommand::SwingHumidityModes, payload);
     this->swing_humidity.set_confirm_ms(cycle_interval);
     // keep vertical swing mode in sync
@@ -914,7 +874,7 @@ void DaikinS21::handle_serial_idle() {
   }
 
   if (this->vertical_swing_mode.staged()) {
-    payload[0] = vertical_swing_mode_to_s21(this->vertical_swing_mode.pending);
+    payload[0] = vertical_swing_mode_encodings[this->vertical_swing_mode.pending];
     this->send_command(StateCommand::VerticalSwingMode, payload);
     this->vertical_swing_mode.set_confirm_ms(cycle_interval);
     // keep regular swing mode state in sync
@@ -1336,20 +1296,13 @@ void DaikinS21::dump_state() {
         LOG_STR_ARG(active_source_strings[this->support.active_source]),
         LOG_STR_ARG(powerful_source_strings[this->support.powerful_source]));
   }
-  ESP_LOGD(TAG, "Mode: %s  Action: %s  Demand: %" PRIu8,
+  ESP_LOGD(TAG, "Mode: %s  Action: %s  Setpoint: %.1fC  Target: %.1fC  Inside: %.1fC  Coil: %.1fC",
       LOG_STR_ARG(climate::climate_mode_to_string(this->get_climate().mode)),
       LOG_STR_ARG(climate::climate_action_to_string(this->get_climate_action())),
-      this->get_demand_pull());
-  ESP_LOGD(TAG, "Fan: %s (%" PRIu16 " RPM)  Swing: %s",
-      LOG_STR_ARG(daikin_fan_mode_to_cstr(this->get_climate().fan)),
-      this->fan_rpm,
-      LOG_STR_ARG(climate::climate_swing_mode_to_string(this->get_swing_mode())));
-  ESP_LOGD(TAG, "Setpoint: %.1fC  Target: %.1fC  Inside: %.1fC  Coil: %.1fC  Humid: %" PRIu8 "%%",
       this->get_climate().setpoint.f_degc(),
       this->get_temp_target().f_degc(),
       this->get_temp_inside().f_degc(),
-      this->get_temp_coil().f_degc(),
-      this->get_humidity());
+      this->get_temp_coil().f_degc());
   ESP_LOGD(TAG, "Cycle Time: %" PRIu32 "ms  UnitState: %" PRIX8 "  SysState: %02" PRIX8,
       this->cycle_time_ms,
       this->unit_state.raw,

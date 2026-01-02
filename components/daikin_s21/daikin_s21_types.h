@@ -13,8 +13,7 @@ namespace esphome::daikin_s21 {
 // forward declaration
 class DaikinS21;
 
-class ProtocolVersion {
- public:
+struct ProtocolVersion {
   uint8_t major{};
   uint8_t minor{};
 
@@ -56,6 +55,45 @@ class DaikinC10 {
 inline constexpr DaikinC10 SETPOINT_STEP{1.0F}; // Daikin setpoint granularity
 inline constexpr DaikinC10 TEMPERATURE_STEP{0.5F}; // Daikin temperature sensor granularity
 inline constexpr DaikinC10 TEMPERATURE_INVALID{DaikinC10::nan_sentinel}; // NaN
+
+/**
+ * Function template for looking up an index enum value from an encoding.
+ *
+ * Encoding is checked and the first index is returned if out of range.
+ *
+ * @tparam T enum type
+ * @tparam N size of enum and encoding table
+ * @tparam &encoding_table encoding table
+ * @param encoding encoding to look up
+ * @return associated index enum value
+ */
+template <typename T, size_t N, const std::array<uint8_t, N> &encoding_table>
+constexpr T encoding_to_enum(const uint8_t encoding) {
+  const auto iter = std::ranges::find(encoding_table, encoding);
+  if (iter != std::ranges::end(encoding_table)) {
+    return static_cast<T>(std::ranges::distance(std::begin(encoding_table), iter));
+  }
+  return static_cast<T>(0);
+}
+
+/**
+ * Function template for looking up an encoding from an index enum value for enums outside of our control.
+ *
+ * Index is checked and the first value is returned if out of range.
+ *
+ * @tparam T enum type
+ * @tparam N size of enum and encoding table
+ * @tparam &encoding_table encoding table
+ * @param index index to look up
+ * @return associated encoding
+ */
+template <typename T, size_t N, const std::array<uint8_t, N> &encoding_table>
+constexpr uint8_t enum_to_encoding_checked(const T index) {
+  if (index < N) {
+    return encoding_table[index];
+  }
+  return encoding_table[0];
+}
 
 /**
  * Command states.
@@ -101,8 +139,6 @@ class CommandState {
   }
 };
 
-using EncodingString = std::pair<uint8_t, const char *>;
-
 enum DaikinFanMode : uint8_t {
   DaikinFanAuto,
   DaikinFanSilent,
@@ -114,7 +150,7 @@ enum DaikinFanMode : uint8_t {
   DaikinFanModeCount, // for array sizing
 };
 
-inline constexpr std::array<EncodingString, DaikinFanModeCount> supported_daikin_fan_modes = {{
+inline constexpr std::array<std::pair<uint8_t, const char *>, DaikinFanModeCount> supported_daikin_fan_modes = {{
   {'A', "Auto"},
   {'B', "Silent"},
   {'3', "1"},
@@ -128,7 +164,13 @@ constexpr const char * daikin_fan_mode_to_cstr(const DaikinFanMode mode) {
   return std::get<const char *>(supported_daikin_fan_modes[mode]);
 }
 
-DaikinFanMode string_to_daikin_fan_mode(std::string_view mode);
+constexpr DaikinFanMode string_to_daikin_fan_mode(const std::string_view mode) {
+  const auto iter = std::ranges::find(supported_daikin_fan_modes, mode, [](const auto &elem){ return std::get<const char *>(elem); });
+  if (iter != std::ranges::end(supported_daikin_fan_modes)) {
+    return static_cast<DaikinFanMode>(std::ranges::distance(std::begin(supported_daikin_fan_modes), iter));
+  }
+  return DaikinFanAuto;
+}
 
 struct DaikinClimateSettings {
   climate::ClimateMode mode{climate::CLIMATE_MODE_OFF};
