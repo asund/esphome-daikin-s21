@@ -7,8 +7,14 @@
 
 namespace esphome::daikin_s21 {
 
-class DaikinS21SelectSwing : public select::Select,
-                             public Parented<DaikinS21> {
+class DaikinS21SelectHumidity : public select::Select,
+                                public Parented<DaikinS21> {
+ protected:
+  void control(size_t index) override;
+};
+
+class DaikinS21SelectVerticalSwing : public select::Select,
+                                     public Parented<DaikinS21> {
  protected:
   void control(size_t index) override;
 };
@@ -20,13 +26,19 @@ class DaikinS21Select : public Component,
   void loop() override;
   void dump_config() override;
 
-  void set_swing_select(DaikinS21SelectSwing *swing_select) {
-    this->swing_select_ = swing_select;
+  void set_humidity_select(DaikinS21SelectHumidity *humidity_select) {
+    this->humidity_select_ = humidity_select;
+    this->get_parent()->request_readout(DaikinS21::ReadoutSwingHumidty);
+  }
+
+  void set_vertical_swing_select(DaikinS21SelectVerticalSwing *vertical_swing_select) {
+    this->vertical_swing_select_ = vertical_swing_select;
     this->get_parent()->request_readout(DaikinS21::ReadoutVerticalSwingMode);
   }
 
  protected:
-  DaikinS21SelectSwing *swing_select_{};
+  DaikinS21SelectHumidity *humidity_select_{};
+  DaikinS21SelectVerticalSwing *vertical_swing_select_{};
 };
 
 } // namespace esphome::daikin_s21

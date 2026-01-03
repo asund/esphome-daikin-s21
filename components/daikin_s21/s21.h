@@ -8,7 +8,6 @@
 #include "esphome/components/climate/climate.h"
 #include "esphome/components/uart/uart.h"
 #include "esphome/core/component.h"
-#include "daikin_s21_fan_modes.h"
 #include "daikin_s21_queries.h"
 #include "daikin_s21_serial.h"
 #include "daikin_s21_types.h"
@@ -28,12 +27,14 @@ class DaikinS21 : public PollingComponent {
   // external command action
   void set_climate_settings(DaikinClimateSettings climate);
   void set_swing_mode(climate::ClimateSwingMode swing);
+  void set_humidity_mode(DaikinHumidityMode humidity);
   void set_mode(DaikinMode mode, bool enable);
   void set_demand_control(uint8_t percent);
   void set_vertical_swing_mode(DaikinVerticalSwingMode swing);
 
   enum ReadoutRequest {
     // binary sensor
+    ReadoutErrorStatus,
     ReadoutUnitStateBits,
     ReadoutSystemStateBits,
     // sensor
@@ -52,6 +53,7 @@ class DaikinS21 : public PollingComponent {
     ReadoutVerticalSwingMode,
     // multiple components
     ReadoutPowerful,
+    ReadoutSwingHumidty,
     ReadoutSpecialModes,
     ReadoutDemandAndEcono,
     ReadoutCount, // just for bitset sizing
@@ -69,7 +71,8 @@ class DaikinS21 : public PollingComponent {
   bool is_ready() { return this->ready.all(); }
   auto get_climate() const { return this->climate.value(); }
   auto get_climate_action() const { return this->action; }
-  auto get_swing_mode() const { return this->swing_mode.value(); }
+  auto get_swing_mode() const { return this->swing_humidity.value().swing; }
+  auto get_humidity_mode() const { return this->swing_humidity.value().humidity; }
   auto get_demand_control() const { return this->demand_econo.value().demand; }
   auto get_temp_inside() const { return this->temp_inside; }
   auto get_temp_target() const { return this->temp_target; }
@@ -141,7 +144,7 @@ class DaikinS21 : public PollingComponent {
   void handle_nop(std::span<const uint8_t> payload) {}
   void handle_state_basic(std::span<const uint8_t> payload);
   void handle_state_error_status(std::span<const uint8_t> payload);
-  void handle_state_swing_or_humidity(std::span<const uint8_t> payload);
+  void handle_state_swing_humidity_modes(std::span<const uint8_t> payload);
   void handle_state_special_modes(std::span<const uint8_t> payload);
   void handle_state_demand_and_econo(std::span<const uint8_t> payload);
   void handle_state_inside_outside_temperature(std::span<const uint8_t> payload);
@@ -183,7 +186,7 @@ class DaikinS21 : public PollingComponent {
 
   // settings
   CommandState<DaikinClimateSettings> climate{};
-  CommandState<climate::ClimateSwingMode> swing_mode{};
+  CommandState<DaikinSwingHumiditySettings> swing_humidity{};
   CommandState<DaikinSpecialModes> special_modes{};
   CommandState<DaikinDemandEcono> demand_econo{};
   CommandState<DaikinVerticalSwingMode> vertical_swing_mode{};
@@ -226,20 +229,19 @@ class DaikinS21 : public PollingComponent {
     bool outside_temperature_query{};
     bool humidity_query{};
     bool unit_system_state_queries{};
-    ActiveSource active_source{ActiveSource::Unknown};
-    PowerfulSource powerful_source{PowerfulSource::Unknown};
+    ActiveSource active_source{ActiveSourceUnknown};
+    PowerfulSource powerful_source{PowerfulSourceUnknown};
     // supported
     bool fan{};
     bool swing{};
     bool horiz_swing{};
     char model_info{'?'};
-    bool humidify{};
-    bool dehumidify{};
     bool dry{};
     bool demand{};
     bool powerful{};
     bool econo{};
     bool streamer{};
+    uint8_t s_humd{}; // bitfield of supported humidity modes, see protocol docs
     // unsupported
     bool ac_led{};
     bool laundry{};

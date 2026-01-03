@@ -60,6 +60,7 @@ class DaikinS21BinarySensor : public Component,
   }
   void set_serial_error_sensor(binary_sensor::BinarySensor *sensor) {
     this->serial_error_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutErrorStatus);
   }
 
  protected:

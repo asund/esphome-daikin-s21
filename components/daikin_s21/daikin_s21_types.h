@@ -5,16 +5,15 @@
 #include <functional>
 #include <limits>
 #include <type_traits>
+#include <utility>
 #include "esphome/components/climate/climate.h"
-#include "daikin_s21_fan_modes.h"
 
 namespace esphome::daikin_s21 {
 
 // forward declaration
 class DaikinS21;
 
-class ProtocolVersion {
- public:
+struct ProtocolVersion {
   uint8_t major{};
   uint8_t minor{};
 
@@ -56,6 +55,45 @@ class DaikinC10 {
 inline constexpr DaikinC10 SETPOINT_STEP{1.0F}; // Daikin setpoint granularity
 inline constexpr DaikinC10 TEMPERATURE_STEP{0.5F}; // Daikin temperature sensor granularity
 inline constexpr DaikinC10 TEMPERATURE_INVALID{DaikinC10::nan_sentinel}; // NaN
+
+/**
+ * Function template for looking up an index enum value from an encoding.
+ *
+ * Encoding is checked and the first index is returned if out of range.
+ *
+ * @tparam T enum type
+ * @tparam N size of enum and encoding table
+ * @tparam &encoding_table encoding table
+ * @param encoding encoding to look up
+ * @return associated index enum value
+ */
+template <typename T, size_t N, const std::array<uint8_t, N> &encoding_table>
+constexpr T encoding_to_enum(const uint8_t encoding) {
+  const auto iter = std::ranges::find(encoding_table, encoding);
+  if (iter != std::ranges::end(encoding_table)) {
+    return static_cast<T>(std::ranges::distance(std::begin(encoding_table), iter));
+  }
+  return static_cast<T>(0);
+}
+
+/**
+ * Function template for looking up an encoding from an index enum value for enums outside of our control.
+ *
+ * Index is checked and the first value is returned if out of range.
+ *
+ * @tparam T enum type
+ * @tparam N size of enum and encoding table
+ * @tparam &encoding_table encoding table
+ * @param index index to look up
+ * @return associated encoding
+ */
+template <typename T, size_t N, const std::array<uint8_t, N> &encoding_table>
+constexpr uint8_t enum_to_encoding_checked(const T index) {
+  if (index < N) {
+    return encoding_table[index];
+  }
+  return encoding_table[0];
+}
 
 /**
  * Command states.
@@ -101,6 +139,63 @@ class CommandState {
   }
 };
 
+enum DaikinFanMode : uint8_t {
+  DaikinFanAuto,
+  DaikinFanSilent,
+  DaikinFan1,
+  DaikinFan2,
+  DaikinFan3,
+  DaikinFan4,
+  DaikinFan5,
+  DaikinFanModeCount, // for array sizing
+};
+
+inline constexpr std::array<std::pair<uint8_t, const char *>, DaikinFanModeCount> supported_daikin_fan_modes = {{
+  {'A', "Auto"},
+  {'B', "Silent"},
+  {'3', "1"},
+  {'4', "2"},
+  {'5', "3"},
+  {'6', "4"},
+  {'7', "5"},
+}};
+
+constexpr const char * daikin_fan_mode_to_cstr(const DaikinFanMode mode) {
+  return std::get<const char *>(supported_daikin_fan_modes[mode]);
+}
+
+constexpr DaikinFanMode string_to_daikin_fan_mode(const std::string_view mode) {
+  const auto iter = std::ranges::find(supported_daikin_fan_modes, mode, [](const auto &elem){ return std::get<const char *>(elem); });
+  if (iter != std::ranges::end(supported_daikin_fan_modes)) {
+    return static_cast<DaikinFanMode>(std::ranges::distance(std::begin(supported_daikin_fan_modes), iter));
+  }
+  return DaikinFanAuto;
+}
+
+struct DaikinClimateSettings {
+  climate::ClimateMode mode{climate::CLIMATE_MODE_OFF};
+  DaikinFanMode fan{DaikinFanAuto};
+  DaikinC10 setpoint{23};
+
+  constexpr bool operator==(const DaikinClimateSettings &other) const = default;
+};
+
+enum DaikinHumidityMode : uint8_t {
+  DaikinHumidityOff,
+  DaikinHumidityLow,
+  DaikinHumidityStandard,
+  DaikinHumidityHigh,
+  DaikinHumidityContinuous,
+  DaikinHumidityModeCount,  // for array sizing
+};
+
+struct DaikinSwingHumiditySettings {
+  climate::ClimateSwingMode swing{climate::ClimateSwingMode::CLIMATE_SWING_OFF};
+  DaikinHumidityMode humidity{DaikinHumidityOff};
+
+  constexpr bool operator==(const DaikinSwingHumiditySettings &other) const = default;
+};
+
 enum DaikinMode : uint8_t {
   ModePowerful,     // maximum output (20 minute timeout), mutaully exclusive with comfort/quiet/econo
   ModeComfort,      // fan angle depends on heating/cooling action
@@ -122,34 +217,37 @@ struct DaikinDemandEcono {
   constexpr bool operator==(const DaikinDemandEcono &other) const = default;
 };
 
-enum class DaikinVerticalSwingMode : uint8_t {
-  Off = 0,
-  Top = 1,
-  Upper = 2,
-  Middle = 3,
-  Lower = 4,
-  Bottom = 5,
-  On,
+enum DaikinVerticalSwingMode : uint8_t {
+  DaikinVerticalSwingOff,
+  DaikinVerticalSwingTop,
+  DaikinVerticalSwingUpper,
+  DaikinVerticalSwingMiddle,
+  DaikinVerticalSwingLower,
+  DaikinVerticalSwingBottom,
+  DaikinVerticalSwingOn,
+  DaikinVerticalSwingModeCount, // for array sizing
 };
 
 /**
  * Possible sources of active flag.
  */
-enum class ActiveSource : uint8_t {
-  Unknown,
-  CompressorOnOff,  // directly read from query
-  UnitState,        // interpreted from unit state bitfield
-  Unsupported,      // hardcoded to active
+enum ActiveSource : uint8_t {
+  ActiveSourceUnknown,
+  ActiveSourceCompressorOnOff,  // directly read from query
+  ActiveSourceUnitState,        // interpreted from unit state bitfield
+  ActiveSourceUnsupported,      // hardcoded to active
+  ActiveSourceCount,            // for array sizing
 };
 
 /**
  * Possible sources of powerful flag.
  */
-enum class PowerfulSource : uint8_t {
-  Unknown,
-  SpecialModes, // directly read from query
-  UnitState,    // interpreted from unit state bitfield
-  Disabled,
+enum PowerfulSource : uint8_t {
+  PowerfulSourceUnknown,
+  PowerfulSourceSpecialModes, // directly read from query
+  PowerfulSourceUnitState,    // interpreted from unit state bitfield
+  PowerfulSourceDisabled,
+  PowerfulSourceCount,        // for array sizing
 };
 
 /**
@@ -176,14 +274,6 @@ class DaikinSystemState {
   constexpr bool defrost() const { return (this->raw & 0x08) != 0; }
   constexpr bool multizone_conflict() const { return (this->raw & 0x20) != 0; }
   uint8_t raw{};
-};
-
-struct DaikinClimateSettings {
-  climate::ClimateMode mode{climate::CLIMATE_MODE_OFF};
-  DaikinFanMode fan{DaikinFanMode::Auto};
-  DaikinC10 setpoint{23};
-
-  constexpr bool operator==(const DaikinClimateSettings &other) const = default;
 };
 
 // MiscQuery::Model or StateQuery::ModelCode responses, reversed ascii hex (these are byte swapped from controller response)

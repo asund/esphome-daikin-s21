@@ -15,7 +15,7 @@ namespace StateQuery {
   inline constexpr std::string_view OptionalFeatures{"F2"};
   inline constexpr std::string_view OnOffTimer{"F3"};
   inline constexpr std::string_view ErrorStatus{"F4"};
-  inline constexpr std::string_view SwingOrHumidity{"F5"};
+  inline constexpr std::string_view SwingHumidityModes{"F5"};
   inline constexpr std::string_view SpecialModes{"F6"};
   inline constexpr std::string_view DemandAndEcono{"F7"};
   inline constexpr std::string_view OldProtocol{"F8"};
@@ -110,7 +110,7 @@ namespace StateCommand {
   inline constexpr std::string_view PowerModeTempFan{"D1"};
   // D2
   inline constexpr std::string_view OnOffTimer{"D3"};
-  inline constexpr std::string_view LouvreSwingMode{"D5"};
+  inline constexpr std::string_view SwingHumidityModes{"D5"};
   inline constexpr std::string_view SpecialModes{"D6"};
   inline constexpr std::string_view DemandAndEcono{"D7"};
   // DH

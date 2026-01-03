@@ -5,7 +5,6 @@
 #include "esphome/core/component.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/preferences.h"
-#include "../daikin_s21_fan_modes.h"
 #include "../daikin_s21_types.h"
 
 namespace esphome::daikin_s21 {
@@ -48,6 +47,8 @@ class DaikinS21Climate : public climate::Climate,
   DaikinC10 get_current_temperature();
   bool calc_unit_setpoint();
   float get_current_humidity() const;
+  DaikinFanMode get_daikin_fan_mode() const;
+  bool set_daikin_fan_mode(DaikinFanMode fan);
   void set_s21_climate();
 
   sensor::Sensor *temperature_sensor_{};
