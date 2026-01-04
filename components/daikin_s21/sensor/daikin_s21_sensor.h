@@ -18,6 +18,9 @@ class DaikinS21Sensor : public PollingComponent,
 
   void publish_sensors();
 
+  void set_temp_setpoint_sensor(sensor::Sensor *sensor) {
+    this->temp_setpoint_sensor_ = sensor;
+  }
   void set_temp_inside_sensor(sensor::Sensor *sensor) {
     this->temp_inside_sensor_ = sensor;
   }
@@ -69,6 +72,7 @@ class DaikinS21Sensor : public PollingComponent,
  protected:
   bool is_free_run() const { return this->get_update_interval() == 0; }
 
+  sensor::Sensor *temp_setpoint_sensor_{};
   sensor::Sensor *temp_inside_sensor_{};
   sensor::Sensor *temp_target_sensor_{};
   sensor::Sensor *temp_outside_sensor_{};

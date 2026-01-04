@@ -455,11 +455,15 @@ select:
 sensor:
   - platform: daikin_s21
     update_interval: 0s
+    # setpoint_temperature: # Unit setpoint. provided for insight on climate adjustment but probably not useful for users.
+    #   name: Setpoint Temperature
+    #   filters:
+    #     - delta: 0.0
     inside_temperature:
       name: Inside Temperature
       filters:
         - delta: 0.0
-    # target_temperature: # unit control loop setpoint, taking mode modifiers into account. probably only useful when debugging
+    # target_temperature: # unit control loop setpoint, taking mode modifiers into account. probably only useful when debugging.
     #   name: Target Temperature
     #   filters:
     #     - delta: 0.0

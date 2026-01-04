@@ -35,10 +35,30 @@ void DaikinS21Sensor::update() {
   }
 }
 
+void DaikinS21Sensor::dump_config() {
+  ESP_LOGCONFIG(TAG, "Daikin S21 Sensor:");
+  LOG_SENSOR("  ", "Temperature Setpoint", this->temp_setpoint_sensor_);
+  LOG_SENSOR("  ", "Temperature Inside", this->temp_inside_sensor_);
+  LOG_SENSOR("  ", "Temperature Target", this->temp_target_sensor_);
+  LOG_SENSOR("  ", "Temperature Outside", this->temp_outside_sensor_);
+  LOG_SENSOR("  ", "Temperature Coil", this->temp_coil_sensor_);
+  LOG_SENSOR("  ", "Fan Speed", this->fan_speed_sensor_);
+  LOG_SENSOR("  ", "Swing Vertical Angle", this->swing_vertical_angle_sensor_);
+  LOG_SENSOR("  ", "Compressor Frequency", this->compressor_frequency_sensor_);
+  LOG_SENSOR("  ", "Humidity", this->humidity_sensor_);
+  LOG_SENSOR("  ", "Demand", this->demand_sensor_);
+  LOG_SENSOR("  ", "IR Counter", this->ir_counter_sensor_);
+  LOG_SENSOR("  ", "Power Consumption", this->power_consumption_sensor_);
+  LOG_SENSOR("  ", "Outdoor Capacity", this->outdoor_capacity_sensor_);
+}
+
 /**
  * Unconditionally publish the sensors
  */
 void DaikinS21Sensor::publish_sensors() {
+  if (this->temp_setpoint_sensor_ != nullptr) {
+    this->temp_setpoint_sensor_->publish_state(this->get_parent()->get_temp_setpoint().f_degc());
+  }
   if (this->temp_inside_sensor_ != nullptr) {
     this->temp_inside_sensor_->publish_state(this->get_parent()->get_temp_inside().f_degc());
   }
@@ -75,22 +95,6 @@ void DaikinS21Sensor::publish_sensors() {
   if (this->outdoor_capacity_sensor_ != nullptr) {
     this->outdoor_capacity_sensor_->publish_state(this->get_parent()->get_outdoor_capacity());
   }
-}
-
-void DaikinS21Sensor::dump_config() {
-  ESP_LOGCONFIG(TAG, "Daikin S21 Sensor:");
-  LOG_SENSOR("  ", "Temperature Inside", this->temp_inside_sensor_);
-  LOG_SENSOR("  ", "Temperature Target", this->temp_target_sensor_);
-  LOG_SENSOR("  ", "Temperature Outside", this->temp_outside_sensor_);
-  LOG_SENSOR("  ", "Temperature Coil", this->temp_coil_sensor_);
-  LOG_SENSOR("  ", "Fan Speed", this->fan_speed_sensor_);
-  LOG_SENSOR("  ", "Swing Vertical Angle", this->swing_vertical_angle_sensor_);
-  LOG_SENSOR("  ", "Compressor Frequency", this->compressor_frequency_sensor_);
-  LOG_SENSOR("  ", "Humidity", this->humidity_sensor_);
-  LOG_SENSOR("  ", "Demand", this->demand_sensor_);
-  LOG_SENSOR("  ", "IR Counter", this->ir_counter_sensor_);
-  LOG_SENSOR("  ", "Power Consumption", this->power_consumption_sensor_);
-  LOG_SENSOR("  ", "Outdoor Capacity", this->outdoor_capacity_sensor_);
 }
 
 } // namespace esphome::daikin_s21
