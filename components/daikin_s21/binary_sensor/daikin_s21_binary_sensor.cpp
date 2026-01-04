@@ -61,14 +61,30 @@ void DaikinS21BinarySensor::dump_config() {
       LOG_BINARY_SENSOR("  ", mode_sensor->get_name().c_str(), mode_sensor);
     }
   }
-  LOG_BINARY_SENSOR("  ", "Defrost", this->defrost_sensor_);
-  LOG_BINARY_SENSOR("  ", "Active", this->active_sensor_);
-  LOG_BINARY_SENSOR("  ", "Online", this->online_sensor_);
-  LOG_BINARY_SENSOR("  ", "Valve", this->valve_sensor_);
-  LOG_BINARY_SENSOR("  ", "Short Cycle", this->short_cycle_sensor_);
-  LOG_BINARY_SENSOR("  ", "System Defrost", this->system_defrost_sensor_);
-  LOG_BINARY_SENSOR("  ", "Multizone Conflict", this->multizone_conflict_sensor_);
-  LOG_BINARY_SENSOR("  ", "Serial Error", this->serial_error_sensor_);
+  if (this->defrost_sensor_ != nullptr) {
+    LOG_BINARY_SENSOR("  ", "Defrost", this->defrost_sensor_);
+  }
+  if (this->active_sensor_ != nullptr) {
+    LOG_BINARY_SENSOR("  ", "Active", this->active_sensor_);
+  }
+  if (this->online_sensor_ != nullptr) {
+    LOG_BINARY_SENSOR("  ", "Online", this->online_sensor_);
+  }
+  if (this->valve_sensor_ != nullptr) {
+    LOG_BINARY_SENSOR("  ", "Valve", this->valve_sensor_);
+  }
+  if (this->short_cycle_sensor_ != nullptr) {
+    LOG_BINARY_SENSOR("  ", "Short Cycle", this->short_cycle_sensor_);
+  }
+  if (this->system_defrost_sensor_ != nullptr) {
+    LOG_BINARY_SENSOR("  ", "System Defrost", this->system_defrost_sensor_);
+  }
+  if (this->multizone_conflict_sensor_ != nullptr) {
+    LOG_BINARY_SENSOR("  ", "Multizone Conflict", this->multizone_conflict_sensor_);
+  }
+  if (this->serial_error_sensor_ != nullptr) {
+    LOG_BINARY_SENSOR("  ", "Serial Error", this->serial_error_sensor_);
+  }
 }
 
 } // namespace esphome::daikin_s21

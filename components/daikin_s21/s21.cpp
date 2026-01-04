@@ -385,7 +385,7 @@ std::span<const uint8_t> DaikinS21::get_query_result(std::string_view query_str)
  */
 void DaikinS21::trigger_cycle() {
   if (this->cycle_active == false) {
-    start_cycle();
+    this->start_cycle();
   } else {
     this->cycle_triggered = true;
   }
