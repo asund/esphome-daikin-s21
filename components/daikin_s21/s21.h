@@ -74,6 +74,7 @@ class DaikinS21 : public PollingComponent {
   auto get_swing_mode() const { return this->swing_humidity.value().swing; }
   auto get_humidity_mode() const { return this->swing_humidity.value().humidity; }
   auto get_demand_control() const { return this->demand_econo.value().demand; }
+  auto get_temp_setpoint() const { return this->climate.value().setpoint; }
   auto get_temp_inside() const { return this->temp_inside; }
   auto get_temp_target() const { return this->temp_target; }
   auto get_temp_outside() const { return this->temp_outside; }
