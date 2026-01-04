@@ -42,6 +42,21 @@ class DaikinC10 {
   explicit constexpr operator int16_t() const { return value; }
   constexpr float f_degc() const { return static_cast<float>(*this); }
 
+  /** Get the fine (0.5C) encoding of the temperature value. */
+  constexpr uint8_t get_s21_fine() const {
+    return (value == DaikinC10::nan_sentinel) ? 0x80 : ((value / 5) + 28);
+  }
+
+  /** Set the temperature value from the fine (0.5C) encoding. */
+  constexpr void set_s21_fine(const uint8_t raw) {
+    this->value = (raw == 0x80) ? DaikinC10::nan_sentinel : ((raw - 28) * 5);
+  }
+
+  /** Set the temperature value from the coarse (1.0C) encoding. */
+  constexpr void set_s21_coarse(const uint8_t raw) {
+    this->value = (raw == 0xFF) ? DaikinC10::nan_sentinel : ((raw - 0x80) * 5); // danijelt reports 0xFF when unsupported
+  }
+
   constexpr auto operator<=>(const DaikinC10 &other) const = default;
   constexpr DaikinC10 operator+(const DaikinC10 &arg) const { return this->value + arg.value; }
   constexpr DaikinC10 operator-(const DaikinC10 &arg) const { return this->value - arg.value; }

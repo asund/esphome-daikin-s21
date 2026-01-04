@@ -813,11 +813,7 @@ void DaikinS21::handle_serial_idle() {
   if (this->climate.staged()) {
     payload[0] = (this->climate.pending.mode == climate::CLIMATE_MODE_OFF) ? '0' : '1'; // power
     payload[1] = climate_mode_to_s21(this->climate.pending.mode);
-    if (this->climate.pending.setpoint == TEMPERATURE_INVALID) {
-      payload[2] = 0x80;
-    } else {
-      payload[2] = (static_cast<int16_t>(this->climate.pending.setpoint) / 5) + 28;
-    }
+    payload[2] = this->climate.pending.setpoint.get_s21_fine();
     payload[3] = fan_mode_to_s21(this->climate.pending.fan);
     this->send_command(StateCommand::PowerModeTempFan, payload);
     this->climate.set_confirm_ms(cycle_interval, 10*1000);  // longer timeout needed for mode changes
@@ -936,11 +932,7 @@ void DaikinS21::handle_state_basic(const std::span<const uint8_t> payload) {
     this->climate.active.mode = s21_to_climate_mode(payload[1]);
     this->action_reported = s21_to_climate_action(payload[1]);
   }
-  if (payload[2] == 0x80) {
-    this->climate.active.setpoint = TEMPERATURE_INVALID;
-  } else {
-    this->climate.active.setpoint = (payload[2] - 28) * 5;  // Celsius * 10
-  }
+  this->climate.active.setpoint.set_s21_fine(payload[2]);
   // silent fan mode not reported here so prefer RG if present
   if (this->support.fan_mode_query == false) {
     this->climate.active.fan = s21_to_fan_mode(payload[3]);
@@ -975,10 +967,10 @@ void DaikinS21::handle_state_demand_and_econo(const std::span<const uint8_t> pay
 /** Coarser than EnvironmentQuery::InsideTemperature and EnvironmentQuery::OutsideTemperature. Added if those queries fail. */
 void DaikinS21::handle_state_inside_outside_temperature(const std::span<const uint8_t> payload) {
   if (this->support.inside_temperature_query == false) {
-    this->temp_inside = (payload[0] - 128) * 5;  // 1 degree
+    this->temp_inside.set_s21_coarse(payload[0]);
   }
-  if ((this->support.outside_temperature_query == false) && (payload[1] != 0xFF)) { // danijelt reports 0xFF when unsupported
-    this->temp_outside = (payload[1] - 128) * 5; // 1 degree
+  if (this->support.outside_temperature_query == false) {
+    this->temp_outside.set_s21_coarse(payload[1]);
   }
   if ((this->support.humidity_query == false) && ((payload[2] - '0') <= 100)) {  // Some units report 0xFF when unsupported
     this->humidity = payload[2] - '0';  // 5% granularity
@@ -1191,8 +1183,6 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
           // save a copy of the payload
           this->active_query->ack(payload);
         }
-      } else {
-        // nothing yet to do when a command is accepted
       }
       break;
 
@@ -1200,8 +1190,6 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
       ESP_LOGW(TAG, "NAK for %" PRI_SV, PRI_SV_ARGS(tx_str));
       if (is_query) {
         this->active_query->nak();
-      } else {
-        // nothing yet to do when a command is rejected
       }
       break;
 
@@ -1214,39 +1202,33 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
         if (this->ready[ReadyProtocolDetection]) {
           this->active_query->nak();
         }
-      } else {
-        // command will be retried, let's hope the code that generates it is bug free
       }
       break;
 
     case DaikinSerial::Result::Error:
       ESP_LOGE(TAG, "Error with %" PRI_SV, PRI_SV_ARGS(tx_str));
+      // something went terribly wrong, try to reinitialize communications
+      this->climate.reset();
+      this->swing_humidity.reset();
+      this->special_modes.reset();
+      this->demand_econo.reset();
+      this->vertical_swing_mode.reset();
+      this->active_query = this->queries.end(); // end the query cycle early, let handle_serial_idle resume communication when error state times out
       break;
+
     default:
       break;
   }
 
   // update local state for next action
-  if (result == DaikinSerial::Result::Error) {
-    // something went terribly wrong, try to reinitialize communications
-    this->climate.reset();
-    this->swing_humidity.reset();
-    this->special_modes.reset();
-    this->demand_econo.reset();
-    this->vertical_swing_mode.reset();
-    this->current_command = {};
-    this->start_cycle();
-  } else {
-    if (is_query) {
-      // if communication established and all queries are disabled we had comms then they were lost
-      if (this->ready[ReadyProtocolDetection] && (std::ranges::count_if(this->queries, DaikinQuery::IsEnabled) == 0)) {
-        this->setup();  // reinitialize in order to prepare for the HVAC unit being reconnected
-      } else {
-        // advance to next query
-        this->active_query = std::ranges::find_if(this->active_query + 1, this->queries.end(), DaikinQuery::IsEnabled);
-      }
+  this->current_command = {};
+  if ((result != DaikinSerial::Result::Error) && is_query) {
+    // if communication established and all queries are disabled we had comms then they were lost
+    if (this->ready[ReadyProtocolDetection] && (std::ranges::count_if(this->queries, DaikinQuery::IsEnabled) == 0)) {
+      this->setup();  // reinitialize in order to prepare for the HVAC unit being reconnected
     } else {
-      this->current_command = {};
+      // advance to next query
+      this->active_query = std::ranges::find_if(this->active_query + 1, this->queries.end(), DaikinQuery::IsEnabled);
     }
   }
 }
