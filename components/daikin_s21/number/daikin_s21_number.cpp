@@ -27,10 +27,7 @@ void DaikinS21Number::loop() {
 }
 
 void DaikinS21Number::dump_config() {
-  ESP_LOGCONFIG(TAG, "Daikin S21 Number:");
-  if (this->demand_number_ != nullptr) {
-    LOG_NUMBER("  ", "Demand", this->demand_number_);
-  }
+  LOG_NUMBER("", "Demand", this->demand_number_);
 }
 
 } // namespace esphome::daikin_s21

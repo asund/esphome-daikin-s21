@@ -44,13 +44,8 @@ void DaikinS21Select::loop() {
 }
 
 void DaikinS21Select::dump_config() {
-  ESP_LOGCONFIG(TAG, "Daikin S21 Select:");
-  if (humidity_select_ != nullptr) {
-    LOG_SELECT("  ", "Humidity", this->humidity_select_);
-  }
-  if (vertical_swing_select_ != nullptr) {
-    LOG_SELECT("  ", "Vertical Swing", this->vertical_swing_select_);
-  }
+  LOG_SELECT("", "Humidity", this->humidity_select_);
+  LOG_SELECT("", "Vertical Swing", this->vertical_swing_select_);
 }
 
 } // namespace esphome::daikin_s21

@@ -175,26 +175,26 @@ void DaikinS21Climate::update() {
 }
 
 void DaikinS21Climate::dump_config() {
-  ESP_LOGCONFIG(TAG, "DaikinS21Climate:");
-  if (this->temperature_sensor_ != nullptr) {
-    if (this->temperature_sensor_unit_is_valid() == false) {
-      ESP_LOGCONFIG(TAG, "  TEMPERATURE SENSOR: INVALID UNIT '%s' (must be °C or °F)",
-                    this->temperature_sensor_->get_unit_of_measurement_ref().c_str());
-    } else {
-      ESP_LOGCONFIG(TAG, "  Temperature sensor: %s",
-                    this->temperature_sensor_->get_name().c_str());
-    }
+  LOG_CLIMATE("", "Daikin S21 Climate", this);
+  LOG_SENSOR("  ", "Temperature Reference", this->temperature_sensor_);
+  if ((this->temperature_sensor_ != nullptr) && (this->temperature_sensor_unit_is_valid() == false)) {
+    ESP_LOGCONFIG(TAG, "  TEMPERATURE SENSOR: INVALID UNIT '%s' (must be °C or °F)",
+        this->temperature_sensor_->get_unit_of_measurement_ref().c_str());
   }
-  if (this->humidity_sensor_ != nullptr) {
-    if ((this->humidity_sensor_->get_unit_of_measurement_ref() != "%")) {
-      ESP_LOGCONFIG(TAG, "  HUMIDITY SENSOR: INVALID UNIT '%s' (must be %%)",
-                    this->humidity_sensor_->get_unit_of_measurement_ref().c_str());
-    } else {
-      ESP_LOGCONFIG(TAG, "  Humidity sensor: %s",
-                    this->humidity_sensor_->get_name().c_str());
-    }
+  LOG_SENSOR("  ", "Humidity Reference", this->humidity_sensor_);
+  if ((this->humidity_sensor_ != nullptr) && (this->humidity_sensor_->get_unit_of_measurement_ref() != "%")) {
+    ESP_LOGCONFIG(TAG, "  HUMIDITY SENSOR: INVALID UNIT '%s' (must be %%)",
+        this->humidity_sensor_->get_unit_of_measurement_ref().c_str());
   }
   ESP_LOGCONFIG(TAG, "  Setpoint interval: %" PRIu32 "s", this->get_update_interval() / 1000);
+  for (const climate::ClimateMode mode : {climate::CLIMATE_MODE_HEAT_COOL, climate::CLIMATE_MODE_COOL, climate::CLIMATE_MODE_HEAT}) {
+    if (const auto * const params = get_setpoint_mode_params(mode)) {
+      ESP_LOGCONFIG(TAG, "  %s unit setpoint range: %.1f-%.1f",
+          LOG_STR_ARG(climate::climate_mode_to_string(mode)), params->min.f_degc(), params->max.f_degc());
+      ESP_LOGCONFIG(TAG, "  %s user offset: %+.1f",
+          LOG_STR_ARG(climate::climate_mode_to_string(mode)), params->offset.f_degc());
+    }
+  }
   this->dump_traits_(TAG);
 }
 

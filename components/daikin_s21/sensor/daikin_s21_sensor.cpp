@@ -36,46 +36,19 @@ void DaikinS21Sensor::update() {
 }
 
 void DaikinS21Sensor::dump_config() {
-  ESP_LOGCONFIG(TAG, "Daikin S21 Sensor:");
-  if (this->temp_setpoint_sensor_ != nullptr) {
-    LOG_SENSOR("  ", "Temperature Setpoint", this->temp_setpoint_sensor_);
-  }
-  if (this->temp_inside_sensor_ != nullptr) {
-    LOG_SENSOR("  ", "Temperature Inside", this->temp_inside_sensor_);
-  }
-  if (this->temp_target_sensor_ != nullptr) {
-    LOG_SENSOR("  ", "Temperature Target", this->temp_target_sensor_);
-  }
-  if (this->temp_outside_sensor_ != nullptr) {
-    LOG_SENSOR("  ", "Temperature Outside", this->temp_outside_sensor_);
-  }
-  if (this->temp_coil_sensor_ != nullptr) {
-    LOG_SENSOR("  ", "Temperature Coil", this->temp_coil_sensor_);
-  }
-  if (this->fan_speed_sensor_ != nullptr) {
-    LOG_SENSOR("  ", "Fan Speed", this->fan_speed_sensor_);
-  }
-  if (this->swing_vertical_angle_sensor_ != nullptr) {
-    LOG_SENSOR("  ", "Swing Vertical Angle", this->swing_vertical_angle_sensor_);
-  }
-  if (this->compressor_frequency_sensor_ != nullptr) {
-    LOG_SENSOR("  ", "Compressor Frequency", this->compressor_frequency_sensor_);
-  }
-  if (this->humidity_sensor_ != nullptr) {
-    LOG_SENSOR("  ", "Humidity", this->humidity_sensor_);
-  }
-  if (this->demand_sensor_ != nullptr) {
-    LOG_SENSOR("  ", "Demand", this->demand_sensor_);
-  }
-  if (this->ir_counter_sensor_ != nullptr) {
-    LOG_SENSOR("  ", "IR Counter", this->ir_counter_sensor_);
-  }
-  if (this->power_consumption_sensor_ != nullptr) {
-    LOG_SENSOR("  ", "Power Consumption", this->power_consumption_sensor_);
-  }
-  if (this->outdoor_capacity_sensor_ != nullptr) {
-    LOG_SENSOR("  ", "Outdoor Capacity", this->outdoor_capacity_sensor_);
-  }
+  LOG_SENSOR("", "Temperature Setpoint", this->temp_setpoint_sensor_);
+  LOG_SENSOR("", "Temperature Inside", this->temp_inside_sensor_);
+  LOG_SENSOR("", "Temperature Target", this->temp_target_sensor_);
+  LOG_SENSOR("", "Temperature Outside", this->temp_outside_sensor_);
+  LOG_SENSOR("", "Temperature Coil", this->temp_coil_sensor_);
+  LOG_SENSOR("", "Fan Speed", this->fan_speed_sensor_);
+  LOG_SENSOR("", "Swing Vertical Angle", this->swing_vertical_angle_sensor_);
+  LOG_SENSOR("", "Compressor Frequency", this->compressor_frequency_sensor_);
+  LOG_SENSOR("", "Humidity", this->humidity_sensor_);
+  LOG_SENSOR("", "Demand", this->demand_sensor_);
+  LOG_SENSOR("", "IR Counter", this->ir_counter_sensor_);
+  LOG_SENSOR("", "Power Consumption", this->power_consumption_sensor_);
+  LOG_SENSOR("", "Outdoor Capacity", this->outdoor_capacity_sensor_);
 }
 
 /**

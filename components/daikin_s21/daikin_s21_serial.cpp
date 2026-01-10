@@ -163,6 +163,10 @@ void DaikinSerial::loop() {
   }
 }
 
+void DaikinSerial::dump_config() {
+  ESP_LOGCONFIG(TAG, "  Debug: %s", ONOFF(this->debug));
+}
+
 void DaikinSerial::send_frame(const std::string_view cmd, const std::span<const uint8_t> payload /*= {}*/) {
   if (cmd.size() > MAX_COMMAND_SIZE) {
     ESP_LOGE(TAG, "Tx: Command '%" PRI_SV "' too large", PRI_SV_ARGS(cmd));

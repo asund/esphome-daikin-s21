@@ -29,7 +29,7 @@ class DaikinSerial : public Component,
 
   void setup() override;
   void loop() override;
-
+  void dump_config() override;
   void set_debug(bool set) { this->debug = set; }
 
   void send_frame(std::string_view cmd, std::span<const uint8_t> payload = {});
