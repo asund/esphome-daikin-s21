@@ -1,6 +1,7 @@
 #include <cinttypes>
 #include <numeric>
 #include <ranges>
+#include "esphome/core/application.h"
 #include "daikin_s21_queries.h"
 #include "s21.h"
 #include "utils.h"
@@ -397,7 +398,7 @@ void DaikinS21::trigger_cycle() {
 void DaikinS21::start_cycle() {
   this->cycle_active = true;
   this->cycle_triggered = this->is_free_run();
-  this->cycle_time_start_ms = millis();
+  this->cycle_time_start_ms = App.get_loop_component_start_time();
   this->active_query = std::ranges::find_if(this->queries, DaikinQuery::IsEnabled);
   this->serial.send_frame(this->active_query->command);
 }
@@ -887,9 +888,8 @@ void DaikinS21::handle_serial_idle() {
   }
 
   // Query cycle complete
-  const auto now = millis();
   this->cycle_active = false;
-  this->cycle_time_ms = now - this->cycle_time_start_ms;
+  this->cycle_time_ms = App.get_loop_component_start_time() - this->cycle_time_start_ms;
   if (this->is_ready() == false) {
     this->ready_state_machine();
   } else {
@@ -913,8 +913,8 @@ void DaikinS21::handle_serial_idle() {
     this->update_callbacks.call();
   }
 
-  if (timestamp_passed(now, this->next_state_dump_ms)) {
-    this->next_state_dump_ms = now + (60 * 1000); // every minute
+  if (timestamp_passed(App.get_loop_component_start_time(), this->next_state_dump_ms)) {
+    this->next_state_dump_ms = App.get_loop_component_start_time() + (60 * 1000); // every minute
     this->enable_loop_soon_any_context();  // dump state in foreground, blocks for too long here
   }
 

@@ -27,14 +27,13 @@ void DaikinSerial::setup() {
  */
 void DaikinSerial::loop() {
   // Handle delays
-  const auto now = millis();
-  const bool delay_expired = timestamp_passed(now, this->next_event_ms);
+  const bool delay_expired = timestamp_passed(App.get_loop_component_start_time(), this->next_event_ms);
   switch (this->comm_state) {
     case CommState::DelayAck: // Waiting for turnaround time to send Ack
       if (delay_expired) {
         this->uart.write_byte(ACK);
         this->comm_state = CommState::DelayIdle;
-        this->next_event_ms = now + DaikinSerial::next_tx_delay_period_ms;
+        this->next_event_ms = App.get_loop_component_start_time() + DaikinSerial::next_tx_delay_period_ms;
       }
       return;
 
@@ -48,7 +47,7 @@ void DaikinSerial::loop() {
     default:  // Rx Timeouts
       if (delay_expired) {
         this->comm_state = CommState::DelayIdle;
-        this->next_event_ms = now + DaikinSerial::rx_timout_period_ms; // 2x rx_timout_period_ms in total before retry
+        this->next_event_ms = App.get_loop_component_start_time() + DaikinSerial::rx_timout_period_ms; // 2x rx_timout_period_ms in total before retry
         this->get_parent()->handle_serial_result(Result::Timeout);
         return;
       }
@@ -61,7 +60,7 @@ void DaikinSerial::loop() {
     uint8_t byte;
     this->uart.read_byte(&byte);
     rx_bytes++;
-    this->next_event_ms = now + DaikinSerial::rx_timout_period_ms;  // received a byte, reset the character timeout
+    this->next_event_ms = App.get_loop_component_start_time() + DaikinSerial::rx_timout_period_ms;  // received a byte, reset the character timeout
 
     // handle the byte
     switch (this->comm_state) {
@@ -73,7 +72,7 @@ void DaikinSerial::loop() {
               this->comm_state = CommState::QueryStx; // query results text to follow
             } else {
               this->comm_state = CommState::DelayIdle;
-              this->next_event_ms = now + DaikinSerial::next_tx_delay_period_ms;
+              this->next_event_ms = App.get_loop_component_start_time() + DaikinSerial::next_tx_delay_period_ms;
               this->get_parent()->handle_serial_result(Result::Ack);
               return;
             }
@@ -81,14 +80,14 @@ void DaikinSerial::loop() {
 
           case NAK:
             this->comm_state = CommState::DelayIdle;
-            this->next_event_ms = now + DaikinSerial::next_tx_delay_period_ms;
+            this->next_event_ms = App.get_loop_component_start_time() + DaikinSerial::next_tx_delay_period_ms;
             this->get_parent()->handle_serial_result(Result::Nak);
             return;
 
           default:
             ESP_LOGW(TAG, "Rx ACK: Unexpected 0x%02" PRIX8, byte);
             this->comm_state = CommState::DelayIdle;
-            this->next_event_ms = now + DaikinSerial::error_delay_period_ms;
+            this->next_event_ms = App.get_loop_component_start_time() + DaikinSerial::error_delay_period_ms;
             this->get_parent()->handle_serial_result(Result::Error);
             return;
         }
@@ -107,7 +106,7 @@ void DaikinSerial::loop() {
           default:
             ESP_LOGW(TAG, "Rx STX: Unexpected 0x%02" PRIX8, byte);
             this->comm_state = CommState::DelayIdle;
-            this->next_event_ms = now + DaikinSerial::error_delay_period_ms;
+            this->next_event_ms = App.get_loop_component_start_time() + DaikinSerial::error_delay_period_ms;
             this->get_parent()->handle_serial_result(Result::Error);
             return;
         }
@@ -129,14 +128,14 @@ void DaikinSerial::loop() {
                 delay_period_ms -= std::max(max_bytes_per_loop - rx_bytes, 0) * char_time;
 
                 this->comm_state = CommState::DelayAck;
-                this->next_event_ms = now + delay_period_ms;
+                this->next_event_ms = App.get_loop_component_start_time() + delay_period_ms;
                 this->get_parent()->handle_serial_result(Result::Ack, this->response);
                 return;
               } else {
                 ESP_LOGW(TAG, "Rx ETX: Checksum mismatch: 0x%02" PRIX8 " != 0x%02" PRIX8 " (calc from %s)",
                     checksum, calc_checksum, hex_repr(this->response).c_str());
                 this->comm_state = CommState::DelayIdle;
-                this->next_event_ms = now + DaikinSerial::error_delay_period_ms;
+                this->next_event_ms = App.get_loop_component_start_time() + DaikinSerial::error_delay_period_ms;
                 this->get_parent()->handle_serial_result(Result::Error);
                 return;
               }
@@ -149,7 +148,7 @@ void DaikinSerial::loop() {
               ESP_LOGW(TAG, "Rx ETX: Overflow %s %s + 0x%02" PRIX8,
                   str_repr(this->response).c_str(), hex_repr(this->response).c_str(), byte);
               this->comm_state = CommState::DelayIdle;
-              this->next_event_ms = now + DaikinSerial::error_delay_period_ms;
+              this->next_event_ms = App.get_loop_component_start_time() + DaikinSerial::error_delay_period_ms;
               this->get_parent()->handle_serial_result(Result::Error);
               return;
             }
@@ -173,7 +172,7 @@ void DaikinSerial::send_frame(const std::string_view cmd, const std::span<const 
     // Prevent spam by starting the state machine anyways to delay
     // this is called from DaikinS21 context when idle, trigger it again after a cooldown
     this->comm_state = CommState::DelayIdle;
-    this->next_event_ms = millis() + DaikinSerial::error_delay_period_ms;
+    this->next_event_ms = App.get_loop_component_start_time() + DaikinSerial::error_delay_period_ms;
     this->enable_loop_soon_any_context();
     this->get_parent()->handle_serial_result(Result::Error);
     return;
@@ -213,7 +212,7 @@ void DaikinSerial::send_frame(const std::string_view cmd, const std::span<const 
 
   // wait for result
   this->comm_state = payload.empty() ? CommState::QueryAck : CommState::CommandAck;
-  this->next_event_ms = millis() + DaikinSerial::rx_timout_period_ms;
+  this->next_event_ms = App.get_loop_component_start_time() + DaikinSerial::rx_timout_period_ms;
   this->enable_loop_soon_any_context();
 }
 
