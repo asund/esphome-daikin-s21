@@ -24,7 +24,7 @@ class DaikinS21Switch : public Component,
   void loop() override;
   void dump_config() override;
 
-  void set_mode_switch(DaikinS21SwitchMode *mode_switch) {
+  void set_mode_switch(DaikinS21SwitchMode * const mode_switch) {
     this->mode_switches_[mode_switch->mode] = mode_switch;
     if (mode_switch->mode == ModePowerful) {
       this->get_parent()->request_readout(DaikinS21::ReadoutPowerful);

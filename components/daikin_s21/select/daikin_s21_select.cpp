@@ -3,7 +3,7 @@
 
 namespace esphome::daikin_s21 {
 
-static const char *const TAG = "daikin_s21.select";
+static const char * const TAG = "daikin_s21.select";
 
 void DaikinS21SelectHumidity::control(const size_t index) {
   this->get_parent()->set_humidity_mode(static_cast<DaikinHumidityMode>(index));
@@ -44,13 +44,8 @@ void DaikinS21Select::loop() {
 }
 
 void DaikinS21Select::dump_config() {
-  ESP_LOGCONFIG(TAG, "Daikin S21 Select:");
-  if (humidity_select_ != nullptr) {
-    LOG_SELECT("  ", "Humidity", this->humidity_select_);
-  }
-  if (vertical_swing_select_ != nullptr) {
-    LOG_SELECT("  ", "Vertical Swing", this->vertical_swing_select_);
-  }
+  LOG_SELECT("", "Humidity", this->humidity_select_);
+  LOG_SELECT("", "Vertical Swing", this->vertical_swing_select_);
 }
 
 } // namespace esphome::daikin_s21

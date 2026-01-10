@@ -20,7 +20,7 @@ class DaikinS21Number : public Component,
   void loop() override;
   void dump_config() override;
 
-  void set_demand(DaikinS21NumberDemand *number) {
+  void set_demand(DaikinS21NumberDemand * const number) {
     this->demand_number_ = number;
   }
 

@@ -2,7 +2,7 @@
 
 namespace esphome::daikin_s21 {
 
-static const char *const TAG = "daikin_s21.switch";
+static const char * const TAG = "daikin_s21.switch";
 
 void DaikinS21Switch::setup() {
   this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); }); // enable update events from DaikinS21
@@ -20,11 +20,8 @@ void DaikinS21Switch::loop() {
 }
 
 void DaikinS21Switch::dump_config() {
-  ESP_LOGCONFIG(TAG, "Daikin S21 Switch:");
   for (auto mode_switch : this->mode_switches_) {
-    if (mode_switch != nullptr) {
-      LOG_SWITCH("  ", mode_switch->get_name().c_str(), mode_switch);
-    }
+    LOG_SWITCH("", "Mode Switch", mode_switch);
   }
 }
 

@@ -5,7 +5,7 @@
 
 namespace esphome::daikin_s21 {
 
-static const char *const TAG = "daikin_s21.text_sensor";
+static const char * const TAG = "daikin_s21.text_sensor";
 
 void DaikinS21TextSensor::setup() {
   for (const auto &sensor : this->sensors) {
@@ -45,20 +45,11 @@ void DaikinS21TextSensor::loop() {
   this->disable_loop(); // wait for further updates
 }
 
-void DaikinS21TextSensor::set_debug_query_sensors(std::vector<text_sensor::TextSensor *> &&sensors) {
-  this->sensors = sensors;
-}
-
 void DaikinS21TextSensor::dump_config() {
-  ESP_LOGCONFIG(TAG, "Daikin S21 Text Sensor:");
-  if (this->software_version_sensor_ != nullptr) {
-    LOG_TEXT_SENSOR("  ", "Software Version", this->software_version_sensor_);
-  }
-  if (this->model_sensor_ != nullptr) {
-    LOG_TEXT_SENSOR("  ", "Model", this->model_sensor_);
-  }
+  LOG_TEXT_SENSOR("", "Software Version", this->software_version_sensor_);
+  LOG_TEXT_SENSOR("", "Model", this->model_sensor_);
   for (const auto sensor : this->sensors) {
-    LOG_TEXT_SENSOR("  ", sensor->get_name().c_str(), sensor);
+    LOG_TEXT_SENSOR("", "Debug Query", sensor);
   }
 }
 

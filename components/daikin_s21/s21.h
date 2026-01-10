@@ -22,7 +22,7 @@ class DaikinS21 : public PollingComponent {
   void loop() override;
   void update() override;
   void dump_config() override;
-  void set_debug(bool set) { this->debug = set; }
+  void set_debug(const bool set) { this->debug = set; }
 
   // external command action
   void set_climate_settings(DaikinClimateSettings climate);

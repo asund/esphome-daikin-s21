@@ -1,6 +1,7 @@
 #include <cinttypes>
 #include <numeric>
 #include <ranges>
+#include "esphome/core/application.h"
 #include "daikin_s21_queries.h"
 #include "s21.h"
 #include "utils.h"
@@ -9,7 +10,7 @@ using namespace esphome;
 
 namespace esphome::daikin_s21 {
 
-static const char *const TAG = "daikin_s21";
+static const char * const TAG = "daikin_s21";
 
 constexpr uint8_t climate_mode_to_s21(const climate::ClimateMode mode) {
   switch (mode) {
@@ -268,9 +269,9 @@ void DaikinS21::update() {
 }
 
 void DaikinS21::dump_config() {
-  ESP_LOGCONFIG(TAG, "DaikinS21:");
-  ESP_LOGCONFIG(TAG, "  Update interval: %" PRIu32, this->get_update_interval());
-  // todo basic detect output
+  ESP_LOGCONFIG(TAG, "Daikin S21:");
+  ESP_LOGCONFIG(TAG, "  Polling interval: %" PRIu32 "ms", this->get_update_interval());
+  ESP_LOGCONFIG(TAG, "  Debug: %s", ONOFF(this->debug));
 }
 
 /**
@@ -281,7 +282,7 @@ void DaikinS21::set_climate_settings(const DaikinClimateSettings climate) {
     ESP_LOGD(TAG, "Mode: %s  Setpoint: %.1f  Fan: %s",
       LOG_STR_ARG(climate::climate_mode_to_string(climate.mode)),
       climate.setpoint.f_degc(),
-      LOG_STR_ARG(daikin_fan_mode_to_cstr(climate.fan)));
+      daikin_fan_mode_to_cstr(climate.fan));
     this->climate.stage(climate);
     this->trigger_cycle();
   }
@@ -397,7 +398,7 @@ void DaikinS21::trigger_cycle() {
 void DaikinS21::start_cycle() {
   this->cycle_active = true;
   this->cycle_triggered = this->is_free_run();
-  this->cycle_time_start_ms = millis();
+  this->cycle_time_start_ms = App.get_loop_component_start_time();
   this->active_query = std::ranges::find_if(this->queries, DaikinQuery::IsEnabled);
   this->serial.send_frame(this->active_query->command);
 }
@@ -748,7 +749,7 @@ void DaikinS21::check_ready_active_source() {
   // check if complete and handle results if so
   this->ready[ReadyActiveSource] = (this->support.active_source != ActiveSourceUnknown);
   if (this->ready[ReadyActiveSource]) {
-    ESP_LOGD(TAG, "Active source is %s", LOG_STR_ARG(active_source_strings[this->support.active_source]));
+    ESP_LOGD(TAG, "Active source is %s", active_source_strings[this->support.active_source]);
   }
 }
 
@@ -784,7 +785,7 @@ void DaikinS21::check_ready_powerful_source() {
   // check if complete and handle results if so
   this->ready[ReadyPowerfulSource] = (this->support.powerful_source != PowerfulSourceUnknown);
   if (this->ready[ReadyPowerfulSource]) {
-    ESP_LOGD(TAG, "Powerful source is %s", LOG_STR_ARG(powerful_source_strings[this->support.powerful_source]));
+    ESP_LOGD(TAG, "Powerful source is %s", powerful_source_strings[this->support.powerful_source]);
   }
 }
 
@@ -887,9 +888,8 @@ void DaikinS21::handle_serial_idle() {
   }
 
   // Query cycle complete
-  const auto now = millis();
   this->cycle_active = false;
-  this->cycle_time_ms = now - this->cycle_time_start_ms;
+  this->cycle_time_ms = App.get_loop_component_start_time() - this->cycle_time_start_ms;
   if (this->is_ready() == false) {
     this->ready_state_machine();
   } else {
@@ -913,8 +913,8 @@ void DaikinS21::handle_serial_idle() {
     this->update_callbacks.call();
   }
 
-  if (timestamp_passed(now, this->next_state_dump_ms)) {
-    this->next_state_dump_ms = now + (60 * 1000); // every minute
+  if (timestamp_passed(App.get_loop_component_start_time(), this->next_state_dump_ms)) {
+    this->next_state_dump_ms = App.get_loop_component_start_time() + (60 * 1000); // every minute
     this->enable_loop_soon_any_context();  // dump state in foreground, blocks for too long here
   }
 
@@ -1172,7 +1172,7 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
         }
         // decode payload
         if ((this->active_query->response_length != 0) && (payload.size() != this->active_query->response_length)) {
-          ESP_LOGW(TAG, "Unexpected payload length for %" PRI_SV " (%s)", this->active_query->command, hex_repr(payload).c_str());
+          ESP_LOGW(TAG, "Unexpected payload length for %" PRI_SV " (%s)", PRI_SV_ARGS(this->active_query->command), hex_repr(payload).c_str());
           this->active_query->nak(payload);
         } else {
           if (this->active_query->handler == nullptr) {
@@ -1275,8 +1275,8 @@ void DaikinS21::dump_state() {
         (v0_features.success() ? hex_repr : str_repr)(v0_features.value()).c_str(),
         (v2_features.success() ? hex_repr : str_repr)(v2_features.value()).c_str(),
         (v3_features.success() ? hex_repr : str_repr)(v3_features_value).c_str(),
-        LOG_STR_ARG(active_source_strings[this->support.active_source]),
-        LOG_STR_ARG(powerful_source_strings[this->support.powerful_source]));
+        active_source_strings[this->support.active_source],
+        powerful_source_strings[this->support.powerful_source]);
   }
   ESP_LOGD(TAG, "Mode: %s  Action: %s  Setpoint: %.1fC  Target: %.1fC  Inside: %.1fC  Coil: %.1fC",
       LOG_STR_ARG(climate::climate_mode_to_string(this->get_climate().mode)),
@@ -1300,9 +1300,9 @@ void DaikinS21::dump_state() {
       }
       return str;
     };
-    ESP_LOGD(TAG, "Enabled: %s", LOG_STR_ARG(comma_join(this->queries | std::views::filter(DaikinQuery::IsEnabled) | std::views::transform(DaikinQuery::GetCommand)).c_str()));
-    ESP_LOGD(TAG, "  Nak'd: %s", LOG_STR_ARG(comma_join(this->queries | std::views::filter(DaikinQuery::IsFailed) | std::views::transform(DaikinQuery::GetCommand)).c_str()));
-    ESP_LOGD(TAG, " Static: %s", LOG_STR_ARG(comma_join(this->queries | std::views::filter(DaikinQuery::IsAckedStatic) | std::views::transform(DaikinQuery::GetCommand)).c_str()));
+    ESP_LOGD(TAG, "Enabled: %s", comma_join(this->queries | std::views::filter(DaikinQuery::IsEnabled) | std::views::transform(DaikinQuery::GetCommand)).c_str());
+    ESP_LOGD(TAG, "  Nak'd: %s", comma_join(this->queries | std::views::filter(DaikinQuery::IsFailed) | std::views::transform(DaikinQuery::GetCommand)).c_str());
+    ESP_LOGD(TAG, " Static: %s", comma_join(this->queries | std::views::filter(DaikinQuery::IsAckedStatic) | std::views::transform(DaikinQuery::GetCommand)).c_str());
   }
 }
 

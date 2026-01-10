@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <span>
 #include <string_view>
+#include <vector>
 #include "esphome/components/uart/uart.h"
 #include "esphome/core/component.h"
 #include "esphome/core/helpers.h"
@@ -25,12 +26,12 @@ class DaikinSerial : public Component,
     Error,
   };
 
-  DaikinSerial(uart::UARTComponent *uart) : uart(*uart) {}
+  DaikinSerial(uart::UARTComponent * const uart) : uart(*uart) {}
 
   void setup() override;
   void loop() override;
-
-  void set_debug(bool set) { this->debug = set; }
+  void dump_config() override;
+  void set_debug(const bool set) { this->debug = set; }
 
   void send_frame(std::string_view cmd, std::span<const uint8_t> payload = {});
 
