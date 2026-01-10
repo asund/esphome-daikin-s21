@@ -3,7 +3,7 @@
 
 namespace esphome::daikin_s21 {
 
-static const char *const TAG = "daikin_s21.select";
+static const char * const TAG = "daikin_s21.select";
 
 void DaikinS21SelectHumidity::control(const size_t index) {
   this->get_parent()->set_humidity_mode(static_cast<DaikinHumidityMode>(index));

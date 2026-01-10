@@ -3,7 +3,7 @@
 
 namespace esphome::daikin_s21 {
 
-static const char *const TAG = "daikin_s21.sensor";
+static const char * const TAG = "daikin_s21.sensor";
 
 void DaikinS21Sensor::setup() {
   if (this->is_free_run()) {

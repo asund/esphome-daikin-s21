@@ -5,7 +5,7 @@
 
 namespace esphome::daikin_s21 {
 
-static const char *const TAG = "daikin_s21.text_sensor";
+static const char * const TAG = "daikin_s21.text_sensor";
 
 void DaikinS21TextSensor::setup() {
   for (const auto &sensor : this->sensors) {
@@ -43,10 +43,6 @@ void DaikinS21TextSensor::loop() {
     }
   }
   this->disable_loop(); // wait for further updates
-}
-
-void DaikinS21TextSensor::set_debug_query_sensors(std::vector<text_sensor::TextSensor *> &&sensors) {
-  this->sensors = sensors;
 }
 
 void DaikinS21TextSensor::dump_config() {

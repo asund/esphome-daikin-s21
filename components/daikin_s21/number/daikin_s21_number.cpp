@@ -3,7 +3,7 @@
 
 namespace esphome::daikin_s21 {
 
-static const char *const TAG = "daikin_s21.number";
+static const char * const TAG = "daikin_s21.number";
 
 void DaikinS21NumberDemand::control(const float value) {
   this->get_parent()->set_demand_control(value);

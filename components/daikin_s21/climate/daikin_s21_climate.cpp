@@ -9,7 +9,7 @@ using namespace esphome;
 
 namespace esphome::daikin_s21 {
 
-static const char *const TAG = "daikin_s21.climate";
+static const char * const TAG = "daikin_s21.climate";
 
 /**
  * Save setpoint for the mode to persistent storage.

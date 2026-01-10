@@ -10,7 +10,7 @@ using namespace esphome;
 
 namespace esphome::daikin_s21 {
 
-static const char *const TAG = "daikin_s21";
+static const char * const TAG = "daikin_s21";
 
 constexpr uint8_t climate_mode_to_s21(const climate::ClimateMode mode) {
   switch (mode) {

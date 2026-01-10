@@ -5,7 +5,7 @@
 
 namespace esphome::daikin_s21 {
 
-static const char *const TAG = "daikin_s21.queries";
+static const char * const TAG = "daikin_s21.queries";
 
 /**
  * Copy the last result into the query instance and records the length.

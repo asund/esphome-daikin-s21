@@ -7,7 +7,7 @@
 
 namespace esphome::daikin_s21 {
 
-static const char *const TAG = "daikin_s21.serial";
+static const char * const TAG = "daikin_s21.serial";
 
 static constexpr uint8_t STX{2};
 static constexpr uint8_t ETX{3};

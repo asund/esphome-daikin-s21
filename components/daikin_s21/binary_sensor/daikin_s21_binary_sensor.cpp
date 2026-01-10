@@ -3,7 +3,7 @@
 
 namespace esphome::daikin_s21 {
 
-static const char *const TAG = "daikin_s21.binary_sensor";
+static const char * const TAG = "daikin_s21.binary_sensor";
 
 void DaikinS21BinarySensor::setup() {
   this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); }); // enable update events from DaikinS21
