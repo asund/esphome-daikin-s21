@@ -22,6 +22,8 @@ A big thanks to:
 A short changelog of sorts, I'll keep things here where a user might encounter
 breaking or significant changes.
 
+* Checksum calculation was fixed. There's a faint chance that a command that was
+  previously NAK'd actually now works.
 * Custom Silent fan mode changed to standard Quiet. Custom Automatic was also
   updated to standard Auto to work around a validation issue, which results in
   a nicer icon. Update any automations to specify these new mode settings.

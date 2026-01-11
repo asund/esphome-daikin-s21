@@ -693,8 +693,9 @@ void DaikinS21::check_ready_sensor_readout() {
 void DaikinS21::check_ready_model_detection() {
   const auto &model_v0 = this->get_query(MiscQuery::Model);
   const auto &model_v2 = this->get_query(StateQuery::ModelCode);
+  const auto &model_v3 = this->get_query(StateQuery::V3Model);
   // check if complete and handle results if so
-  this->ready[ReadyModelDetection] = (model_v0.ready() && model_v2.ready());
+  this->ready[ReadyModelDetection] = (model_v0.ready() && model_v2.ready() && model_v3.ready());
   if (this->ready[ReadyModelDetection]) {
     // Unit and system state aren't always reliable, blacklist models here
     switch (this->modelV0) {
@@ -716,7 +717,7 @@ void DaikinS21::check_ready_model_detection() {
       }
     }
     // no v2 handling required yet
-    ESP_LOGD(TAG, "Model %04" PRIX16 " %04" PRIX16 " detected", this->modelV0, this->modelV2);
+    ESP_LOGD(TAG, "Model %04" PRIX16 " %04" PRIX16 " %04" PRIX16 " detected", this->modelV0, this->modelV2, this->modelV3);
   }
 }
 
