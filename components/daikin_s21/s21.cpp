@@ -896,8 +896,8 @@ void DaikinS21::handle_serial_idle() {
     // resolve action
     if (this->unit_state.defrost() && (this->action_reported == climate::CLIMATE_ACTION_HEATING)) {
       this->action = climate::CLIMATE_ACTION_COOLING; // report cooling during defrost
-    } else if (this->active || (this->action_reported == climate::CLIMATE_ACTION_FAN)) {
-      this->action = this->action_reported; // trust the unit when active or in fan only
+    } else if (this->active || (this->action_reported == climate::CLIMATE_ACTION_FAN) || (this->action_reported == climate::CLIMATE_ACTION_OFF)) {
+      this->action = this->action_reported; // trust the unit when active or in fan only or off
     } else {
       this->action = climate::CLIMATE_ACTION_IDLE;
     }

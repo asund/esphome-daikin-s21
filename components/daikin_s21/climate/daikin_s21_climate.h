@@ -11,13 +11,13 @@ namespace esphome::daikin_s21 {
 
 class DaikinSetpointMode {
  public:
-  ESPPreferenceObject setpoint_pref{};
+  ESPPreferenceObject target_pref{};
   DaikinC10 offset{};
   DaikinC10 min{};
   DaikinC10 max{};
 
-  void save_setpoint(DaikinC10 value);
-  DaikinC10 load_setpoint();
+  void save_target(DaikinC10 value);
+  DaikinC10 load_target();
 };
 
 class DaikinS21Climate : public climate::Climate,
@@ -55,6 +55,7 @@ class DaikinS21Climate : public climate::Climate,
   sensor::Sensor *humidity_sensor_{};
   DaikinC10 unit_setpoint{TEMPERATURE_INVALID};
   bool check_setpoint{};
+  bool target_resolved{};
 
   DaikinSetpointMode* get_setpoint_mode_params(climate::ClimateMode mode);
   DaikinSetpointMode heat_cool_params{};

@@ -23,7 +23,7 @@ from .. import (
     daikin_s21_ns,
     CONF_S21_ID,
     S21_PARENT_SCHEMA,
-    DaikinS21Modes,
+    DAIKIN_MODE_CONFIG_ENUMS,
     CONF_ECONO,
     CONF_COMFORT,
     CONF_POWERFUL,
@@ -113,18 +113,9 @@ async def to_code(config):
     await cg.register_component(var, config)
     await cg.register_parented(var, config[CONF_S21_ID])
 
-    mode_sensors = (
-        (CONF_POWERFUL, DaikinS21Modes.ModePowerful),
-        (CONF_COMFORT, DaikinS21Modes.ModeComfort),
-        (CONF_QUIET, DaikinS21Modes.ModeQuiet),
-        (CONF_STREAMER, DaikinS21Modes.ModeStreamer),
-        (CONF_LED, DaikinS21Modes.ModeSensorLED),
-        (CONF_MOTION, DaikinS21Modes.ModeMotionSensor),
-        (CONF_ECONO, DaikinS21Modes.ModeEcono),
-    )
-    for key, mode in mode_sensors:
+    for key, mode_enum in DAIKIN_MODE_CONFIG_ENUMS.items():
         if key in config:
-            sens = await binary_sensor.new_binary_sensor(config[key], mode)
+            sens = await binary_sensor.new_binary_sensor(config[key], mode_enum)
             cg.add(var.set_mode_sensor(sens))
 
     binary_sensors = (

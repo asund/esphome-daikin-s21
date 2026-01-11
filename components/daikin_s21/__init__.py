@@ -6,6 +6,8 @@ import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.const import (
   CONF_ID,
+  CONF_LED,
+  CONF_MOTION,
   ICON_ACCOUNT_CHECK,
 )
 
@@ -34,6 +36,15 @@ daikin_s21_ns = cg.esphome_ns.namespace("daikin_s21")
 DaikinS21 = daikin_s21_ns.class_("DaikinS21", cg.PollingComponent)
 DaikinSerial = daikin_s21_ns.class_("DaikinSerial", cg.Component)
 DaikinS21Modes = daikin_s21_ns.enum("DaikinMode")
+DAIKIN_MODE_CONFIG_ENUMS = {
+    CONF_POWERFUL: DaikinS21Modes.ModePowerful,
+    CONF_COMFORT: DaikinS21Modes.ModeComfort,
+    CONF_QUIET: DaikinS21Modes.ModeQuiet,
+    CONF_STREAMER: DaikinS21Modes.ModeStreamer,
+    CONF_LED: DaikinS21Modes.ModeSensorLED,
+    CONF_MOTION: DaikinS21Modes.ModeMotionSensor,
+    CONF_ECONO: DaikinS21Modes.ModeEcono,
+}
 uart_ns = cg.esphome_ns.namespace("uart")
 UARTComponent = uart_ns.class_("UARTComponent")
 

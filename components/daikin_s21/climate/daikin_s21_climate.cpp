@@ -12,23 +12,23 @@ namespace esphome::daikin_s21 {
 static const char * const TAG = "daikin_s21.climate";
 
 /**
- * Save setpoint for the mode to persistent storage.
+ * Save target for the mode to persistent storage.
 *
  * Only save if value is different from what's already saved. Some platforms don't support this internally.
  */
-void DaikinSetpointMode::save_setpoint(const DaikinC10 value) {
-  if (value != this->load_setpoint()) {
+void DaikinSetpointMode::save_target(const DaikinC10 value) {
+  if (value != this->load_target()) {
     const int16_t save_val = static_cast<int16_t>(value);
-    this->setpoint_pref.save(&save_val);
+    this->target_pref.save(&save_val);
   }
 }
 
 /**
- * Load setpoint for the mode from persistent storage.
+ * Load target for the mode from persistent storage.
  */
-DaikinC10 DaikinSetpointMode::load_setpoint() {
+DaikinC10 DaikinSetpointMode::load_target() {
   int16_t load_val{};
-  if (this->setpoint_pref.load(&load_val)) {
+  if (this->target_pref.load(&load_val)) {
     return load_val;
   }
   return TEMPERATURE_INVALID;
@@ -36,9 +36,9 @@ DaikinC10 DaikinSetpointMode::load_setpoint() {
 
 void DaikinS21Climate::setup() {
   uint32_t h = this->get_object_id_hash();
-  this->heat_cool_params.setpoint_pref = global_preferences->make_preference<int16_t>(h + 1);
-  this->cool_params.setpoint_pref = global_preferences->make_preference<int16_t>(h + 2);
-  this->heat_params.setpoint_pref = global_preferences->make_preference<int16_t>(h + 3);
+  this->heat_cool_params.target_pref = global_preferences->make_preference<int16_t>(h + 1);
+  this->cool_params.target_pref = global_preferences->make_preference<int16_t>(h + 2);
+  this->heat_params.target_pref = global_preferences->make_preference<int16_t>(h + 3);
   // populate default traits
   this->traits_.add_feature_flags(climate::CLIMATE_SUPPORTS_CURRENT_TEMPERATURE | climate::CLIMATE_SUPPORTS_ACTION);
   if (this->visual_min_temperature_override_.has_value()) {
@@ -117,22 +117,25 @@ void DaikinS21Climate::loop() {
       this->unit_setpoint = reported_climate.setpoint;
     }
 
-    // Update target temperature
-    if (std::isfinite(this->target_temperature) == false) {
-      // Initialize target temperature if needed using stored setpoint
-      // for mode, or fall back to use s21's setpoint.
-      const auto setpoint = mode_params->load_setpoint();
-      this->target_temperature = ((setpoint != TEMPERATURE_INVALID) ? setpoint : reported_climate.setpoint).f_degc();
-      do_publish = true;
-      update_unit_setpoint = true;
-    } else if (this->unit_setpoint != reported_climate.setpoint) {
-      // User probably set temp via IR remote -- so try to honor their wish by
-      // matching controller's target value to what they sent via remote.
-      // This keeps the external temperature sensor in the loop.
-      ESP_LOGI(TAG, "Unit setpoint changed, updating target temperature (%.1f -> %.1f)",
-          this->unit_setpoint.f_degc(), reported_climate.setpoint.f_degc());
+    // Determine a new target temperature?
+    if ((std::isfinite(this->target_temperature) == false) || // controller init or external mode change to a setpoint mode
+        (this->unit_setpoint != reported_climate.setpoint)) { // external change to setpoint
+      // Assume the reported setpoint (external IR remote change) should be the target temperature
+      auto new_target = reported_climate.setpoint;
+      // When first initializing, we don't know if the reported setpoint is from the IR remote or an offset value from a
+      // previous ESPHome run. Use the saved target to resolve this once and in the future we can trust that we have set
+      // target_temperature and unit_setpoint when commanding the unit and so any changes must be from the IR remote.
+      if (this->target_resolved == false) {
+        this->target_resolved = true;
+        const auto saved_target = mode_params->load_target();
+        if (saved_target != TEMPERATURE_INVALID) {
+          new_target = saved_target;
+        }
+      }
+      ESP_LOGI(TAG, "Target temperature changed: %.1f -> %.1f",
+          this->target_temperature, new_target.f_degc());
+      this->target_temperature = new_target.f_degc();
       this->unit_setpoint = reported_climate.setpoint;  // will be recalculated shortly, but ensure that log statement is sensical
-      this->target_temperature = reported_climate.setpoint.f_degc();
       do_publish = true;
       update_unit_setpoint = true;
     }
@@ -144,7 +147,10 @@ void DaikinS21Climate::loop() {
       update_unit_setpoint = this->calc_unit_setpoint();
     }
   } else {
-    // Not a setpoint mode, clear them and publish
+    // Not a setpoint mode
+    // No previous target to recover
+    this->target_resolved = true;
+    // Clear setpoints and publish
     if (std::isfinite(this->target_temperature)) {
       this->target_temperature = NAN;
       this->unit_setpoint = TEMPERATURE_INVALID;
@@ -335,7 +341,7 @@ void DaikinS21Climate::control(const climate::ClimateCall &call) {
     // If call sets the mode but does not include target, then try to use saved target.
     if (call.get_target_temperature().has_value() == false) {
       if (auto * const mode_params = this->get_setpoint_mode_params(this->mode)) {
-        const auto sp = mode_params->load_setpoint();
+        const auto sp = mode_params->load_target();
         if (sp != TEMPERATURE_INVALID) {
           this->target_temperature = sp.f_degc();
         }
@@ -417,7 +423,7 @@ void DaikinS21Climate::set_s21_climate() {
   // Command new settings
   this->get_parent()->set_climate_settings({this->mode, this->get_daikin_fan_mode(), this->unit_setpoint});
   if (auto * const mode_params = this->get_setpoint_mode_params(this->mode)) {
-    mode_params->save_setpoint(this->target_temperature);
+    mode_params->save_target(this->target_temperature);
   }
 }
 
