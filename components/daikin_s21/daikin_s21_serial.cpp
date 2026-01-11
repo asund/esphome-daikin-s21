@@ -11,7 +11,6 @@ static const char * const TAG = "daikin_s21.serial";
 
 static constexpr uint8_t STX{2};
 static constexpr uint8_t ETX{3};
-static constexpr uint8_t ENQ{5};
 static constexpr uint8_t ACK{6};
 static constexpr uint8_t NAK{21};
 
@@ -118,8 +117,12 @@ void DaikinSerial::loop() {
             {
               const uint8_t checksum = this->response.back();
               this->response.pop_back();
-              const uint8_t calc_checksum = std::reduce(this->response.begin(), this->response.end(), 0U);
-              if ((calc_checksum == checksum) || ((calc_checksum == STX) && (checksum == ENQ))) {  // protocol avoids STX in message body
+              uint8_t calc_checksum = std::reduce(this->response.begin(), this->response.end(), 0U);
+              // protocol avoids special control characters in the message body by applying an offset
+              if ((calc_checksum == STX) || (calc_checksum == ETX) || (calc_checksum == ACK)) {
+                calc_checksum += 2;
+              }
+              if (calc_checksum == checksum) {
                 // Reduce the delay period by the number of character times waiting for the scheduler
                 // to call loop() since the final ETX was received. This is very minor.
                 auto delay_period_ms = DaikinSerial::ack_delay_period_ms;
@@ -204,8 +207,9 @@ void DaikinSerial::send_frame(const std::string_view cmd, const std::span<const 
     this->uart.write_array(payload.data(), payload.size());
     checksum = std::reduce(payload.begin(), payload.end(), checksum);
   }
-  if (checksum == STX) {
-    checksum = ENQ;  // mid-message STX characters are escaped
+  // mid-message special control characters are offset to avoid framing errors
+  if ((checksum == STX) || (checksum == ETX) || (checksum == ACK)) {
+    checksum += 2;
   }
   this->uart.write_byte(checksum);
   this->uart.write_byte(ETX);
