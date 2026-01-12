@@ -109,17 +109,17 @@ static constexpr std::array<uint8_t, DaikinVerticalSwingModeCount> vertical_swin
 constexpr auto s21_to_vertical_swing_mode = encoding_to_enum<DaikinVerticalSwingMode, DaikinVerticalSwingModeCount, vertical_swing_mode_encodings>;
 
 static constexpr std::array<const char *, ActiveSourceCount> active_source_strings = {{
+  "unknown",
   "Rg",
   "RzB2",
   "assumed on",
-  "undetected",
 }};
 
 static constexpr std::array<const char *, PowerfulSourceCount> powerful_source_strings = {{
+  "unknown",
   "G6",
   "RzB2",
   "disabled",
-  "undetected",
 }};
 
 /**
