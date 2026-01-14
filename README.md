@@ -22,6 +22,8 @@ A big thanks to:
 A short changelog of sorts, I'll keep things here where a user might encounter
 breaking or significant changes.
 
+* Added additional energy consumption sensors for protocol 3.20+. Renamed
+  existing "power_consumption" to "energy_indoor". Sorry. Update your YAML.
 * Checksum calculation was fixed. There's a faint chance that a command that was
   previously NAK'd actually now works.
 * Custom Silent fan mode changed to standard Quiet. Custom Automatic was also
@@ -171,8 +173,13 @@ example configuration.
 v2+ protocol units may also support:
 
 * IR counter that increments when the remote is used.
-* Total power consumption in kWh.
+* Energy consumption of all indoor units in kWh.
 * Outdoor unit capacity in indoor units.
+
+v3.20+ protocol units may also support:
+
+* Energy consumption in cooling and heating modes in kWh, including the outside
+  unit's use, for this inside unit.
 
 ### Binary Sensor
 
@@ -506,13 +513,23 @@ sensor:
       name: IR Counter
       filters:
         - delta: 0.0
-    power_consumption:
-      name: Power Consumption
+    energy_indoor:
+      name: Energy Consumption Indoor
+      device_id: daikin_outdoor # this is the sum of all indoor units on an outdoor unit
       filters:
         - delta: 0.0
     outdoor_capacity:
       name: Outdoor Capacity
       device_id: daikin_outdoor
+      filters:
+        - delta: 0.0
+    # Protocol Version 3.20:
+    energy_cooling:
+      name: Energy Consumption Cooling
+      filters:
+        - delta: 0.0
+    energy_heating:
+      name: Energy Consumption Heating
       filters:
         - delta: 0.0
   # optional external reference sensors

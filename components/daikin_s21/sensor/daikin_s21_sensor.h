@@ -18,6 +18,18 @@ class DaikinS21Sensor : public PollingComponent,
 
   void publish_sensors();
 
+  void set_energy_cooling_sensor(sensor::Sensor * const sensor) {
+    this->energy_cooling_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutEnergyConsumptionClimateModes);
+  }
+  void set_energy_heating_sensor(sensor::Sensor * const sensor) {
+    this->energy_heating_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutEnergyConsumptionClimateModes);
+  }
+  void set_energy_indoor_sensor(sensor::Sensor * const sensor) {
+    this->energy_indoor_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutEnergyConsumptionIndoorUnits);
+  }
   void set_temp_setpoint_sensor(sensor::Sensor * const sensor) {
     this->temp_setpoint_sensor_ = sensor;
   }
@@ -60,10 +72,6 @@ class DaikinS21Sensor : public PollingComponent,
     this->ir_counter_sensor_ = sensor;
     this->get_parent()->request_readout(DaikinS21::ReadoutIRCounter);
   }
-  void set_power_consumption_sensor(sensor::Sensor * const sensor) {
-    this->power_consumption_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutPowerConsumption);
-  }
   void set_outdoor_capacity_sensor(sensor::Sensor * const sensor) {
     this->outdoor_capacity_sensor_ = sensor;
     this->get_parent()->request_readout(DaikinS21::ReadoutOutdoorCapacity);
@@ -72,6 +80,9 @@ class DaikinS21Sensor : public PollingComponent,
  protected:
   bool is_free_run() const { return this->get_update_interval() == 0; }
 
+  sensor::Sensor *energy_cooling_sensor_{};
+  sensor::Sensor *energy_heating_sensor_{};
+  sensor::Sensor *energy_indoor_sensor_{};
   sensor::Sensor *temp_setpoint_sensor_{};
   sensor::Sensor *temp_inside_sensor_{};
   sensor::Sensor *temp_target_sensor_{};
@@ -83,7 +94,6 @@ class DaikinS21Sensor : public PollingComponent,
   sensor::Sensor *humidity_sensor_{};
   sensor::Sensor *demand_sensor_{};
   sensor::Sensor *ir_counter_sensor_{};
-  sensor::Sensor *power_consumption_sensor_{};
   sensor::Sensor *outdoor_capacity_sensor_{};
 };
 
