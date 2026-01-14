@@ -36,6 +36,9 @@ void DaikinS21Sensor::update() {
 }
 
 void DaikinS21Sensor::dump_config() {
+  LOG_SENSOR("", "Energy Cooling", this->energy_cooling_sensor_);
+  LOG_SENSOR("", "Energy Heating", this->energy_heating_sensor_);
+  LOG_SENSOR("", "Energy Indoor", this->energy_indoor_sensor_);
   LOG_SENSOR("", "Temperature Setpoint", this->temp_setpoint_sensor_);
   LOG_SENSOR("", "Temperature Inside", this->temp_inside_sensor_);
   LOG_SENSOR("", "Temperature Target", this->temp_target_sensor_);
@@ -47,7 +50,6 @@ void DaikinS21Sensor::dump_config() {
   LOG_SENSOR("", "Humidity", this->humidity_sensor_);
   LOG_SENSOR("", "Demand", this->demand_sensor_);
   LOG_SENSOR("", "IR Counter", this->ir_counter_sensor_);
-  LOG_SENSOR("", "Power Consumption", this->power_consumption_sensor_);
   LOG_SENSOR("", "Outdoor Capacity", this->outdoor_capacity_sensor_);
 }
 
@@ -55,6 +57,15 @@ void DaikinS21Sensor::dump_config() {
  * Unconditionally publish the sensors
  */
 void DaikinS21Sensor::publish_sensors() {
+  if (this->energy_cooling_sensor_ != nullptr) {
+    this->energy_cooling_sensor_->publish_state(this->get_parent()->get_energy_consumption_cooling() / 100.0F);
+  }
+  if (this->energy_heating_sensor_ != nullptr) {
+    this->energy_heating_sensor_->publish_state(this->get_parent()->get_energy_consumption_heating() / 100.0F);
+  }
+  if (this->energy_indoor_sensor_ != nullptr) {
+    this->energy_indoor_sensor_->publish_state(this->get_parent()->get_energy_consumption_indoor_units() / 100.0F);
+  }
   if (this->temp_setpoint_sensor_ != nullptr) {
     this->temp_setpoint_sensor_->publish_state(this->get_parent()->get_temp_setpoint().f_degc());
   }
@@ -87,9 +98,6 @@ void DaikinS21Sensor::publish_sensors() {
   }
   if (this->ir_counter_sensor_ != nullptr) {
     this->ir_counter_sensor_->publish_state(this->get_parent()->get_ir_counter());
-  }
-  if (this->power_consumption_sensor_ != nullptr) {
-    this->power_consumption_sensor_->publish_state(this->get_parent()->get_power_consumption() / 100.0F);
   }
   if (this->outdoor_capacity_sensor_ != nullptr) {
     this->outdoor_capacity_sensor_->publish_state(this->get_parent()->get_outdoor_capacity());

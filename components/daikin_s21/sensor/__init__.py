@@ -34,13 +34,15 @@ DaikinS21Sensor = daikin_s21_ns.class_("DaikinS21Sensor", cg.PollingComponent)
 
 CONF_COIL_TEMP = "coil_temperature"
 CONF_COMPRESSOR_FREQUENCY = "compressor_frequency"
+CONF_ENERGY_COOLING = "energy_cooling"
+CONF_ENERGY_HEATING = "energy_heating"
+CONF_ENERGY_INDOOR = "energy_indoor"
 CONF_DEMAND = "demand"
 CONF_FAN_SPEED = "fan_speed"
 CONF_IR_COUNTER = "ir_counter"
 CONF_INSIDE_TEMP = "inside_temperature"
 CONF_OUTDOOR_CAPACITY = "outdoor_capacity"
 CONF_OUTSIDE_TEMP = "outside_temperature"
-CONF_POWER_CONSUMPTION = "power_consumption"
 CONF_SETPOINT_TEMP = "setpoint_temperature"
 CONF_SWING_VERTICAL_ANGLE = "swing_vertical_angle"
 
@@ -48,6 +50,12 @@ TEMPERATURE_SENSOR_SCHEMA = sensor.sensor_schema(
     unit_of_measurement=UNIT_CELSIUS,
     accuracy_decimals=1,
     device_class=DEVICE_CLASS_TEMPERATURE,
+    state_class=STATE_CLASS_MEASUREMENT,
+)
+ENERGY_SENSOR_SCHEMA = sensor.sensor_schema(
+    unit_of_measurement=UNIT_KILOWATT_HOURS,
+    accuracy_decimals=2,
+    device_class=DEVICE_CLASS_ENERGY,
     state_class=STATE_CLASS_MEASUREMENT,
 )
 
@@ -70,6 +78,9 @@ CONFIG_SCHEMA = (
             accuracy_decimals=1,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
+        cv.Optional(CONF_ENERGY_COOLING): ENERGY_SENSOR_SCHEMA,
+        cv.Optional(CONF_ENERGY_HEATING): ENERGY_SENSOR_SCHEMA,
+        cv.Optional(CONF_ENERGY_INDOOR): ENERGY_SENSOR_SCHEMA,
         cv.Optional(CONF_FAN_SPEED): sensor.sensor_schema(
             unit_of_measurement=UNIT_REVOLUTIONS_PER_MINUTE,
             icon=ICON_FAN,
@@ -94,12 +105,6 @@ CONFIG_SCHEMA = (
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional(CONF_OUTSIDE_TEMP): TEMPERATURE_SENSOR_SCHEMA,
-        cv.Optional(CONF_POWER_CONSUMPTION): sensor.sensor_schema(
-            unit_of_measurement=UNIT_KILOWATT_HOURS,
-            accuracy_decimals=2,
-            device_class=DEVICE_CLASS_ENERGY,
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
         cv.Optional(CONF_SETPOINT_TEMP): TEMPERATURE_SENSOR_SCHEMA,
         cv.Optional(CONF_SWING_VERTICAL_ANGLE): sensor.sensor_schema(
             unit_of_measurement=UNIT_DEGREES,
@@ -120,13 +125,15 @@ async def to_code(config):
         (CONF_COIL_TEMP, var.set_temp_coil_sensor),
         (CONF_COMPRESSOR_FREQUENCY, var.set_compressor_frequency_sensor),
         (CONF_DEMAND, var.set_demand_sensor),
+        (CONF_ENERGY_COOLING, var.set_energy_cooling_sensor),
+        (CONF_ENERGY_HEATING, var.set_energy_heating_sensor),
+        (CONF_ENERGY_INDOOR, var.set_energy_indoor_sensor),
         (CONF_FAN_SPEED, var.set_fan_speed_sensor),
         (CONF_HUMIDITY, var.set_humidity_sensor),
         (CONF_IR_COUNTER, var.set_ir_counter_sensor),
         (CONF_INSIDE_TEMP, var.set_temp_inside_sensor),
         (CONF_OUTDOOR_CAPACITY, var.set_outdoor_capacity_sensor),
         (CONF_OUTSIDE_TEMP, var.set_temp_outside_sensor),
-        (CONF_POWER_CONSUMPTION, var.set_power_consumption_sensor),
         (CONF_SETPOINT_TEMP, var.set_temp_setpoint_sensor),
         (CONF_SWING_VERTICAL_ANGLE, var.set_swing_vertical_angle_sensor),
         (CONF_TARGET_TEMPERATURE, var.set_temp_target_sensor),

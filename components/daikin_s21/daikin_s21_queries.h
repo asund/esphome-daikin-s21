@@ -26,7 +26,7 @@ namespace StateQuery {
   inline constexpr std::string_view IRCounter{"FG"};
   inline constexpr std::string_view V2OptionalFeatures{"FK"};
   // FL
-  inline constexpr std::string_view PowerConsumption{"FM"};
+  inline constexpr std::string_view EnergyConsumptionIndoorUnits{"FM"};
   inline constexpr std::string_view ITELC{"FN"};
   inline constexpr std::string_view FP{"FP"};
   inline constexpr std::string_view FQ{"FQ"};
@@ -35,7 +35,7 @@ namespace StateQuery {
   inline constexpr std::string_view OutdoorCapacity{"FT"};
   inline constexpr std::string_view V3OptionalFeatures{"FU00"};
   inline constexpr std::string_view AllowedTemperatureRange{"FU02"};
-  inline constexpr std::string_view Uptime{"FU04"};
+  inline constexpr std::string_view EnergyConsumptionClimateModes{"FU04"};
   inline constexpr std::string_view ModelName{"FU05"};
   inline constexpr std::string_view ProductionInformation{"FU15"};
   inline constexpr std::string_view ProductionOrder{"FU25"};

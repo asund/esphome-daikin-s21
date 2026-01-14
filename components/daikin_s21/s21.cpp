@@ -166,10 +166,11 @@ void apply_swing_mode(const climate::ClimateSwingMode swing, DaikinVerticalSwing
  *
  * @param bytes ASCII bytes of format <ones><tens><hundreds[><neg/pos>,<thousands>]
  * @param base base used for conversion
- * @return int16_t integer representation of string
+ * @return unsigned integer representation of string, one's complement representation for signed values
  */
-int16_t bytes_to_num(std::span<const uint8_t> bytes, const int base = 10) {
-  std::array<char, 4+1> buffer{};
+auto bytes_to_num(std::span<const uint8_t> bytes, const int base = 10) {
+  static_assert(sizeof(unsigned long) >= sizeof(uint32_t));
+  std::array<char, 8+1> buffer{};
   std::ranges::reverse_copy(bytes, buffer.begin());
   return std::strtoul(buffer.data(), nullptr, base);
 }
@@ -193,7 +194,7 @@ DaikinS21::DaikinS21(DaikinSerial * const serial)
     {StateQuery::ModelCode, &DaikinS21::handle_state_model_code_v2, 4, true},
     {StateQuery::IRCounter, &DaikinS21::handle_state_ir_counter, 4},
     {StateQuery::V2OptionalFeatures, &DaikinS21::handle_nop, 4, true},
-    {StateQuery::PowerConsumption, &DaikinS21::handle_state_power_consumption, 4},
+    {StateQuery::EnergyConsumptionIndoorUnits, &DaikinS21::handle_state_energy_consumption_indoor_units, 4},
     // {StateQuery::ITELC, &DaikinS21::handle_nop, 4},  // unknown, daikin intelligent touch controller?
     // {StateQuery::FP, &DaikinS21::handle_nop, 4}, // unknown
     // {StateQuery::FQ, &DaikinS21::handle_nop, 4}, // unknown
@@ -201,6 +202,7 @@ DaikinS21::DaikinS21(DaikinSerial * const serial)
     // {StateQuery::FS, &DaikinS21::handle_nop, 4}, // unknown
     {StateQuery::OutdoorCapacity, &DaikinS21::handle_state_outdoor_capacity, 4},
     {StateQuery::V3OptionalFeatures, &DaikinS21::handle_nop, 32, true},
+    {StateQuery::EnergyConsumptionClimateModes, &DaikinS21::handle_state_energy_consumption_climate_modes, 32},
     {StateQuery::ModelName, &DaikinS21::handle_state_model_name, 32, true},
     // {StateQuery::FV, &DaikinS21::handle_nop}, // unknown
     {StateQuery::NewProtocol, &DaikinS21::handle_nop, 4, true},  // protocol version detect
@@ -569,8 +571,8 @@ void DaikinS21::check_ready_protocol_detection() {
         this->enable_query(StateQuery::IRCounter);
       }
       this->enable_query(StateQuery::V2OptionalFeatures);
-      if (this->readout_requests[ReadoutPowerConsumption]) {
-        this->enable_query(StateQuery::PowerConsumption);
+      if (this->readout_requests[ReadoutEnergyConsumptionIndoorUnits]) {
+        this->enable_query(StateQuery::EnergyConsumptionIndoorUnits);
       }
       if (this->readout_requests[DaikinS21::ReadoutVerticalSwingMode]) {
         this->enable_query(StateQuery::VerticalSwingMode);
@@ -583,6 +585,11 @@ void DaikinS21::check_ready_protocol_detection() {
       this->enable_query(StateQuery::V3OptionalFeatures);
       this->enable_query(StateQuery::SoftwareRevision);
       this->enable_query(StateQuery::V3Model);
+    }
+    if (this->protocol_version >= ProtocolVersion(3,20)) {
+      if (this->readout_requests[ReadoutEnergyConsumptionClimateModes]) {
+        this->enable_query(StateQuery::EnergyConsumptionClimateModes);
+      }
     }
     if (this->protocol_version >= ProtocolVersion(3,40)) {
       this->enable_query(StateQuery::ModelName);
@@ -986,8 +993,8 @@ void DaikinS21::handle_state_ir_counter(const std::span<const uint8_t> payload) 
   this->ir_counter = bytes_to_num(payload); // format unknown
 }
 
-void DaikinS21::handle_state_power_consumption(const std::span<const uint8_t> payload) {
-  this->power_consumption = bytes_to_num(payload, 16);
+void DaikinS21::handle_state_energy_consumption_indoor_units(const std::span<const uint8_t> payload) {
+  this->energy_consumption_indoor_units = bytes_to_num(payload, 16);
 }
 
 void DaikinS21::handle_vertical_swing_mode(const std::span<const uint8_t> payload) {
@@ -998,6 +1005,11 @@ void DaikinS21::handle_vertical_swing_mode(const std::span<const uint8_t> payloa
 
 void DaikinS21::handle_state_outdoor_capacity(const std::span<const uint8_t> payload) {
   this->outdoor_capacity = bytes_to_num(payload);
+}
+
+void DaikinS21::handle_state_energy_consumption_climate_modes(const std::span<const uint8_t> payload) {
+  this->energy_consumption_cooling = bytes_to_num(payload.first(8), 16);
+  this->energy_consumption_heating = bytes_to_num(payload.subspan(8, 8), 16);
 }
 
 void DaikinS21::handle_state_model_name(std::span<const uint8_t> payload) {
