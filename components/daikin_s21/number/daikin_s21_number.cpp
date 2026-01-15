@@ -1,5 +1,4 @@
 #include "daikin_s21_number.h"
-#include "../s21.h"
 
 namespace esphome::daikin_s21 {
 

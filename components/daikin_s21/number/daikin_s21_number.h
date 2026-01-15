@@ -4,6 +4,7 @@
 #include "esphome/core/component.h"
 #include "esphome/core/helpers.h"
 #include "../daikin_s21_types.h"
+#include "../s21.h"
 
 namespace esphome::daikin_s21 {
 
@@ -22,6 +23,7 @@ class DaikinS21Number : public Component,
 
   void set_demand(DaikinS21NumberDemand * const number) {
     this->demand_number_ = number;
+    this->get_parent()->request_readout(DaikinS21::ReadoutDemandAndEcono);
   }
 
  protected:
