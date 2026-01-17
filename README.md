@@ -23,7 +23,7 @@ A short changelog of sorts, I'll keep things here where a user might encounter
 breaking or significant changes.
 
 * Added additional energy consumption sensors for protocol 3.20+. Renamed
-  existing "power_consumption" to "energy_indoor". Sorry. Update your YAML.
+  existing "power_consumption" to "energy". Sorry. Update your YAML.
 * Checksum calculation was fixed. There's a faint chance that a command that was
   previously NAK'd actually now works.
 * Custom Silent fan mode changed to standard Quiet. Custom Automatic was also
@@ -513,9 +513,9 @@ sensor:
       name: IR Counter
       filters:
         - delta: 0.0
-    energy_indoor:
-      name: Energy Consumption Indoor
-      device_id: daikin_outdoor # this is the sum of all indoor units on an outdoor unit
+    energy:
+      name: Energy Consumption
+      device_id: daikin_outdoor
       filters:
         - delta: 0.0
     outdoor_capacity:

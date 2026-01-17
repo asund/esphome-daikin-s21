@@ -36,9 +36,9 @@ void DaikinS21Sensor::update() {
 }
 
 void DaikinS21Sensor::dump_config() {
+  LOG_SENSOR("", "Energy", this->energy_sensor_);
   LOG_SENSOR("", "Energy Cooling", this->energy_cooling_sensor_);
   LOG_SENSOR("", "Energy Heating", this->energy_heating_sensor_);
-  LOG_SENSOR("", "Energy Indoor", this->energy_indoor_sensor_);
   LOG_SENSOR("", "Temperature Setpoint", this->temp_setpoint_sensor_);
   LOG_SENSOR("", "Temperature Inside", this->temp_inside_sensor_);
   LOG_SENSOR("", "Temperature Target", this->temp_target_sensor_);
@@ -57,14 +57,14 @@ void DaikinS21Sensor::dump_config() {
  * Unconditionally publish the sensors
  */
 void DaikinS21Sensor::publish_sensors() {
+  if (this->energy_sensor_ != nullptr) {
+    this->energy_sensor_->publish_state(this->get_parent()->get_energy_consumption_total() / 10.0F);
+  }
   if (this->energy_cooling_sensor_ != nullptr) {
-    this->energy_cooling_sensor_->publish_state(this->get_parent()->get_energy_consumption_cooling() / 100.0F);
+    this->energy_cooling_sensor_->publish_state(this->get_parent()->get_energy_consumption_cooling() / 10.0F);
   }
   if (this->energy_heating_sensor_ != nullptr) {
-    this->energy_heating_sensor_->publish_state(this->get_parent()->get_energy_consumption_heating() / 100.0F);
-  }
-  if (this->energy_indoor_sensor_ != nullptr) {
-    this->energy_indoor_sensor_->publish_state(this->get_parent()->get_energy_consumption_indoor_units() / 100.0F);
+    this->energy_heating_sensor_->publish_state(this->get_parent()->get_energy_consumption_heating() / 10.0F);
   }
   if (this->temp_setpoint_sensor_ != nullptr) {
     this->temp_setpoint_sensor_->publish_state(this->get_parent()->get_temp_setpoint().f_degc());

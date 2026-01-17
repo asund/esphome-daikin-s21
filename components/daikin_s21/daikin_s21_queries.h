@@ -26,7 +26,7 @@ namespace StateQuery {
   inline constexpr std::string_view IRCounter{"FG"};
   inline constexpr std::string_view V2OptionalFeatures{"FK"};
   // FL
-  inline constexpr std::string_view EnergyConsumptionIndoorUnits{"FM"};
+  inline constexpr std::string_view EnergyConsumptionTotal{"FM"};
   inline constexpr std::string_view ITELC{"FN"};
   inline constexpr std::string_view FP{"FP"};
   inline constexpr std::string_view FQ{"FQ"};

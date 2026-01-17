@@ -194,7 +194,7 @@ DaikinS21::DaikinS21(DaikinSerial * const serial)
     {StateQuery::ModelCode, &DaikinS21::handle_state_model_code_v2, 4, true},
     {StateQuery::IRCounter, &DaikinS21::handle_state_ir_counter, 4},
     {StateQuery::V2OptionalFeatures, &DaikinS21::handle_nop, 4, true},
-    {StateQuery::EnergyConsumptionIndoorUnits, &DaikinS21::handle_state_energy_consumption_indoor_units, 4},
+    {StateQuery::EnergyConsumptionTotal, &DaikinS21::handle_state_energy_consumption_total, 4},
     // {StateQuery::ITELC, &DaikinS21::handle_nop, 4},  // unknown, daikin intelligent touch controller?
     // {StateQuery::FP, &DaikinS21::handle_nop, 4}, // unknown
     // {StateQuery::FQ, &DaikinS21::handle_nop, 4}, // unknown
@@ -571,8 +571,8 @@ void DaikinS21::check_ready_protocol_detection() {
         this->enable_query(StateQuery::IRCounter);
       }
       this->enable_query(StateQuery::V2OptionalFeatures);
-      if (this->readout_requests[ReadoutEnergyConsumptionIndoorUnits]) {
-        this->enable_query(StateQuery::EnergyConsumptionIndoorUnits);
+      if (this->readout_requests[ReadoutEnergyConsumptionTotal]) {
+        this->enable_query(StateQuery::EnergyConsumptionTotal);
       }
       if (this->readout_requests[DaikinS21::ReadoutVerticalSwingMode]) {
         this->enable_query(StateQuery::VerticalSwingMode);
@@ -993,8 +993,8 @@ void DaikinS21::handle_state_ir_counter(const std::span<const uint8_t> payload) 
   this->ir_counter = bytes_to_num(payload); // format unknown
 }
 
-void DaikinS21::handle_state_energy_consumption_indoor_units(const std::span<const uint8_t> payload) {
-  this->energy_consumption_indoor_units = bytes_to_num(payload, 16);
+void DaikinS21::handle_state_energy_consumption_total(const std::span<const uint8_t> payload) {
+  this->energy_consumption_total = bytes_to_num(payload, 16);
 }
 
 void DaikinS21::handle_vertical_swing_mode(const std::span<const uint8_t> payload) {
