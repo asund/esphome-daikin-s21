@@ -6,6 +6,7 @@ import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import sensor
 from esphome.const import (
+    CONF_ENERGY,
     CONF_HUMIDITY,
     CONF_ID,
     CONF_TARGET_TEMPERATURE,
@@ -21,6 +22,7 @@ from esphome.const import (
     DEVICE_CLASS_HUMIDITY,
     DEVICE_CLASS_TEMPERATURE,
     STATE_CLASS_MEASUREMENT,
+    STATE_CLASS_TOTAL_INCREASING,
 )
 
 from .. import (
@@ -36,7 +38,6 @@ CONF_COIL_TEMP = "coil_temperature"
 CONF_COMPRESSOR_FREQUENCY = "compressor_frequency"
 CONF_ENERGY_COOLING = "energy_cooling"
 CONF_ENERGY_HEATING = "energy_heating"
-CONF_ENERGY_INDOOR = "energy_indoor"
 CONF_DEMAND = "demand"
 CONF_FAN_SPEED = "fan_speed"
 CONF_IR_COUNTER = "ir_counter"
@@ -54,9 +55,9 @@ TEMPERATURE_SENSOR_SCHEMA = sensor.sensor_schema(
 )
 ENERGY_SENSOR_SCHEMA = sensor.sensor_schema(
     unit_of_measurement=UNIT_KILOWATT_HOURS,
-    accuracy_decimals=2,
+    accuracy_decimals=1,
     device_class=DEVICE_CLASS_ENERGY,
-    state_class=STATE_CLASS_MEASUREMENT,
+    state_class=STATE_CLASS_TOTAL_INCREASING,
 )
 
 CONFIG_SCHEMA = (
@@ -78,9 +79,9 @@ CONFIG_SCHEMA = (
             accuracy_decimals=1,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
+        cv.Optional(CONF_ENERGY): ENERGY_SENSOR_SCHEMA,
         cv.Optional(CONF_ENERGY_COOLING): ENERGY_SENSOR_SCHEMA,
         cv.Optional(CONF_ENERGY_HEATING): ENERGY_SENSOR_SCHEMA,
-        cv.Optional(CONF_ENERGY_INDOOR): ENERGY_SENSOR_SCHEMA,
         cv.Optional(CONF_FAN_SPEED): sensor.sensor_schema(
             unit_of_measurement=UNIT_REVOLUTIONS_PER_MINUTE,
             icon=ICON_FAN,
@@ -125,9 +126,9 @@ async def to_code(config):
         (CONF_COIL_TEMP, var.set_temp_coil_sensor),
         (CONF_COMPRESSOR_FREQUENCY, var.set_compressor_frequency_sensor),
         (CONF_DEMAND, var.set_demand_sensor),
+        (CONF_ENERGY, var.set_energy_sensor),
         (CONF_ENERGY_COOLING, var.set_energy_cooling_sensor),
         (CONF_ENERGY_HEATING, var.set_energy_heating_sensor),
-        (CONF_ENERGY_INDOOR, var.set_energy_indoor_sensor),
         (CONF_FAN_SPEED, var.set_fan_speed_sensor),
         (CONF_HUMIDITY, var.set_humidity_sensor),
         (CONF_IR_COUNTER, var.set_ir_counter_sensor),
