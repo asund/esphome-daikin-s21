@@ -494,9 +494,13 @@ sensor:
       filters:
         - delta: 0.0
     compressor_frequency:
-      name: Compressor Frequency
+      name: Compressor Frequency  # RPM by default, uncomment below to map to Hz
       device_id: daikin_outdoor
+      # unit_of_measurement: "Hz"
+      # device_class: frequency
+      # accuracy_decimals: 2
       filters:
+        # - multiply: !lambda return 1.0F / 60.0F;
         - delta: 0.0
     humidity:
       id: daikin_humidity
@@ -504,7 +508,7 @@ sensor:
       filters:
         - delta: 0.0
     demand:
-      name: Demand  # 0-15 demand units, use filter to map to %
+      name: Demand  # 0-15 demand units by default, use filter to map to 100%
       filters:
         - multiply: !lambda return 100.0F / 15.0F;
         - delta: 0.0
