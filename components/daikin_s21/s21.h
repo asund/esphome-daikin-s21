@@ -90,7 +90,7 @@ class DaikinS21 : public PollingComponent {
   auto get_energy_consumption_heating() const { return this->energy_consumption_heating; }
   auto get_vertical_swing_mode() const { return this->vertical_swing_mode.value(); }
   auto get_outdoor_capacity() const { return this->outdoor_capacity; }
-  auto get_compressor_frequency() const { return this->compressor_rpm; }
+  auto get_compressor_frequency() const { return this->compressor_hz; }
   auto get_humidity() const { return this->humidity; }
   auto get_demand_pull() const { return this->demand_pull; }
   auto get_unit_state() const { return this->unit_state; }
@@ -205,7 +205,7 @@ class DaikinS21 : public PollingComponent {
   DaikinC10 temp_coil{};
   uint16_t fan_rpm_setpoint{};  // not supported
   uint16_t fan_rpm{};
-  uint16_t compressor_rpm{};
+  uint16_t compressor_hz{};
   int16_t swing_vertical_angle_setpoint{};  // not supported
   int16_t swing_vertical_angle{};
   uint16_t ir_counter{};

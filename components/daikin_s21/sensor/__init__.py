@@ -11,6 +11,7 @@ from esphome.const import (
     CONF_ID,
     CONF_TARGET_TEMPERATURE,
     DEVICE_CLASS_ENERGY,
+    DEVICE_CLASS_FREQUENCY,
     DEVICE_CLASS_HUMIDITY,
     DEVICE_CLASS_TEMPERATURE,
     ICON_COUNTER,
@@ -20,6 +21,7 @@ from esphome.const import (
     STATE_CLASS_TOTAL_INCREASING,
     UNIT_CELSIUS,
     UNIT_DEGREES,
+    UNIT_HERTZ,
     UNIT_KILOWATT_HOURS,
     UNIT_PERCENT,
     UNIT_REVOLUTIONS_PER_MINUTE,
@@ -68,9 +70,10 @@ CONFIG_SCHEMA = (
     .extend({
         cv.Optional(CONF_COIL_TEMP): TEMPERATURE_SENSOR_SCHEMA,
         cv.Optional(CONF_COMPRESSOR_FREQUENCY): sensor.sensor_schema(
-            unit_of_measurement=UNIT_REVOLUTIONS_PER_MINUTE,
+            unit_of_measurement=UNIT_HERTZ,
             icon="mdi:pump",
             accuracy_decimals=0,
+            device_class=DEVICE_CLASS_FREQUENCY,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional(CONF_DEMAND): sensor.sensor_schema(
