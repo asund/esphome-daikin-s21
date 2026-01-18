@@ -1099,9 +1099,9 @@ void DaikinS21::handle_env_indoor_frequency_command_signal(const std::span<const
 }
 
 void DaikinS21::handle_env_compressor_frequency(const std::span<const uint8_t> payload) {
-  this->compressor_rpm = bytes_to_num(payload) * 10;
-  if (this->compressor_rpm == 9990) {
-    this->compressor_rpm = 0;  // reported by danijelt
+  this->compressor_hz = bytes_to_num(payload);
+  if (this->compressor_hz == 999) {
+    this->compressor_hz = 0;  // reported by danijelt
   }
 }
 

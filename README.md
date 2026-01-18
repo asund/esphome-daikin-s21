@@ -22,14 +22,16 @@ A big thanks to:
 A short changelog of sorts, I'll keep things here where a user might encounter
 breaking or significant changes.
 
+* Fixed compressor frequency sensor scaling. Please purge your history for this
+  sensor, the values will be incorrect.
 * Added additional energy consumption sensors for protocol 3.20+. Renamed
   existing "power_consumption" to "energy". Sorry. Update your YAML.
-* Checksum calculation was fixed. There's a faint chance that a command that was
-  previously NAK'd actually now works.
+* Checksum calculation was fixed. There's a faint chance that a command or
+  query that was previously NAK'd actually now works.
 * Custom Silent fan mode changed to standard Quiet. Custom Automatic was also
   updated to standard Auto to work around a validation issue, which results in
   a nicer icon. Update any automations to specify these new mode settings.
-* Configuration schema for the climate component (specidically the unit
+* Configuration schema for the climate component (specifically the unit
   temperature range limits) has changed to organize them by mode as well as
   adding a temperature offset to be applied when commanding the unit. Update
   your configurations to the new schema (see example) if your project now fails
@@ -494,13 +496,12 @@ sensor:
       filters:
         - delta: 0.0
     compressor_frequency:
-      name: Compressor Frequency  # RPM by default, uncomment below to map to Hz
+      name: Compressor Frequency
       device_id: daikin_outdoor
-      # unit_of_measurement: "Hz"
-      # device_class: frequency
-      # accuracy_decimals: 2
+      # unit_of_measurement: "RPM"  # if you would prefer RPM, uncomment the following
+      # device_class: ""  # override default "frequency", RPM is not a measurement of frequency in HA
       filters:
-        # - multiply: !lambda return 1.0F / 60.0F;
+        # - multiply: 60.0
         - delta: 0.0
     humidity:
       id: daikin_humidity
