@@ -48,7 +48,7 @@ namespace StateQuery {
   // FX30
   // FX40
   // FX50
-  // FX60
+  inline constexpr std::string_view UnitPower{"FX60"};
   // FX70
   // FX80
   // FX90

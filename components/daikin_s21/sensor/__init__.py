@@ -9,10 +9,12 @@ from esphome.const import (
     CONF_ENERGY,
     CONF_HUMIDITY,
     CONF_ID,
+    CONF_POWER,
     CONF_TARGET_TEMPERATURE,
     DEVICE_CLASS_ENERGY,
     DEVICE_CLASS_FREQUENCY,
     DEVICE_CLASS_HUMIDITY,
+    DEVICE_CLASS_POWER,
     DEVICE_CLASS_TEMPERATURE,
     ICON_COUNTER,
     ICON_FAN,
@@ -24,6 +26,7 @@ from esphome.const import (
     UNIT_KILOWATT_HOURS,
     UNIT_PERCENT,
     UNIT_REVOLUTIONS_PER_MINUTE,
+    UNIT_WATT,
 )
 
 from .. import (
@@ -108,6 +111,12 @@ CONFIG_SCHEMA = (
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional(CONF_OUTSIDE_TEMP): TEMPERATURE_SENSOR_SCHEMA,
+        cv.Optional(CONF_POWER): sensor.sensor_schema(
+            unit_of_measurement=UNIT_WATT,
+            accuracy_decimals=0,
+            device_class=DEVICE_CLASS_POWER,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
         cv.Optional(CONF_SETPOINT_TEMP): TEMPERATURE_SENSOR_SCHEMA,
         cv.Optional(CONF_SWING_VERTICAL_ANGLE): sensor.sensor_schema(
             unit_of_measurement=UNIT_DEGREES,
@@ -137,6 +146,7 @@ async def to_code(config):
         (CONF_INSIDE_TEMP, var.set_temp_inside_sensor),
         (CONF_OUTDOOR_CAPACITY, var.set_outdoor_capacity_sensor),
         (CONF_OUTSIDE_TEMP, var.set_temp_outside_sensor),
+        (CONF_POWER, var.set_unit_power_sensor),
         (CONF_SETPOINT_TEMP, var.set_temp_setpoint_sensor),
         (CONF_SWING_VERTICAL_ANGLE, var.set_swing_vertical_angle_sensor),
         (CONF_TARGET_TEMPERATURE, var.set_temp_target_sensor),
