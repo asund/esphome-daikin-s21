@@ -72,6 +72,10 @@ class DaikinS21Sensor : public PollingComponent,
     this->ir_counter_sensor_ = sensor;
     this->get_parent()->request_readout(DaikinS21::ReadoutIRCounter);
   }
+  void set_unit_power_sensor(sensor::Sensor * const sensor) {
+    this->unit_power_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutUnitPower);
+  }
   void set_outdoor_capacity_sensor(sensor::Sensor * const sensor) {
     this->outdoor_capacity_sensor_ = sensor;
     this->get_parent()->request_readout(DaikinS21::ReadoutOutdoorCapacity);
@@ -94,6 +98,7 @@ class DaikinS21Sensor : public PollingComponent,
   sensor::Sensor *humidity_sensor_{};
   sensor::Sensor *demand_sensor_{};
   sensor::Sensor *ir_counter_sensor_{};
+  sensor::Sensor *unit_power_sensor_{};
   sensor::Sensor *outdoor_capacity_sensor_{};
 };
 

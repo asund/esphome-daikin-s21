@@ -198,13 +198,14 @@ DaikinS21::DaikinS21(DaikinSerial * const serial)
     // {StateQuery::ITELC, &DaikinS21::handle_nop, 4},  // unknown, daikin intelligent touch controller?
     // {StateQuery::FP, &DaikinS21::handle_nop, 4}, // unknown
     // {StateQuery::FQ, &DaikinS21::handle_nop, 4}, // unknown
-    {StateQuery::VerticalSwingMode, &DaikinS21::handle_vertical_swing_mode, 4},
+    {StateQuery::VerticalSwingMode, &DaikinS21::handle_state_vertical_swing_mode, 4},
     // {StateQuery::FS, &DaikinS21::handle_nop, 4}, // unknown
     {StateQuery::OutdoorCapacity, &DaikinS21::handle_state_outdoor_capacity, 4},
     {StateQuery::V3OptionalFeatures, &DaikinS21::handle_nop, 32, true},
     {StateQuery::EnergyConsumptionClimateModes, &DaikinS21::handle_state_energy_consumption_climate_modes, 32},
     {StateQuery::ModelName, &DaikinS21::handle_state_model_name, 32, true},
     // {StateQuery::FV, &DaikinS21::handle_nop}, // unknown
+    {StateQuery::UnitPower, &DaikinS21::handle_state_unit_power, 4},
     {StateQuery::NewProtocol, &DaikinS21::handle_nop, 4, true},  // protocol version detect
     {StateQuery::SoftwareRevision, &DaikinS21::handle_state_software_revision, 32, true},
     {StateQuery::V3Model, &DaikinS21::handle_state_model_v3, 4, true}, // unknown/unconfirmed
@@ -585,6 +586,9 @@ void DaikinS21::check_ready_protocol_detection() {
       this->enable_query(StateQuery::V3OptionalFeatures);
       this->enable_query(StateQuery::SoftwareRevision);
       this->enable_query(StateQuery::V3Model);
+      if (this->readout_requests[ReadoutUnitPower]) {
+        this->enable_query(StateQuery::UnitPower);
+      }
     }
     if (this->protocol_version >= ProtocolVersion(3,20)) {
       if (this->readout_requests[ReadoutEnergyConsumptionClimateModes]) {
@@ -997,7 +1001,7 @@ void DaikinS21::handle_state_energy_consumption_total(const std::span<const uint
   this->energy_consumption_total = bytes_to_num(payload, 16);
 }
 
-void DaikinS21::handle_vertical_swing_mode(const std::span<const uint8_t> payload) {
+void DaikinS21::handle_state_vertical_swing_mode(const std::span<const uint8_t> payload) {
   this->vertical_swing_mode.active = s21_to_vertical_swing_mode(payload[0]);
   // keep regular swing mode in sync
   apply_vertical_swing_mode(this->vertical_swing_mode.active, this->swing_humidity.active.swing);
@@ -1018,6 +1022,10 @@ void DaikinS21::handle_state_model_name(std::span<const uint8_t> payload) {
   payload = { payload.begin(), end };
   std::ranges::copy(payload, this->model_name.begin());
   this->model_name[payload.size()] = 0;
+}
+
+void DaikinS21::handle_state_unit_power(std::span<const uint8_t> payload) {
+  this->unit_power = bytes_to_num(payload, 16);
 }
 
 void DaikinS21::handle_state_software_revision(std::span<const uint8_t> payload) {

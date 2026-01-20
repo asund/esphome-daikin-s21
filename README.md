@@ -3,6 +3,10 @@
 ESPHome component to control Daikin indoor mini-split units using the wired
 protocol available over S21 and related ports.
 
+**==Upgrade Note==**: If your automatic update failed, I may have changed some
+config schema. I try not to do this but this project is till evolving. Please
+see the changelog below for details.
+
 A big thanks to:
 * [revk](https://github.com/revk) for work on the fantastic
   [Faikout](https://github.com/revk/ESP32-Faikout) (née Faikin) project, which
@@ -17,15 +21,17 @@ A big thanks to:
   protocol control debugging.
 * The users of this project who have contributed, tested or offered feedback.
 
-## Recent Changes
+## Recent / Breaking Changes
 
 A short changelog of sorts, I'll keep things here where a user might encounter
 breaking or significant changes.
 
+* Added instantaneous unit power sensor.
 * Fixed compressor frequency sensor scaling. Please purge your history for this
   sensor, the values will be incorrect.
 * Added additional energy consumption sensors for protocol 3.20+. Renamed
-  existing "power_consumption" to "energy". Sorry. Update your YAML.
+  existing "power_consumption" to "energy_indoor" (briefly) to "energy". Sorry.
+  Update your YAML.
 * Checksum calculation was fixed. There's a faint chance that a command or
   query that was previously NAK'd actually now works.
 * Custom Silent fan mode changed to standard Quiet. Custom Automatic was also
@@ -177,6 +183,9 @@ v2+ protocol units may also support:
 * IR counter that increments when the remote is used.
 * Energy consumption of all indoor units in kWh.
 * Outdoor unit capacity in indoor units.
+* Instantaneous unit power consumption in W. If you have a multihead system,
+  sampling jitter may result in incorrect results when summed. Use as a rough
+  indicator only and prefer energy consumption for your dashboard.
 
 v3.20+ protocol units may also support:
 
@@ -526,6 +535,11 @@ sensor:
     outdoor_capacity:
       name: Outdoor Capacity
       device_id: daikin_outdoor
+      filters:
+        - delta: 0.0
+    # Protocol Version 3
+    power:
+      name: Unit Power
       filters:
         - delta: 0.0
     # Protocol Version 3.20:

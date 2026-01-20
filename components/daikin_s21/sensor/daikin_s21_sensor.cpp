@@ -50,6 +50,7 @@ void DaikinS21Sensor::dump_config() {
   LOG_SENSOR("", "Humidity", this->humidity_sensor_);
   LOG_SENSOR("", "Demand", this->demand_sensor_);
   LOG_SENSOR("", "IR Counter", this->ir_counter_sensor_);
+  LOG_SENSOR("", "Unit Power", this->unit_power_sensor_);
   LOG_SENSOR("", "Outdoor Capacity", this->outdoor_capacity_sensor_);
 }
 
@@ -98,6 +99,9 @@ void DaikinS21Sensor::publish_sensors() {
   }
   if (this->ir_counter_sensor_ != nullptr) {
     this->ir_counter_sensor_->publish_state(this->get_parent()->get_ir_counter());
+  }
+  if (this->unit_power_sensor_ != nullptr) {
+    this->unit_power_sensor_->publish_state(this->get_parent()->get_unit_power());
   }
   if (this->outdoor_capacity_sensor_ != nullptr) {
     this->outdoor_capacity_sensor_->publish_state(this->get_parent()->get_outdoor_capacity());
