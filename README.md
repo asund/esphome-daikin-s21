@@ -4,7 +4,7 @@ ESPHome component to control Daikin indoor mini-split units using the wired
 protocol available over S21 and related ports.
 
 **==Upgrade Note==**: If your automatic update failed, I may have changed some
-config schema. I try not to do this but this project is till evolving. Please
+config schema. I try not to do this but this project is still evolving. Please
 see the changelog below for details.
 
 A big thanks to:

@@ -101,7 +101,7 @@ void DaikinS21Sensor::publish_sensors() {
     this->ir_counter_sensor_->publish_state(this->get_parent()->get_ir_counter());
   }
   if (this->unit_power_sensor_ != nullptr) {
-    this->unit_power_sensor_->publish_state(this->get_parent()->get_unit_power());
+    this->unit_power_sensor_->publish_state(this->get_parent()->get_unit_power_watts());
   }
   if (this->outdoor_capacity_sensor_ != nullptr) {
     this->outdoor_capacity_sensor_->publish_state(this->get_parent()->get_outdoor_capacity());

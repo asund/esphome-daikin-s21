@@ -91,7 +91,7 @@ class DaikinS21 : public PollingComponent {
   auto get_energy_consumption_heating() const { return this->energy_consumption_heating; }
   auto get_vertical_swing_mode() const { return this->vertical_swing_mode.value(); }
   auto get_outdoor_capacity() const { return this->outdoor_capacity; }
-  auto get_unit_power() const { return this->unit_power * 10; }
+  auto get_unit_power_watts() const { return this->unit_power * 10; }
   auto get_compressor_frequency() const { return this->compressor_hz; }
   auto get_humidity() const { return this->humidity; }
   auto get_demand_pull() const { return this->demand_pull; }
