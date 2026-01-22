@@ -3,7 +3,7 @@
 ESPHome component to control Daikin indoor mini-split units using the wired
 protocol available over S21 and related ports.
 
-**==Upgrade Note==**: If your automatic update failed, I may have changed some
+***Upgrade Note***: If your automatic update failed, I may have changed some
 config schema. I try not to do this but this project is still evolving. Please
 see the changelog below for details.
 
@@ -115,7 +115,7 @@ on a measured reference value.
 ### Select
 
 * Vertical swing setpoint. v2+ may support this. Preset values can be selected
-  for the vertical louvre, including the standard on and off for the varrying
+  for the vertical louver, including the standard on and off for the varrying
   setting.
 
 * Humidity setpoint. v2+ may support this. The operation of this isn't well
@@ -172,7 +172,7 @@ example configuration.
   not the user setpoint and not that interesting to me but may be useful for
   your automations.
 * Fan speed of inside blower.
-* Vertical swing angle of louvre. This uses Daikin's reference frame.
+* Vertical swing angle of louver. This uses Daikin's reference frame.
 * Compressor frequency of the outside exchanger.
 * Humidity. Not supported on all units, can report a consistent 50% or 0% if
   not present.
@@ -183,12 +183,12 @@ v2+ protocol units may also support:
 * IR counter that increments when the remote is used.
 * Energy consumption of all indoor units in kWh.
 * Outdoor unit capacity in indoor units.
-* Instantaneous unit power consumption in W. If you have a multihead system,
-  sampling jitter may result in incorrect results when summed. Use as a rough
-  indicator only and prefer energy consumption for your dashboard.
 
 v3.20+ protocol units may also support:
 
+* Instantaneous unit power consumption in W. If you have a multihead system,
+  sampling jitter may result in incorrect results when summed. Use as a rough
+  indicator only and prefer energy consumption for your dashboard.
 * Energy consumption in cooling and heating modes in kWh, including the outside
   unit's use, for this inside unit.
 
@@ -391,7 +391,7 @@ The default is 1.0°C to match Daikin's internal granularity.
 
 ```yaml
 esphome:
-  min_version: "2025.12"
+  min_version: "2026.1"
   devices:
     - id: daikin_outdoor
       name: "Daikin Compressor"
@@ -537,12 +537,11 @@ sensor:
       device_id: daikin_outdoor
       filters:
         - delta: 0.0
-    # Protocol Version 3
+    # Protocol Version 3.20:
     power:
       name: Unit Power
       filters:
         - delta: 0.0
-    # Protocol Version 3.20:
     energy_cooling:
       name: Energy Consumption Cooling
       filters:

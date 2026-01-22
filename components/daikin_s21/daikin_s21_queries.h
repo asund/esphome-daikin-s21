@@ -84,7 +84,7 @@ namespace EnvironmentQuery {
   inline constexpr std::string_view LiquidTemperature{"RI"};
   inline constexpr std::string_view FanSpeedSetpoint{"RK"};
   inline constexpr std::string_view FanSpeed{"RL"};
-  inline constexpr std::string_view LouvreAngleSetpoint{"RM"};
+  inline constexpr std::string_view LouverAngleSetpoint{"RM"};
   inline constexpr std::string_view VerticalSwingAngle{"RN"};
   inline constexpr std::string_view RW{"RW"};
   inline constexpr std::string_view TargetTemperature{"RX"}; // (not user setpoint, see details)
