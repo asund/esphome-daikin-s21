@@ -41,23 +41,23 @@ void DaikinS21Climate::setup() {
   this->heat_params.target_pref = global_preferences->make_preference<int16_t>(h + 3);
   // populate default traits
   this->traits_.add_feature_flags(climate::CLIMATE_SUPPORTS_CURRENT_TEMPERATURE | climate::CLIMATE_SUPPORTS_ACTION);
-  if (this->visual_min_temperature_override_.has_value()) {
-    this->traits_.set_visual_min_temperature(this->visual_min_temperature_override_.value());
+  if (std::isfinite(this->visual_min_temperature_override_)) {
+    this->traits_.set_visual_min_temperature(this->visual_min_temperature_override_);
   } else {
     this->traits_.set_visual_min_temperature(std::min({this->heat_cool_params.min, this->cool_params.min, this->heat_params.min}).f_degc());
   }
-  if (this->visual_max_temperature_override_.has_value()) {
-    this->traits_.set_visual_max_temperature(this->visual_max_temperature_override_.value());
+  if (std::isfinite(this->visual_max_temperature_override_)) {
+    this->traits_.set_visual_max_temperature(this->visual_max_temperature_override_);
   } else {
     this->traits_.set_visual_max_temperature(std::max({this->heat_cool_params.max, this->cool_params.max, this->heat_params.max}).f_degc());
   }
-  if (this->visual_target_temperature_step_override_.has_value()) {
-    this->traits_.set_visual_target_temperature_step(this->visual_target_temperature_step_override_.value());
+  if (std::isfinite(this->visual_target_temperature_step_override_)) {
+    this->traits_.set_visual_target_temperature_step(this->visual_target_temperature_step_override_);
   } else {
     this->traits_.set_visual_target_temperature_step(SETPOINT_STEP.f_degc());
   }
-  if (this->visual_current_temperature_step_override_.has_value()) {
-    this->traits_.set_visual_current_temperature_step(this->visual_current_temperature_step_override_.value());
+  if (std::isfinite(this->visual_current_temperature_step_override_)) {
+    this->traits_.set_visual_current_temperature_step(this->visual_current_temperature_step_override_);
   } else {
     this->traits_.set_visual_current_temperature_step(TEMPERATURE_STEP.f_degc());
   }
@@ -195,10 +195,10 @@ void DaikinS21Climate::dump_config() {
   ESP_LOGCONFIG(TAG, "  Setpoint interval: %" PRIu32 "s", this->get_update_interval() / 1000);
   for (const climate::ClimateMode mode : {climate::CLIMATE_MODE_HEAT_COOL, climate::CLIMATE_MODE_COOL, climate::CLIMATE_MODE_HEAT}) {
     if (const auto * const params = get_setpoint_mode_params(mode)) {
-      ESP_LOGCONFIG(TAG, "  %s unit setpoint range: %.1f-%.1f",
-          LOG_STR_ARG(climate::climate_mode_to_string(mode)), params->min.f_degc(), params->max.f_degc());
-      ESP_LOGCONFIG(TAG, "  %s user offset: %+.1f",
-          LOG_STR_ARG(climate::climate_mode_to_string(mode)), params->offset.f_degc());
+      ESP_LOGCONFIG(TAG, "  %s parameters\n"
+                         "    Unit setpoint range: %.1f-%.1f\n"
+                         "    User offset: %+.1f",
+          LOG_STR_ARG(climate::climate_mode_to_string(mode)), params->min.f_degc(), params->max.f_degc(), params->offset.f_degc());
     }
   }
   this->dump_traits_(TAG);
@@ -400,7 +400,7 @@ DaikinFanMode DaikinS21Climate::get_daikin_fan_mode() const {
       return DaikinFanAuto;
     }
   } else {
-    return string_to_daikin_fan_mode(this->get_custom_fan_mode());
+    return stringref_to_daikin_fan_mode(this->get_custom_fan_mode());
   }
 }
 

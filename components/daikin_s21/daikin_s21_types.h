@@ -179,8 +179,8 @@ constexpr const char * daikin_fan_mode_to_cstr(const DaikinFanMode mode) {
   return std::get<const char *>(supported_daikin_fan_modes[mode]);
 }
 
-constexpr DaikinFanMode string_to_daikin_fan_mode(const std::string_view mode) {
-  const auto iter = std::ranges::find(supported_daikin_fan_modes, mode, [](const auto &elem){ return std::get<const char *>(elem); });
+constexpr DaikinFanMode stringref_to_daikin_fan_mode(const StringRef mode) {
+  const auto iter = std::ranges::find(supported_daikin_fan_modes, mode, [](const auto &elem){ return static_cast<StringRef>(std::get<const char *>(elem)); });
   if (iter != std::ranges::end(supported_daikin_fan_modes)) {
     return static_cast<DaikinFanMode>(std::ranges::distance(std::begin(supported_daikin_fan_modes), iter));
   }

@@ -220,7 +220,7 @@ DaikinS21::DaikinS21(DaikinSerial * const serial)
     {EnvironmentQuery::LiquidTemperature, &DaikinS21::handle_env_liquid_temperature, 4},
     // {EnvironmentQuery::FanSpeedSetpoint, &DaikinS21::handle_env_fan_speed_setpoint, 3},  // not supported yet, can translate DaikinFanMode to RPM
     {EnvironmentQuery::FanSpeed, &DaikinS21::handle_env_fan_speed, 3},
-    // {EnvironmentQuery::LouvreAngleSetpoint, &DaikinS21::handle_env_vertical_swing_angle_setpoint, 4},  // not supported yet
+    // {EnvironmentQuery::LouverAngleSetpoint, &DaikinS21::handle_env_vertical_swing_angle_setpoint, 4},  // not supported yet
     {EnvironmentQuery::VerticalSwingAngle, &DaikinS21::handle_env_vertical_swing_angle, 4},
     // {EnvironmentQuery::RW, &DaikinS21::handle_nop, 2},  // unknown, "00" for me
     {EnvironmentQuery::TargetTemperature, &DaikinS21::handle_env_target_temperature, 4},
@@ -272,9 +272,10 @@ void DaikinS21::update() {
 }
 
 void DaikinS21::dump_config() {
-  ESP_LOGCONFIG(TAG, "Daikin S21:");
-  ESP_LOGCONFIG(TAG, "  Polling interval: %" PRIu32 "ms", this->get_update_interval());
-  ESP_LOGCONFIG(TAG, "  Debug: %s", ONOFF(this->debug));
+  ESP_LOGCONFIG(TAG, "Daikin S21:\n"
+                     "  Polling interval: %" PRIu32 "ms\n"
+                     "  Debug: %s",
+      this->get_update_interval(), ONOFF(this->debug));
 }
 
 /**
@@ -586,13 +587,13 @@ void DaikinS21::check_ready_protocol_detection() {
       this->enable_query(StateQuery::V3OptionalFeatures);
       this->enable_query(StateQuery::SoftwareRevision);
       this->enable_query(StateQuery::V3Model);
-      if (this->readout_requests[ReadoutUnitPower]) {
-        this->enable_query(StateQuery::UnitPower);
-      }
     }
     if (this->protocol_version >= ProtocolVersion(3,20)) {
       if (this->readout_requests[ReadoutEnergyConsumptionClimateModes]) {
         this->enable_query(StateQuery::EnergyConsumptionClimateModes);
+      }
+      if (this->readout_requests[ReadoutUnitPower]) {
+        this->enable_query(StateQuery::UnitPower);
       }
     }
     if (this->protocol_version >= ProtocolVersion(3,40)) {
@@ -1272,13 +1273,13 @@ void DaikinS21::dump_state() {
         this->software_version.data(),
         this->software_revision.data());
   }
-  ESP_LOGD(TAG, "  Fan: %c  VSwing: %c  HSwing: %c  MI: %c  Humidify: %02" PRIX8,
+  ESP_LOGD(TAG, " Fan: %c  VSwing: %c  HSwing: %c  MI: %c  Humidify: %02" PRIX8 "\n"
+                " Dry: %c  Demand: %c  Powerful: %c  Econo: %c  Streamer: %c",
       this->support.fan ? 'Y' : 'N',
       this->support.swing ? 'Y' : 'N',
       this->support.horiz_swing ? 'Y' : 'N',
       this->support.model_info,
-      this->support.s_humd);
-  ESP_LOGD(TAG, "  Dry: %c  Demand: %c  Powerful: %c  Econo: %c  Streamer: %c",
+      this->support.s_humd,
       this->support.dry ? 'Y' : 'N',
       this->support.demand ? 'Y' : 'N',
       this->support.powerful ? 'Y' : 'N',
@@ -1299,14 +1300,14 @@ void DaikinS21::dump_state() {
         active_source_strings[this->support.active_source],
         powerful_source_strings[this->support.powerful_source]);
   }
-  ESP_LOGD(TAG, "Mode: %s  Action: %s  Setpoint: %.1fC  Target: %.1fC  Inside: %.1fC  Coil: %.1fC",
+  ESP_LOGD(TAG, " Mode: %s  Action: %s  Setpoint: %.1fC  Target: %.1fC  Inside: %.1fC  Coil: %.1fC\n"
+                " Cycle Time: %" PRIu32 "ms  UnitState: %" PRIX8 "  SysState: %02" PRIX8,
       LOG_STR_ARG(climate::climate_mode_to_string(this->get_climate().mode)),
       LOG_STR_ARG(climate::climate_action_to_string(this->get_climate_action())),
       this->get_climate().setpoint.f_degc(),
       this->get_temp_target().f_degc(),
       this->get_temp_inside().f_degc(),
-      this->get_temp_coil().f_degc());
-  ESP_LOGD(TAG, "Cycle Time: %" PRIu32 "ms  UnitState: %" PRIX8 "  SysState: %02" PRIX8,
+      this->get_temp_coil().f_degc(),
       this->cycle_time_ms,
       this->unit_state.raw,
       this->system_state.raw);
@@ -1321,9 +1322,12 @@ void DaikinS21::dump_state() {
       }
       return str;
     };
-    ESP_LOGD(TAG, "Enabled: %s", comma_join(this->queries | std::views::filter(DaikinQuery::IsEnabled) | std::views::transform(DaikinQuery::GetCommand)).c_str());
-    ESP_LOGD(TAG, "  Nak'd: %s", comma_join(this->queries | std::views::filter(DaikinQuery::IsFailed) | std::views::transform(DaikinQuery::GetCommand)).c_str());
-    ESP_LOGD(TAG, " Static: %s", comma_join(this->queries | std::views::filter(DaikinQuery::IsAckedStatic) | std::views::transform(DaikinQuery::GetCommand)).c_str());
+    ESP_LOGD(TAG, "Enabled: %s\n"
+                  "  Nak'd: %s\n"
+                  " Static: %s",
+        comma_join(this->queries | std::views::filter(DaikinQuery::IsEnabled) | std::views::transform(DaikinQuery::GetCommand)).c_str(),
+        comma_join(this->queries | std::views::filter(DaikinQuery::IsFailed) | std::views::transform(DaikinQuery::GetCommand)).c_str(),
+        comma_join(this->queries | std::views::filter(DaikinQuery::IsAckedStatic) | std::views::transform(DaikinQuery::GetCommand)).c_str());
   }
 }
 
