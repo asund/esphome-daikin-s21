@@ -36,6 +36,8 @@ SUPPORTED_CLIMATE_MODES_OPTIONS = {
     "DRY": climate.ClimateMode.CLIMATE_MODE_DRY,
 }
 
+validate_supported_climate_mode = cv.enum(SUPPORTED_CLIMATE_MODES_OPTIONS, upper=True)
+
 CONFIG_MODE_SCHEMA = cv.Schema({
     cv.Optional(CONF_OFFSET, default="0"): cv.temperature,
     cv.Optional(CONF_MAX_TEMPERATURE, default="30"): cv.temperature,
@@ -49,8 +51,8 @@ CONFIG_SCHEMA = (
     .extend({
         cv.Optional(CONF_SENSOR): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_HUMIDITY_SENSOR): cv.use_id(sensor.Sensor),
-        cv.Optional(CONF_SUPPORTED_MODES, default=list(SUPPORTED_CLIMATE_MODES_OPTIONS)): cv.ensure_list(cv.enum(SUPPORTED_CLIMATE_MODES_OPTIONS, upper=True)),
-        cv.Optional(CONF_SUPPORTED_SWING_MODES, default=list(climate.CLIMATE_SWING_MODES)): cv.ensure_list(cv.enum(climate.CLIMATE_SWING_MODES, upper=True)),
+        cv.Optional(CONF_SUPPORTED_MODES, default=list(SUPPORTED_CLIMATE_MODES_OPTIONS)): cv.ensure_list(validate_supported_climate_mode),
+        cv.Optional(CONF_SUPPORTED_SWING_MODES, default=list(climate.CLIMATE_SWING_MODES)): cv.ensure_list(climate.validate_climate_swing_mode),
         cv.Optional(CONF_HEAT_COOL_MODE, default={}): CONFIG_MODE_SCHEMA,
         cv.Optional(CONF_COOL_MODE, default={CONF_MAX_TEMPERATURE:"32", CONF_MIN_TEMPERATURE:"18"}): CONFIG_MODE_SCHEMA,
         cv.Optional(CONF_HEAT_MODE, default={CONF_MAX_TEMPERATURE:"30", CONF_MIN_TEMPERATURE:"10"}): CONFIG_MODE_SCHEMA,
@@ -71,12 +73,12 @@ async def to_code(config):
         cg.add(var.set_humidity_reference_sensor(sens))
 
     if "OFF" not in config[CONF_SUPPORTED_MODES]:
-        config[CONF_SUPPORTED_MODES].append(climate.ClimateMode.CLIMATE_MODE_OFF)   # always supported
+        config[CONF_SUPPORTED_MODES].append(validate_supported_climate_mode("OFF"))   # always supported
     if len(config[CONF_SUPPORTED_MODES]) > 1:   # don't generate code if just OFF, this is already the default
         cg.add(var.set_supported_modes(config[CONF_SUPPORTED_MODES]))
 
     if "OFF" not in config[CONF_SUPPORTED_SWING_MODES]:
-        config[CONF_SUPPORTED_SWING_MODES].append(climate.ClimateSwingMode.CLIMATE_SWING_OFF)   # always supported
+        config[CONF_SUPPORTED_SWING_MODES].append(climate.validate_climate_swing_mode("OFF"))   # always supported
     if len(config[CONF_SUPPORTED_SWING_MODES]) > 1: # don't generate code if just OFF, leave empty to avoid UI clutter
         cg.add(var.set_supported_swing_modes(config[CONF_SUPPORTED_SWING_MODES]))
 
