@@ -167,7 +167,9 @@ example configuration.
 
 * Inside temperature, usually measured at indoor air handler return.
 * Outside temperature from the exchanger.
-* Coil temperature of indoor air handler.
+* Coil temperature of indoor air handler. These will be very similar for units
+  sharing an outdoor compressor. You may only want to enable this on a single
+  indoor unit to reduce UI clutter.
 * Target temperature (internal setpoint, modified by special modes). This is
   not the user setpoint and not that interesting to me but may be useful for
   your automations.
@@ -494,6 +496,7 @@ sensor:
         - delta: 0.0
     coil_temperature:
       name: Coil Temperature
+      # device_id: daikin_outdoor # values will be roughly the same on multiple indoor units, though they are independent measurements.
       filters:
         - delta: 0.0
     fan_speed:
