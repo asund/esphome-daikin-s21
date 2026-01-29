@@ -14,6 +14,10 @@ static constexpr uint8_t ETX{3};
 static constexpr uint8_t ACK{6};
 static constexpr uint8_t NAK{21};
 
+constexpr bool is_control_character(const uint8_t ch) {
+  return (ch == STX) || (ch == ETX) || (ch == ACK) || (ch == NAK);
+}
+
 void DaikinSerial::setup() {
   // start idle, wait for updates
   this->disable_loop();
@@ -119,7 +123,7 @@ void DaikinSerial::loop() {
               this->response.pop_back();
               uint8_t calc_checksum = std::reduce(this->response.begin(), this->response.end(), 0U);
               // protocol avoids special control characters in the message body by applying an offset
-              if ((calc_checksum == STX) || (calc_checksum == ETX) || (calc_checksum == ACK)) {
+              if (is_control_character(calc_checksum)) {
                 calc_checksum += 2;
               }
               if (calc_checksum == checksum) {
@@ -208,7 +212,7 @@ void DaikinSerial::send_frame(const std::string_view cmd, const std::span<const 
     checksum = std::reduce(payload.begin(), payload.end(), checksum);
   }
   // mid-message special control characters are offset to avoid framing errors
-  if ((checksum == STX) || (checksum == ETX) || (checksum == ACK)) {
+  if (is_control_character(checksum)) {
     checksum += 2;
   }
   this->uart.write_byte(checksum);
