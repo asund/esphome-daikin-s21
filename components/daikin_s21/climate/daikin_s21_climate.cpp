@@ -41,24 +41,36 @@ void DaikinS21Climate::setup() {
   this->heat_params.target_pref = global_preferences->make_preference<int16_t>(h + 3);
   // populate default traits
   this->traits_.add_feature_flags(climate::CLIMATE_SUPPORTS_CURRENT_TEMPERATURE | climate::CLIMATE_SUPPORTS_ACTION);
+#ifdef USE_CLIMATE_VISUAL_OVERRIDES
   if (std::isfinite(this->visual_min_temperature_override_)) {
     this->traits_.set_visual_min_temperature(this->visual_min_temperature_override_);
-  } else {
+  } else
+#endif
+  {
     this->traits_.set_visual_min_temperature(std::min({this->heat_cool_params.min, this->cool_params.min, this->heat_params.min}).f_degc());
   }
+#ifdef USE_CLIMATE_VISUAL_OVERRIDES
   if (std::isfinite(this->visual_max_temperature_override_)) {
     this->traits_.set_visual_max_temperature(this->visual_max_temperature_override_);
-  } else {
+  } else
+#endif
+  {
     this->traits_.set_visual_max_temperature(std::max({this->heat_cool_params.max, this->cool_params.max, this->heat_params.max}).f_degc());
   }
+#ifdef USE_CLIMATE_VISUAL_OVERRIDES
   if (std::isfinite(this->visual_target_temperature_step_override_)) {
     this->traits_.set_visual_target_temperature_step(this->visual_target_temperature_step_override_);
-  } else {
+  } else
+#endif
+  {
     this->traits_.set_visual_target_temperature_step(SETPOINT_STEP.f_degc());
   }
+#ifdef USE_CLIMATE_VISUAL_OVERRIDES
   if (std::isfinite(this->visual_current_temperature_step_override_)) {
     this->traits_.set_visual_current_temperature_step(this->visual_current_temperature_step_override_);
-  } else {
+  } else
+#endif
+  {
     this->traits_.set_visual_current_temperature_step(TEMPERATURE_STEP.f_degc());
   }
   this->traits_.set_supported_fan_modes({climate::CLIMATE_FAN_AUTO, climate::CLIMATE_FAN_QUIET});
