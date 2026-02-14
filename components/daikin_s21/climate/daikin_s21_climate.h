@@ -39,6 +39,8 @@ class DaikinS21Climate : public climate::Climate,
  protected:
   climate::ClimateTraits traits_{};
   climate::ClimateTraits traits() override { return traits_; };
+  uint32_t last_publish_{0}; //Used for publish rate-limit when values fluctuate
+  float last_temp_raw_{NAN}; //last measured inside temperature, used for denoise before rounding
 
   bool is_free_run() const { return this->get_update_interval() == 0; }
   bool temperature_sensor_unit_is_valid();

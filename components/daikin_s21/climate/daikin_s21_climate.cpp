@@ -10,6 +10,8 @@ using namespace esphome;
 namespace esphome::daikin_s21 {
 
 static const char * const TAG = "daikin_s21.climate";
+static constexpr uint32_t MIN_PUBLISH_INTERVAL = 10000; // 10sec
+static constexpr float TEMPERATURE_DEADBAND = 0.3; //Temperature deadband to preventfrequent updates
 
 /**
  * Save target for the mode to persistent storage.
@@ -108,7 +110,7 @@ void DaikinS21Climate::loop() {
   const float current_humidity = this->get_current_humidity();
   if ((this->mode != reported_climate.mode) ||
       (this->action != this->get_parent()->get_climate_action()) ||
-      (std::isnan(this->current_temperature) != std::isnan(current_temperature)) || (this->current_temperature != current_temperature) || // differ in nan-ness or value
+      (std::isnan(this->current_temperature) != std::isnan(current_temperature)) || (abs(this->current_temperature - current_temperature)>=TEMPERATURE_DEADBAND) || // differ in nan-ness or value
       (std::isnan(this->current_humidity) != std::isnan(current_humidity)) || (this->current_humidity != current_humidity) ||
       (this->swing_mode != reported_swing)) {
     this->mode = reported_climate.mode;
@@ -172,7 +174,13 @@ void DaikinS21Climate::loop() {
 
   // Publish when state changed
   if (do_publish) {
-    this->publish_state();
+    const uint32_t now = millis();
+
+    // Rate limit how often the state is published
+    if (MIN_PUBLISH_INTERVAL == 0 || now - this->last_publish_ >= MIN_PUBLISH_INTERVAL) {
+      this->last_publish_ = now;
+      this->publish_state();
+    }
   }
   // Command unit when setpoint changed
   if (update_unit_setpoint) {
