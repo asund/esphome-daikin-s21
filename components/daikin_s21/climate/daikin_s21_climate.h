@@ -35,12 +35,19 @@ class DaikinS21Climate : public climate::Climate,
   void set_temperature_reference_sensor(sensor::Sensor * const sensor) { this->temperature_sensor_ = sensor; }
   void set_humidity_reference_sensor(sensor::Sensor * sensor);
   void set_setpoint_mode_config(climate::ClimateMode mode, DaikinC10 offset, DaikinC10 min, DaikinC10 max);
+  void set_temperature_deadband(float value);
+  void set_temperature_publish_holdoff(uint32_t value);
 
  protected:
   climate::ClimateTraits traits_{};
   climate::ClimateTraits traits() override { return traits_; };
+
+  float temperature_deadband_{0.3f};        // default
+  uint32_t temperature_publish_holdoff_{30000};  // default 30s
+
   uint32_t last_publish_{0}; //Used for publish rate-limit when values fluctuate
   float last_temp_raw_{NAN}; //last measured inside temperature, used for denoise before rounding
+
 
   bool is_free_run() const { return this->get_update_interval() == 0; }
   bool temperature_sensor_unit_is_valid();
