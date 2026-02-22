@@ -94,7 +94,8 @@ CONFIG_SCHEMA = (
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional(CONF_HUMIDITY): sensor.sensor_schema(
-            unit_of_measurement=ICON_WATER_PERCENT,
+            unit_of_measurement=UNIT_PERCENT,
+            icon=ICON_WATER_PERCENT,
             accuracy_decimals=0,
             device_class=DEVICE_CLASS_HUMIDITY,
             state_class=STATE_CLASS_MEASUREMENT,
