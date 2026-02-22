@@ -22,6 +22,8 @@ from .. import (
     CONF_S21_ID,
     S21_PARENT_SCHEMA,
 )
+CONF_TEMPERATURE_DEADBAND = "temperature_deadband"
+CONF_TEMPERATURE_PUBLISH_HOLDOFF = "temperature_publish_holdoff"
 
 AUTO_LOAD = ["sensor"]
 
@@ -56,6 +58,8 @@ CONFIG_SCHEMA = (
         cv.Optional(CONF_HEAT_COOL_MODE, default={}): CONFIG_MODE_SCHEMA,
         cv.Optional(CONF_COOL_MODE, default={CONF_MAX_TEMPERATURE:"32", CONF_MIN_TEMPERATURE:"18"}): CONFIG_MODE_SCHEMA,
         cv.Optional(CONF_HEAT_MODE, default={CONF_MAX_TEMPERATURE:"30", CONF_MIN_TEMPERATURE:"10"}): CONFIG_MODE_SCHEMA,
+        cv.Optional(CONF_TEMPERATURE_DEADBAND, default=0.3): cv.float_,
+        cv.Optional(CONF_TEMPERATURE_PUBLISH_HOLDOFF, default="30s"): cv.positive_time_period_milliseconds,
     })
 )
 
@@ -63,6 +67,10 @@ async def to_code(config):
     var = await climate.new_climate(config)
     await cg.register_component(var, config)
     await cg.register_parented(var, config[CONF_S21_ID])
+    cg.add(var.set_temperature_deadband(config[CONF_TEMPERATURE_DEADBAND]))
+    cg.add(var.set_temperature_publish_holdoff(
+        config[CONF_TEMPERATURE_PUBLISH_HOLDOFF].total_milliseconds
+    ))
 
     if CONF_SENSOR in config:
         sens = await cg.get_variable(config[CONF_SENSOR])

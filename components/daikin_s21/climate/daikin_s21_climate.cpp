@@ -108,7 +108,7 @@ void DaikinS21Climate::loop() {
   const float current_humidity = this->get_current_humidity();
   if ((this->mode != reported_climate.mode) ||
       (this->action != this->get_parent()->get_climate_action()) ||
-      (std::isnan(this->current_temperature) != std::isnan(current_temperature)) || (this->current_temperature != current_temperature) || // differ in nan-ness or value
+      (std::isnan(this->current_temperature) != std::isnan(current_temperature)) || (abs(this->current_temperature - current_temperature) >= this->temperature_deadband_) || // differ in nan-ness or value
       (std::isnan(this->current_humidity) != std::isnan(current_humidity)) || (this->current_humidity != current_humidity) ||
       (this->swing_mode != reported_swing)) {
     this->mode = reported_climate.mode;
@@ -170,9 +170,26 @@ void DaikinS21Climate::loop() {
     }
   }
 
-  // Publish when state changed
   if (do_publish) {
-    this->publish_state();
+    const uint32_t now = millis();
+
+    const bool temperature_only =
+        (this->mode == reported_climate.mode) &&
+        (this->action == this->get_parent()->get_climate_action()) &&
+        (this->swing_mode == reported_swing);
+
+    if (!temperature_only) {
+      // Immediate publish for mode/fan/swing/action changes
+      this->last_publish_ = now;
+      this->publish_state();
+    } else {
+      // Temperature-only change → apply holdoff
+      if (this->temperature_publish_holdoff_ == 0 ||
+          now - this->last_publish_ >= this->temperature_publish_holdoff_) {
+        this->last_publish_ = now;
+        this->publish_state();
+      }
+    }
   }
   // Command unit when setpoint changed
   if (update_unit_setpoint) {
@@ -262,6 +279,14 @@ bool DaikinS21Climate::temperature_sensor_unit_is_valid() {
     return u == "°C" || u == "°F";
   }
   return false;
+}
+
+void DaikinS21Climate::set_temperature_deadband(float value) {
+  this->temperature_deadband_ = value;
+}
+
+void DaikinS21Climate::set_temperature_publish_holdoff(uint32_t value) {
+  this->temperature_publish_holdoff_ = value;
 }
 
 bool DaikinS21Climate::use_temperature_sensor() {
