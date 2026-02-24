@@ -104,17 +104,19 @@ void DaikinS21Climate::loop() {
   bool update_unit_setpoint = false;
 
   // If the reported state differs from the component state, update component and publish an update
-  const float current_temperature = this->get_current_temperature().f_degc();
-  const float current_humidity = this->get_current_humidity();
+  const float new_temperature = this->get_current_temperature().f_degc();
+  const float new_humidity = this->get_current_humidity();
   if ((this->mode != reported_climate.mode) ||
       (this->action != this->get_parent()->get_climate_action()) ||
-      (std::isnan(this->current_temperature) != std::isnan(current_temperature)) || (this->current_temperature != current_temperature) || // differ in nan-ness or value
-      (std::isnan(this->current_humidity) != std::isnan(current_humidity)) || (this->current_humidity != current_humidity) ||
+      (std::isfinite(this->current_temperature) != std::isfinite(new_temperature)) || // differ in finite-ness
+      (std::isfinite(this->current_temperature) && (this->current_temperature != new_temperature)) || // differ in finite value
+      (std::isfinite(this->current_humidity) != std::isfinite(new_humidity)) ||
+      (std::isfinite(this->current_humidity) && (this->current_humidity != new_humidity)) ||
       (this->swing_mode != reported_swing)) {
     this->mode = reported_climate.mode;
     this->action = this->get_parent()->get_climate_action();
-    this->current_temperature = current_temperature;
-    this->current_humidity = current_humidity;
+    this->current_temperature = new_temperature;
+    this->current_humidity = new_humidity;
     this->swing_mode = reported_swing;
     do_publish = true;
   }
