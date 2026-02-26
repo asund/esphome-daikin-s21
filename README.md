@@ -112,7 +112,22 @@ difference in temperature between the unit and your space. Keep in mind the
 unit will overshoot, so you may want to configure an offset for the mode based
 on a measured reference value.
 
+Climate publish rate was raised as a problem by a user. When external sensors
+are used any change in temperature or humidity will cause the updated climate
+state to be published over the network. The internal default Daikin sensor can
+also flip between values when on the edge between steps. You can reduce this by
+configuring an explicit temperature sensor (in the case of the internal sensor)
+and then using ESPHome sensor filters in the sensor definitions themselves.
+Any of the averaging filters can be used to flatten out a toggling internal
+sensor and use of the delta filter can gate updates to coarser, more signficant
+changes.
+
 ### Select
+
+* LED brightness. v2+ may support this. The value may change when using IR
+  remote modes that make use of the PIR sensor. If this control works for you,
+  there's no need to enable the Sensor LED or Sensor Mode switches or binary
+  sensors.
 
 * Vertical swing setpoint. v2+ may support this. Preset values can be selected
   for the vertical louver, including the standard on and off for the varrying
@@ -242,7 +257,7 @@ a dedicated sensor. Normally you wouldn't need to use this, but if a value
 looks interesting you can see the value change over time in Home Assistant.
 I'd prefer if we use this just to confirm a query works and then add proper
 support, rather than trying to interpret the string via HA. Open an issue with
-details if you want a sensor added.
+details if you want a sensor or control added.
 
 ## Limitations
 
@@ -448,6 +463,7 @@ climate:
     #   - vertical
     #   - both
     # Optional sensors to use for temperature and humidity references
+    sensor: daikin_temperature  # Internal, see indoor temperature sensor below
     # sensor: room_temp  # External, see homeassistant sensor below
     humidity_sensor: daikin_humidity  # Internal, see humidity sensor below
     # humidity_sensor: room_humidity  # External, see homeassistant sensor below
@@ -469,6 +485,8 @@ climate:
 
 select:
   - platform: daikin_s21
+    brightness:
+      name: LED Brightness
     humidity:
       name: Humidity
     vertical_swing:
@@ -482,6 +500,7 @@ sensor:
     #   filters:
     #     - delta: 0.0
     inside_temperature:
+      id: daikin_temperature
       name: Inside Temperature
       filters:
         - delta: 0.0

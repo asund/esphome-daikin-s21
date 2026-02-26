@@ -29,6 +29,7 @@ class DaikinS21 : public PollingComponent {
   void set_swing_mode(climate::ClimateSwingMode swing);
   void set_humidity_mode(DaikinHumidityMode humidity);
   void set_mode(DaikinMode mode, bool enable);
+  void set_brightness_mode(DaikinLEDBrightnessMode brightness);
   void set_demand_control(uint8_t percent);
   void set_vertical_swing_mode(DaikinVerticalSwingMode swing);
 
@@ -103,6 +104,7 @@ class DaikinS21 : public PollingComponent {
   bool get_active() const { return this->active; }
   bool get_serial_error() const { return this->serial_error; }
   bool get_mode(DaikinMode mode) const;
+  DaikinLEDBrightnessMode get_brightness_mode() const;
   std::span<const uint8_t> get_query_result(std::string_view query_str);
   auto get_cycle_interval_ms() const { return std::max(this->get_update_interval(), this->cycle_time_ms); }
 

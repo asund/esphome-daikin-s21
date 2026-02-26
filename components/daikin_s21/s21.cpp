@@ -326,6 +326,35 @@ void DaikinS21::set_mode(const DaikinMode mode, const bool enable) {
 }
 
 /**
+ * Set the LED bitset value of the specified brightness mode and trigger a write to the unit if it changed.
+ */
+void DaikinS21::set_brightness_mode(const DaikinLEDBrightnessMode brightness) {
+  bool led = false;
+  bool motion = false;
+  switch(brightness) {
+    case DaikinLEDBrightnessHigh:
+      led = true;
+      break;
+    case DaikinLEDBrightnessLow:
+      motion = true;
+      break;
+    case DaikinLEDBrightnessOff:
+      led = true;
+      motion = true;
+      break;
+    default:
+      return;
+  }
+  DaikinSpecialModes current = this->special_modes.value(); // local copy to modify
+  if ((current[ModeSensorLED] != led) || (current[ModeMotionSensor] != motion)) {
+    current[ModeSensorLED] = led;
+    current[ModeMotionSensor] = motion;
+    this->special_modes.stage(current);
+    this->trigger_cycle();
+  }
+}
+
+/**
  * Set the demand control percentage and trigger a write to the unit if it changed.
  */
 void DaikinS21::set_demand_control(const uint8_t percent) {
@@ -370,6 +399,20 @@ bool DaikinS21::get_mode(const DaikinMode mode) const {
     return this->demand_econo.value().econo;
   }
   return false;
+}
+
+/**
+ * Get the decoded value of the LED brightness mode
+ */
+DaikinLEDBrightnessMode DaikinS21::get_brightness_mode() const {
+  const DaikinSpecialModes current = this->special_modes.value();
+  if ((current[ModeSensorLED] == true) && (current[ModeMotionSensor] == true)) {
+    return DaikinLEDBrightnessOff;
+  } else if ((current[ModeSensorLED] == false) && (current[ModeMotionSensor] == true)) {
+    return DaikinLEDBrightnessLow;
+  } else {
+    return DaikinLEDBrightnessHigh; // default
+  }
 }
 
 /**

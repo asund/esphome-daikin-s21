@@ -195,6 +195,12 @@ struct DaikinClimateSettings {
   constexpr bool operator==(const DaikinClimateSettings &other) const = default;
 };
 
+enum DaikinLEDBrightnessMode : uint8_t {
+  DaikinLEDBrightnessHigh,
+  DaikinLEDBrightnessLow,
+  DaikinLEDBrightnessOff,
+};
+
 enum DaikinHumidityMode : uint8_t {
   DaikinHumidityOff,
   DaikinHumidityLow,
