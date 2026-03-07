@@ -5,6 +5,11 @@ namespace esphome::daikin_s21 {
 
 static const char * const TAG = "daikin_s21.select";
 
+void DaikinS21SelectLEDBrightness::control(const size_t index) {
+  this->get_parent()->set_brightness_mode(static_cast<DaikinLEDBrightnessMode>(index));
+  this->publish_state(index);
+}
+
 void DaikinS21SelectHumidity::control(const size_t index) {
   this->get_parent()->set_humidity_mode(static_cast<DaikinHumidityMode>(index));
   this->publish_state(index);
@@ -28,6 +33,7 @@ void DaikinS21Select::setup() {
 
 void DaikinS21Select::loop() {
   const std::pair<select::Select *, size_t> selects_and_values[] = {
+    {this->brightness_select_, this->get_parent()->get_brightness_mode()},
     {this->humidity_select_, this->get_parent()->get_humidity_mode()},
     {this->vertical_swing_select_, this->get_parent()->get_vertical_swing_mode()},
   };

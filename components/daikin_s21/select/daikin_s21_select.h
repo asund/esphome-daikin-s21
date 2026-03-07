@@ -7,6 +7,12 @@
 
 namespace esphome::daikin_s21 {
 
+class DaikinS21SelectLEDBrightness : public select::Select,
+                                     public Parented<DaikinS21> {
+ protected:
+  void control(size_t index) override;
+};
+
 class DaikinS21SelectHumidity : public select::Select,
                                 public Parented<DaikinS21> {
  protected:
@@ -26,6 +32,11 @@ class DaikinS21Select : public Component,
   void loop() override;
   void dump_config() override;
 
+  void set_brightness_select(DaikinS21SelectLEDBrightness * const brightness_select) {
+    this->brightness_select_ = brightness_select;
+    this->get_parent()->request_readout(DaikinS21::ReadoutSpecialModes);
+  }
+
   void set_humidity_select(DaikinS21SelectHumidity * const humidity_select) {
     this->humidity_select_ = humidity_select;
     this->get_parent()->request_readout(DaikinS21::ReadoutSwingHumidty);
@@ -37,6 +48,7 @@ class DaikinS21Select : public Component,
   }
 
  protected:
+  DaikinS21SelectLEDBrightness *brightness_select_{};
   DaikinS21SelectHumidity *humidity_select_{};
   DaikinS21SelectVerticalSwing *vertical_swing_select_{};
 };

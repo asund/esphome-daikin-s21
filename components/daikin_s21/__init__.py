@@ -27,6 +27,7 @@ CONF_QUIET = "quiet"
 CONF_STREAMER = "streamer"
 ICON_COMFORT = ICON_ACCOUNT_CHECK
 ICON_ECONO = "mdi:leaf"
+ICON_LED_ON = "mdi:led-on"
 ICON_POWERFUL = "mdi:arm-flex"
 ICON_QUIET = "mdi:volume-minus"
 ICON_STREAMER = "mdi:creation"
