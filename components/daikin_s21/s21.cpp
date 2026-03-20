@@ -535,36 +535,22 @@ void DaikinS21::ready_state_machine() {
 }
 
 void DaikinS21::check_ready_protocol_detection() {
-  static constexpr uint8_t old_version_0[] = {'0',0,0,0};
-  static constexpr uint8_t old_version_1[] = {'0','1',0,0};
-  static constexpr uint8_t old_version_2or3[] = {'0','2',0,0};
-  static constexpr uint8_t old_version_31plus[] = {'0','2','0','0'};
   const auto &old_proto = this->get_query(StateQuery::OldProtocol);
   const auto &new_proto = this->get_query(StateQuery::NewProtocol);
-
   this->protocol_version = ProtocolUndetected;
   // Check availability first, both protocol indicators were enabled on init so skip to the chase
   if (old_proto.success() && new_proto.failed()) {
-    if (std::ranges::equal(old_proto.value(), old_version_0)) {
-      this->protocol_version = ProtocolVersion(0);
-    } else if (std::ranges::equal(old_proto.value(), old_version_1)) {
-      this->protocol_version = ProtocolVersion(1);
-    } else if (std::ranges::equal(old_proto.value(), old_version_2or3) || std::ranges::equal(old_proto.value(), old_version_31plus)) {
-      this->protocol_version = ProtocolVersion(2); // NAK for NewProtocol rules out 3.0
-    } else {
-      this->protocol_version = ProtocolUnknown;
+    // Just old protocol present, either "0\x0\0x0\0x0", "01\x0\x0", "02\x0\x0" or "0200"
+    this->protocol_version = { static_cast<uint8_t>(bytes_to_num(old_proto.value()) / 10) };
+    if (this->protocol_version.major > 2) {
+      this->protocol_version = ProtocolUnknown; // never seen, flag as unknown to generate user reports
     }
   } else if (old_proto.ready() && new_proto.success()) {
+    // New and old protocol present, either "0030", "0230" or "0430"
     const uint16_t raw_version = bytes_to_num(new_proto.value());
     this->protocol_version = {static_cast<uint8_t>(raw_version / 100), static_cast<uint8_t>(raw_version % 100)};
-    // fixup on the 2 / 3.0 protocol border
-    if (this->protocol_version == ProtocolVersion(3,0)) {
-      if (old_proto.success() && std::ranges::equal(old_proto.value(), old_version_31plus)) {
-        this->protocol_version = ProtocolVersion(3,10);
-      }
-    }
   } else if (old_proto.failed() && new_proto.failed()) {
-    // both nak'd, even though we're talking to the unit?
+    // Both protocols nak'd, even though we're talking to the unit?
     this->protocol_version = ProtocolUnknown;
   }
 
@@ -600,11 +586,11 @@ void DaikinS21::check_ready_protocol_detection() {
     }
     this->enable_query(EnvironmentQuery::CompressorOnOff);
     this->enable_query(MiscQuery::SoftwareVersion);
-    if (this->protocol_version <= ProtocolVersion(2)) {
+    if (this->protocol_version.major <= 2) {
       this->enable_query(MiscQuery::Model);
       this->enable_query(MiscQuery::Version);
     }
-    if (this->protocol_version >= ProtocolVersion(2)) {
+    if (this->protocol_version.major >= 2) {
       if (this->readout_requests[ReadoutPowerful] || this->readout_requests[ReadoutSpecialModes]) {
         this->enable_query(StateQuery::SpecialModes);
       }
@@ -626,7 +612,7 @@ void DaikinS21::check_ready_protocol_detection() {
         this->enable_query(StateQuery::OutdoorCapacity);
       }
     }
-    if (this->protocol_version >= ProtocolVersion(3)) {
+    if (this->protocol_version.major >= 3) {
       this->enable_query(StateQuery::V3OptionalFeatures);
       this->enable_query(StateQuery::SoftwareRevision);
       this->enable_query(StateQuery::V3Model);
@@ -699,7 +685,7 @@ void DaikinS21::check_ready_optional_features() {
         this->support.horiz_swing = false;
       }
       this->support.dry =           (v2_features[2] & 0b00001000);
-      if (this->protocol_version > ProtocolVersion(2)) {
+      if (this->protocol_version.major > 2) {
         this->support.demand =      (v2_features[3] & 0b00000001);
       }
     }
@@ -817,7 +803,7 @@ void DaikinS21::check_ready_powerful_source() {
     const auto &special_modes = this->get_query(StateQuery::SpecialModes);  // enabled when requested and protocol >= 2
     if (special_modes.success()) {
       this->support.powerful_source = PowerfulSourceSpecialModes;
-    } else if (special_modes.failed() || (this->protocol_version < ProtocolVersion(2))) {
+    } else if (special_modes.failed() || (this->protocol_version.major < 2)) {
       auto &unit_state = this->get_query(EnvironmentQuery::UnitState);
       if (unit_state.success()) {
         this->support.powerful_source = PowerfulSourceUnitState;
