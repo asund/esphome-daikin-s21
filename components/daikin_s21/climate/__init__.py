@@ -38,6 +38,8 @@ SUPPORTED_CLIMATE_MODES_OPTIONS = {
 
 validate_supported_climate_mode = cv.enum(SUPPORTED_CLIMATE_MODES_OPTIONS, upper=True)
 
+CONF_OFFSET_INTERVAL = "offset_interval"
+
 CONFIG_MODE_SCHEMA = cv.Schema({
     cv.Optional(CONF_OFFSET, default="0"): cv.temperature,
     cv.Optional(CONF_MAX_TEMPERATURE, default="30"): cv.temperature,
@@ -49,6 +51,7 @@ CONFIG_SCHEMA = (
     .extend(cv.polling_component_schema("0s"))
     .extend(S21_PARENT_SCHEMA)
     .extend({
+        cv.Optional(CONF_OFFSET_INTERVAL, default="5min"): cv.positive_time_period_milliseconds,
         cv.Optional(CONF_SENSOR): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_HUMIDITY_SENSOR): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_SUPPORTED_MODES, default=list(SUPPORTED_CLIMATE_MODES_OPTIONS)): cv.ensure_list(validate_supported_climate_mode),
@@ -63,6 +66,8 @@ async def to_code(config):
     var = await climate.new_climate(config)
     await cg.register_component(var, config)
     await cg.register_parented(var, config[CONF_S21_ID])
+
+    cg.add(var.set_offset_interval(config[CONF_OFFSET_INTERVAL]))
 
     if CONF_SENSOR in config:
         sens = await cg.get_variable(config[CONF_SENSOR])

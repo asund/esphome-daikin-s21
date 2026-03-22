@@ -30,6 +30,7 @@ class DaikinS21Climate : public climate::Climate,
   void dump_config() override;
   void control(const climate::ClimateCall &call) override;
 
+  void set_offset_interval(const uint32_t offset_interval) { this->offset_interval = offset_interval; };
   void set_supported_modes(climate::ClimateModeMask modes);
   void set_supported_swing_modes(climate::ClimateSwingModeMask swing_modes);
   void set_temperature_reference_sensor(sensor::Sensor * const sensor) { this->temperature_sensor_ = sensor; }
@@ -53,8 +54,10 @@ class DaikinS21Climate : public climate::Climate,
 
   sensor::Sensor *temperature_sensor_{};
   sensor::Sensor *humidity_sensor_{};
+  uint32_t offset_interval{};
+  uint32_t next_offset_check_ms{};
   DaikinC10 unit_setpoint{TEMPERATURE_INVALID};
-  bool check_setpoint{};
+  bool check_sensors{true};
   bool target_resolved{};
 
   DaikinSetpointMode* get_setpoint_mode_params(climate::ClimateMode mode);

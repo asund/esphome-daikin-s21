@@ -1,9 +1,11 @@
 #include <cmath>
+#include "esphome/core/application.h"
 #include "esphome/core/defines.h"
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 #include "daikin_s21_climate.h"
 #include "../s21.h"
+#include "../utils.h"
 
 using namespace esphome;
 
@@ -100,24 +102,26 @@ void DaikinS21Climate::setup() {
 void DaikinS21Climate::loop() {
   const auto reported_climate = this->get_parent()->get_climate();
   const auto reported_swing = this->get_parent()->get_swing_mode();
+  const float new_temperature = this->get_current_temperature().f_degc();
+  const float new_humidity = this->get_current_humidity();
   bool do_publish = false;
   bool update_unit_setpoint = false;
 
-  // If the reported state differs from the component state, update component and publish an update
-  const float new_temperature = this->get_current_temperature().f_degc();
-  const float new_humidity = this->get_current_humidity();
+  // See if there's a reason to publish an update
+  // Temperature and humidity can be noisy, only publish because of them if the component update interval has passed
+  if (this->check_sensors) {
+    if ((std::isfinite(this->current_temperature) != std::isfinite(new_temperature)) || // differ in finite-ness
+        (std::isfinite(this->current_temperature) && (this->current_temperature != new_temperature)) || // differ in finite value
+        (std::isfinite(this->current_humidity) != std::isfinite(new_humidity)) ||
+        (std::isfinite(this->current_humidity) && (this->current_humidity != new_humidity))) {
+      do_publish = true;
+    }
+    this->check_sensors = this->is_free_run();
+  }
+  // Always publish other changes
   if ((this->mode != reported_climate.mode) ||
       (this->action != this->get_parent()->get_climate_action()) ||
-      (std::isfinite(this->current_temperature) != std::isfinite(new_temperature)) || // differ in finite-ness
-      (std::isfinite(this->current_temperature) && (this->current_temperature != new_temperature)) || // differ in finite value
-      (std::isfinite(this->current_humidity) != std::isfinite(new_humidity)) ||
-      (std::isfinite(this->current_humidity) && (this->current_humidity != new_humidity)) ||
       (this->swing_mode != reported_swing)) {
-    this->mode = reported_climate.mode;
-    this->action = this->get_parent()->get_climate_action();
-    this->current_temperature = new_temperature;
-    this->current_humidity = new_humidity;
-    this->swing_mode = reported_swing;
     do_publish = true;
   }
   if (this->set_daikin_fan_mode(reported_climate.fan)) {
@@ -125,7 +129,7 @@ void DaikinS21Climate::loop() {
   }
 
   // Update target temperature (user's desire) and unit setpoint (after offset)
-  if (auto * const mode_params = this->get_setpoint_mode_params(this->mode)) {
+  if (auto * const mode_params = this->get_setpoint_mode_params(reported_climate.mode)) {
     // Initialize setpoint so chenge detection can work
     if (this->unit_setpoint == TEMPERATURE_INVALID) {
       this->unit_setpoint = reported_climate.setpoint;
@@ -155,8 +159,9 @@ void DaikinS21Climate::loop() {
     }
 
     // Recalculate the unit setpoint if the target temperature changed or it's time to recheck
-    if (update_unit_setpoint || this->is_free_run() || this->check_setpoint) {
-      this->check_setpoint = false;
+    if (update_unit_setpoint || timestamp_passed(App.get_loop_component_start_time(), this->next_offset_check_ms)) {
+      this->next_offset_check_ms = App.get_loop_component_start_time() + this->offset_interval;
+
       // Reuse this flag to mean the setpoint has been updated and should be sent
       update_unit_setpoint = this->calc_unit_setpoint();
     }
@@ -174,6 +179,12 @@ void DaikinS21Climate::loop() {
 
   // Publish when state changed
   if (do_publish) {
+    // Save local state so we know what was last published
+    this->mode = reported_climate.mode;
+    this->action = this->get_parent()->get_climate_action();
+    this->current_temperature = new_temperature;
+    this->current_humidity = new_humidity;
+    this->swing_mode = reported_swing;
     this->publish_state();
   }
   // Command unit when setpoint changed
@@ -191,7 +202,7 @@ void DaikinS21Climate::loop() {
  * when applicable in the current climate mode.
  */
 void DaikinS21Climate::update() {
-  this->check_setpoint = true;
+  this->check_sensors = true;
 }
 
 void DaikinS21Climate::dump_config() {
