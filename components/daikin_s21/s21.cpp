@@ -207,7 +207,7 @@ DaikinS21::DaikinS21(DaikinSerial * const serial)
     // {StateQuery::FV, &DaikinS21::handle_nop}, // unknown
     {StateQuery::UnitPower, &DaikinS21::handle_state_unit_power, 4},
     {StateQuery::NewProtocol, &DaikinS21::handle_nop, 4, true},  // protocol version detect
-    {StateQuery::SoftwareRevision, &DaikinS21::handle_state_software_revision, 32, true},
+    {StateQuery::SoftwareRevision, &DaikinS21::handle_state_software_revision, 8, true},
     {StateQuery::V3Model, &DaikinS21::handle_state_model_v3, 4, true}, // unknown/unconfirmed
     // {EnvironmentQuery::PowerOnOff, &DaikinS21::handle_env_power_on_off, 1}, // redundant
     // {EnvironmentQuery::IndoorUnitMode, &DaikinS21::handle_env_indoor_unit_mode, 1}, // redundant
