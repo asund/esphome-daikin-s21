@@ -46,7 +46,7 @@ class DaikinS21Climate : public climate::Climate,
   bool use_temperature_sensor();
   DaikinC10 temperature_sensor_degc();
   DaikinC10 get_current_temperature();
-  bool calc_unit_setpoint();
+  bool calc_unit_setpoint(const DaikinSetpointMode &mode_params, DaikinC10 current_temperature);
   float get_current_humidity() const;
   DaikinFanMode get_daikin_fan_mode() const;
   bool set_daikin_fan_mode(DaikinFanMode fan);
