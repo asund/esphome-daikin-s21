@@ -24,11 +24,11 @@ class DaikinS21Climate : public climate::Climate,
                          public PollingComponent,
                          public Parented<DaikinS21> {
  public:
-  void setup() override;
-  void loop() override;
-  void update() override;
-  void dump_config() override;
-  void control(const climate::ClimateCall &call) override;
+  void setup() final;
+  void loop() final;
+  void update() final;
+  void dump_config() final;
+  void control(const climate::ClimateCall &call) final;
 
   void set_offset_interval(const uint32_t offset_interval) { this->offset_interval = offset_interval; };
   void set_supported_modes(climate::ClimateModeMask modes);
@@ -39,7 +39,7 @@ class DaikinS21Climate : public climate::Climate,
 
  protected:
   climate::ClimateTraits traits_{};
-  climate::ClimateTraits traits() override { return traits_; };
+  climate::ClimateTraits traits() final { return traits_; };
 
   bool is_free_run() const { return this->get_update_interval() == 0; }
   bool temperature_sensor_unit_is_valid();

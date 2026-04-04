@@ -17,9 +17,9 @@ class DaikinS21BinarySensorMode : public binary_sensor::BinarySensor {
 class DaikinS21BinarySensor : public Component,
                               public Parented<DaikinS21> {
  public:
-  void setup() override;
-  void loop() override;
-  void dump_config() override;
+  void setup() final;
+  void loop() final;
+  void dump_config() final;
 
   void set_mode_sensor(DaikinS21BinarySensorMode * const mode_sensor) {
     this->mode_sensors_[mode_sensor->mode] = mode_sensor;

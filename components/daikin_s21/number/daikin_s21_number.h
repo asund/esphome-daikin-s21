@@ -11,15 +11,15 @@ namespace esphome::daikin_s21 {
 class DaikinS21NumberDemand : public number::Number,
                               public Parented<DaikinS21> {
  protected:
-  void control(float value) override;
+  void control(float value) final;
 };
 
 class DaikinS21Number : public Component,
                         public Parented<DaikinS21> {
  public:
-  void setup() override;
-  void loop() override;
-  void dump_config() override;
+  void setup() final;
+  void loop() final;
+  void dump_config() final;
 
   void set_demand(DaikinS21NumberDemand * const number) {
     this->demand_number_ = number;

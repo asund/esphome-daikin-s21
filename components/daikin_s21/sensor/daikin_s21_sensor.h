@@ -11,10 +11,10 @@ namespace esphome::daikin_s21 {
 class DaikinS21Sensor : public PollingComponent,
                         public Parented<DaikinS21> {
  public:
-  void setup() override;
-  void loop() override;
-  void update() override;
-  void dump_config() override;
+  void setup() final;
+  void loop() final;
+  void update() final;
+  void dump_config() final;
 
   void publish_sensors();
 

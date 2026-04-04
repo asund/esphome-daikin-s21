@@ -28,9 +28,9 @@ class DaikinSerial : public Component,
 
   DaikinSerial(uart::UARTComponent * const uart) : uart(*uart) {}
 
-  void setup() override;
-  void loop() override;
-  void dump_config() override;
+  void setup() final;
+  void loop() final;
+  void dump_config() final;
   void set_debug(const bool set) { this->debug = set; }
 
   void send_frame(std::string_view cmd, std::span<const uint8_t> payload = {});

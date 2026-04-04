@@ -18,10 +18,10 @@ class DaikinS21 : public PollingComponent {
  public:
   DaikinS21(DaikinSerial * const serial);
 
-  void setup() override;
-  void loop() override;
-  void update() override;
-  void dump_config() override;
+  void setup() final;
+  void loop() final;
+  void update() final;
+  void dump_config() final;
   void set_debug(const bool set) { this->debug = set; }
 
   // external command action
