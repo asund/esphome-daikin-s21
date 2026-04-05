@@ -179,7 +179,7 @@ DaikinS21::DaikinS21(DaikinSerial * const serial)
   : serial(*serial) { // serial required in config, non-null
   // populate supported queries
   // this is done in the constructor so debug queries are only ever added to this list
-  // see https://github.com/revk/ESP32-Faikout/wiki/S21-Protocol for documentation
+  // see https://codeberg.org/RevK/ESP32-Faikout/wiki/S21-Protocol for documentation
   this->queries = {
     {StateQuery::Basic, &DaikinS21::handle_state_basic, 4},
     {StateQuery::OptionalFeatures, &DaikinS21::handle_nop, 4, true},

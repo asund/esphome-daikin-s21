@@ -297,7 +297,7 @@ Arduino.
 
 ## Hardware
 
-Please see the Faikout [wiring](https://github.com/revk/ESP32-Faikout/wiki/Wiring)
+Please see the Faikout [wiring](https://codeberg.org/RevK/ESP32-Faikout/wiki/Wiring)
 page for detailed documentation including pinouts, alternate connectors with
 images. The below is just a quick reference overview.
 
@@ -350,7 +350,7 @@ Contacts: JST `SXA-001T-P0.6`
 
 ### PCB Option 1
 
-joshbenner uses the board designed by revk available [here](https://github.com/revk/ESP32-Faikout/tree/main/PCB/Faikout).
+joshbenner uses the board designed by revk available [here](https://codeberg.org/RevK/ESP32-Faikout/src/branch/main/PCB/Faikout).
 Note that revk's design includes a FET that inverts the logic levels on the
 ESP's RX pin, and on newer revisions the TX pin as well. When interfacing
 through a FET the RX line should be configured with a pullup. This handling
