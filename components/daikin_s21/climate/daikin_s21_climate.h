@@ -24,12 +24,13 @@ class DaikinS21Climate : public climate::Climate,
                          public PollingComponent,
                          public Parented<DaikinS21> {
  public:
-  void setup() override;
-  void loop() override;
-  void update() override;
-  void dump_config() override;
-  void control(const climate::ClimateCall &call) override;
+  void setup() final;
+  void loop() final;
+  void update() final;
+  void dump_config() final;
+  void control(const climate::ClimateCall &call) final;
 
+  void set_offset_interval(const uint32_t offset_interval) { this->offset_interval = offset_interval; };
   void set_supported_modes(climate::ClimateModeMask modes);
   void set_supported_swing_modes(climate::ClimateSwingModeMask swing_modes);
   void set_temperature_reference_sensor(sensor::Sensor * const sensor) { this->temperature_sensor_ = sensor; }
@@ -38,14 +39,14 @@ class DaikinS21Climate : public climate::Climate,
 
  protected:
   climate::ClimateTraits traits_{};
-  climate::ClimateTraits traits() override { return traits_; };
+  climate::ClimateTraits traits() final { return traits_; };
 
   bool is_free_run() const { return this->get_update_interval() == 0; }
   bool temperature_sensor_unit_is_valid();
   bool use_temperature_sensor();
   DaikinC10 temperature_sensor_degc();
   DaikinC10 get_current_temperature();
-  bool calc_unit_setpoint();
+  bool calc_unit_setpoint(const DaikinSetpointMode &mode_params, DaikinC10 current_temperature);
   float get_current_humidity() const;
   DaikinFanMode get_daikin_fan_mode() const;
   bool set_daikin_fan_mode(DaikinFanMode fan);
@@ -53,8 +54,10 @@ class DaikinS21Climate : public climate::Climate,
 
   sensor::Sensor *temperature_sensor_{};
   sensor::Sensor *humidity_sensor_{};
+  uint32_t offset_interval{};
+  uint32_t next_offset_check_ms{};
   DaikinC10 unit_setpoint{TEMPERATURE_INVALID};
-  bool check_setpoint{};
+  bool check_sensors{true};
   bool target_resolved{};
 
   DaikinSetpointMode* get_setpoint_mode_params(climate::ClimateMode mode);

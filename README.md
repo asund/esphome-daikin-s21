@@ -8,8 +8,8 @@ config schema. I try not to do this but this project is still evolving. Please
 see the changelog below for details.
 
 A big thanks to:
-* [revk](https://github.com/revk) for work on the fantastic
-  [Faikout](https://github.com/revk/ESP32-Faikout) (née Faikin) project, which
+* [revk](https://codeberg.org/RevK) for work on the fantastic
+  [Faikout](https://codeberg.org/RevK/ESP32-Faikout) (née Faikin) project, which
   was the primary inspiration and guide for building this ESPHome component. In
   addition, the very active and resourceful community that project has fostered
   that has decoded much of the protocol.
@@ -24,13 +24,22 @@ A big thanks to:
 ## Recent / Breaking Changes
 
 A short changelog of sorts, I'll keep things here where a user might encounter
-breaking or significant changes.
+breaking or significant changes, including configuration updates.
 
+* ***Important***: Updated configuration schema of climate component. The
+  previous `update_interval` is moved to `offset_interval`. This is the period
+  where the external reference temperature sensor offset is applied to the
+  internal control loop. `update_interval` now means the period at which sensor
+  updates are published to the frontend. This addresses a user request to limit
+  the publishing rate when the system uses noisy or precise sensors with a high
+  update rate that aren't actually that interesting. Changes to other values
+  (action, fan mode, etc.) will still be published immediately. It can be
+  omitted for free run operation if desired.
 * Added instantaneous unit power sensor.
 * Fixed compressor frequency sensor scaling. Please purge your history for this
   sensor, the values will be incorrect.
 * Added additional energy consumption sensors for protocol 3.20+. Renamed
-  existing "power_consumption" to "energy_indoor" (briefly) to "energy". Sorry.
+  existing `power_consumption` to `energy_indoor` (briefly) to `energy`. Sorry.
   Update your YAML.
 * Checksum calculation was fixed. There's a faint chance that a command or
   query that was previously NAK'd actually now works.
@@ -261,12 +270,13 @@ details if you want a sensor or control added.
 
 ## Limitations
 
-**NOTE:** Currently there's a serious issue when using the Arduino framework.
+**NOTE:** There was a serious issue when using the Arduino framework.
 If flashed OTA you may lose communication and require a physical reflashing
 (annoying if your board in inside your air handler). Please stick to the
 ESP-IDF PlatformIO framework for now (Arduino is an extra shim over the ESP-IDF
 SDK anyways). See the framework selection in the configuration example. As of
-this writing, independent UART pin inversion control also wasn't possible.
+this writing, independent UART pin inversion control also wasn't possible with
+Arduino.
 
 * Aforementioned S21 control limitations. Your unit may support a mode but
   support for controlling over S21 may not be there. See your model's
@@ -287,7 +297,7 @@ this writing, independent UART pin inversion control also wasn't possible.
 
 ## Hardware
 
-Please see the Faikout [wiring](https://github.com/revk/ESP32-Faikout/wiki/Wiring)
+Please see the Faikout [wiring](https://codeberg.org/RevK/ESP32-Faikout/wiki/Wiring)
 page for detailed documentation including pinouts, alternate connectors with
 images. The below is just a quick reference overview.
 
@@ -340,7 +350,7 @@ Contacts: JST `SXA-001T-P0.6`
 
 ### PCB Option 1
 
-joshbenner uses the board designed by revk available [here](https://github.com/revk/ESP32-Faikout/tree/main/PCB/Faikout).
+joshbenner uses the board designed by revk available [here](https://codeberg.org/RevK/ESP32-Faikout/src/branch/main/PCB/Faikout).
 Note that revk's design includes a FET that inverts the logic levels on the
 ESP's RX pin, and on newer revisions the TX pin as well. When interfacing
 through a FET the RX line should be configured with a pullup. This handling
@@ -452,7 +462,7 @@ climate:
     #     target_temperature: 1
     #     current_temperature: 0.5
     # Settings from DaikinS21Climate:
-    # supported_modes:  # optional, restricts available modes. off is always supported.
+    # supported_modes:  # optional, restricts available climate modes. off is always supported.
     #   - heat_cool
     #   - cool
     #   - heat
@@ -462,13 +472,14 @@ climate:
     #   - horizontal
     #   - vertical
     #   - both
+    # update_interval: 1min # Interval used to limit sensor publishing rate
+    # offset_interval: 5min # Interval used to adjust the unit's setpoint using finer grained control
     # Optional sensors to use for temperature and humidity references
     sensor: daikin_temperature  # Internal, see indoor temperature sensor below
     # sensor: room_temp  # External, see homeassistant sensor below
     humidity_sensor: daikin_humidity  # Internal, see humidity sensor below
     # humidity_sensor: room_humidity  # External, see homeassistant sensor below
-    # or leave unconfigured if unsupported to omit reporting
-    # update_interval: 60s # Interval used to adjust the unit's setpoint using reference sensor
+    # or leave unconfigured if unsupported to omit humidity reporting
     # Mode specific temperature parameters:
     # heat_cool_mode:
     #   offset: 0           # offset to apply to unit setpoint in this mode
