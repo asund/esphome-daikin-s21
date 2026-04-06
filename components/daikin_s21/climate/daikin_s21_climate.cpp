@@ -111,12 +111,12 @@ void DaikinS21Climate::loop() {
   // See if there's a reason to publish an update
   // Temperature and humidity can be noisy, only publish because of them if the component update interval has passed
   if (this->check_sensors) {
+    this->check_sensors = this->is_free_run();
     if ((prev_temperature != new_temperature) ||
         (std::isfinite(this->current_humidity) != std::isfinite(new_humidity)) || // differ in finite-ness
         (std::isfinite(this->current_humidity) && (this->current_humidity != new_humidity))) {  // differ in finite value
       do_publish = true;
     }
-    this->check_sensors = this->is_free_run();
   }
   // Always publish other changes
   if ((this->mode != reported_climate.mode) ||

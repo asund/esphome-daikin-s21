@@ -66,7 +66,7 @@ async def to_code(config):
                 CONF_NAME: query,
                 CONF_DISABLED_BY_DEFAULT: False,
                 CONF_ICON: ICON_BUG,
-                CONF_ENTITY_CATEGORY: cg.EntityCategory.ENTITY_CATEGORY_DIAGNOSTIC,
+                CONF_ENTITY_CATEGORY: ENTITY_CATEGORY_DIAGNOSTIC,
             })
             debug_sensors.append(await text_sensor.new_text_sensor(cfg))
         cg.add(var.set_debug_query_sensors(debug_sensors))
