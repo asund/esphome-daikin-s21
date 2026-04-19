@@ -240,42 +240,44 @@ DaikinS21::DaikinS21(DaikinSerial * const serial)
 }
 
 void DaikinS21::setup() {
-  this->reset_queries();
-  this->ready.reset();
-  this->start_poller(); // for reinit
+  // mitigation, remove when 2026.4.1 released
+  if (this->get_update_interval() <= 1) {
+    this->set_update_interval(SCHEDULER_DONT_RUN);
+    this->stop_poller();
+  }
+
+  this->reset_queries();  // importantly schedules initial queries
+  this->defer([this](){ this->trigger_cycle(); });
   this->disable_loop();
 }
 
 /**
  * Component update loop.
  *
- * Used for deferred work. Printing too much in the timer callback context causes warnings about blocking for too long.
+ * Used for deferred work. Use Component::defer if more work items are added.
+ *
+ * Dumps the component state to logs. Printing too much in the timer callback context causes warnings about blocking for too long.
  */
 void DaikinS21::loop() {
-  this->dump_state(); // use Component::defer if more work items are added
+  this->dump_state();
   this->disable_loop();
 }
 
 /**
  * PollingComponent update loop.
  *
- * Disable the polling loop (this function) if configured to free run.
+ * Disable the component polling loop (this function) if configured to free run.
  * It executes once on startup
  *
- * Trigger a cycle.
+ * Trigger a S21 communication cycle.
  */
 void DaikinS21::update() {
-  if (this->is_free_run()) {
-    this->stop_poller();
-  }
   this->trigger_cycle();
 }
 
 void DaikinS21::dump_config() {
-  ESP_LOGCONFIG(TAG, "Daikin S21:\n"
-                     "  Polling interval: %" PRIu32 "ms\n"
-                     "  Debug: %s",
-      this->get_update_interval(), ONOFF(this->debug));
+  ESP_LOGCONFIG(TAG, "  Debug: %s", ONOFF(this->debug));
+  LOG_UPDATE_INTERVAL(this);
 }
 
 /**
@@ -1276,7 +1278,11 @@ void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const st
   if ((result != DaikinSerial::Result::Error) && is_query) {
     // if communication established and all queries are disabled we had comms then they were lost
     if (this->ready[ReadyProtocolDetection] && (std::ranges::count_if(this->queries, DaikinQuery::IsEnabled) == 0)) {
-      this->setup();  // reinitialize in order to prepare for the HVAC unit being reconnected
+      // reinitialize in order to prepare for the HVAC unit being reconnected
+      this->ready.reset();
+      this->reset_queries();
+      this->cycle_active = false;
+      this->defer([this](){ this->trigger_cycle(); });
     } else {
       // advance to next query
       this->active_query = std::ranges::find_if(this->active_query + 1, this->queries.end(), DaikinQuery::IsEnabled);

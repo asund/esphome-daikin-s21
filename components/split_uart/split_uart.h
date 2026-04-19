@@ -34,11 +34,11 @@ class SplitUART : public uart::UARTComponent, public Component {
     return this->rx->read_array(data, len);
   }
 
-  int available() override {
+  size_t available() override {
     return this->rx->available();
   }
 
-  void flush() override {
+  uart::UARTFlushResult flush() override {
     return this->tx->flush();
   }
 

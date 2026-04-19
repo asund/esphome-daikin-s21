@@ -106,7 +106,7 @@ class DaikinS21 : public PollingComponent {
   bool get_mode(DaikinMode mode) const;
   DaikinLEDBrightnessMode get_brightness_mode() const;
   std::span<const uint8_t> get_query_result(std::string_view query_str);
-  auto get_cycle_interval_ms() const { return std::max(this->get_update_interval(), this->cycle_time_ms); }
+  auto get_cycle_interval_ms() const { return std::max(this->cycle_time_ms, this->is_free_run() ? 0 : this->get_update_interval()); }
 
   // callbacks for serial events
   void handle_serial_result(DaikinSerial::Result result, std::span<const uint8_t> response = {});
@@ -117,7 +117,7 @@ class DaikinS21 : public PollingComponent {
 
   // communication state
   void dump_state();
-  bool is_free_run() const { return this->get_update_interval() == 0; }
+  bool is_free_run() const { return this->get_update_interval() == SCHEDULER_DONT_RUN; }
   void trigger_cycle();
   void start_cycle();
   enum ReadyCommand : uint8_t {

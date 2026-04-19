@@ -6,6 +6,12 @@ namespace esphome::daikin_s21 {
 static const char * const TAG = "daikin_s21.sensor";
 
 void DaikinS21Sensor::setup() {
+  // mitigation, remove when 2026.4.1 released
+  if (this->get_update_interval() <= 1) {
+    this->set_update_interval(SCHEDULER_DONT_RUN);
+    this->stop_poller();
+  }
+
   if (this->is_free_run()) {
     this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); });  // enable update events from DaikinS21
   }
@@ -15,7 +21,7 @@ void DaikinS21Sensor::setup() {
 /**
  * ESPHome Component loop
  *
- * Deferred work when an update occurs.
+ * Deferred work when an update occurs. Use Component::defer if more work items are added.
  *
  * Publish the sensors and wait for further updates.
  */
@@ -36,6 +42,7 @@ void DaikinS21Sensor::update() {
 }
 
 void DaikinS21Sensor::dump_config() {
+  LOG_UPDATE_INTERVAL(this);
   LOG_SENSOR("", "Energy", this->energy_sensor_);
   LOG_SENSOR("", "Energy Cooling", this->energy_cooling_sensor_);
   LOG_SENSOR("", "Energy Heating", this->energy_heating_sensor_);

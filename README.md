@@ -26,6 +26,17 @@ A big thanks to:
 A short changelog of sorts, I'll keep things here where a user might encounter
 breaking or significant changes, including configuration updates.
 
+* Bumped minimum ESPHome version to 2026.4.0 in order to address a few issues.
+  If you have an `update_interval` of 0s specified in any polling components
+  (s21, climate, sensor) please change this to `never` to indicate the intent
+  to not poll. My code will treat this a request to free run and publish
+  updates when available. Improvements to ESPHome's scheduler mean 0s polls are
+  now honoured immediately and watchdog timeouts will occur. As of today
+  there's no warning or mitigation during codegen. My code will avoid these
+  lockups for now but in 2026.4.1 you'll see very tight polling loops until you
+  update your config, so update them now. At some point down the line I will
+  remove my local mitigation and ESPHome compile time warnings will serve.
+  See [15516](https://github.com/esphome/esphome/pull/15516) and [15799](https://github.com/esphome/esphome/pull/15799).
 * ***Important***: Updated configuration schema of climate component. The
   previous `update_interval` is moved to `offset_interval`. This is the period
   where the external reference temperature sensor offset is applied to the
@@ -418,7 +429,7 @@ The default is 1.0°C to match Daikin's internal granularity.
 
 ```yaml
 esphome:
-  min_version: "2026.1"
+  min_version: "2026.4.0"
   devices:
     - id: daikin_outdoor
       name: "Daikin Compressor"
@@ -450,7 +461,7 @@ uart:
 daikin_s21:
   uart: s21_uart
   # debug_protocol: true  # please enable when reporting logs!
-  # update_interval: 5s  # also supports periodic polling instead of more responsive free run
+  # update_interval: never  # Communication cycle rate, 'never' for free run
 
 climate:
   - name: My Daikin
@@ -472,8 +483,8 @@ climate:
     #   - horizontal
     #   - vertical
     #   - both
-    # update_interval: 1min # Interval used to limit sensor publishing rate
-    # offset_interval: 5min # Interval used to adjust the unit's setpoint using finer grained control
+    # update_interval: never # Interval used to limit sensor publishing rate, 'never' for free run
+    # offset_interval: 5min # Interval used to adjust the unit's setpoint using finer grained control, 'never' for free run
     # Optional sensors to use for temperature and humidity references
     sensor: daikin_temperature  # Internal, see indoor temperature sensor below
     # sensor: room_temp  # External, see homeassistant sensor below
@@ -505,7 +516,7 @@ select:
 
 sensor:
   - platform: daikin_s21
-    update_interval: 0s
+    # update_interval: never  # Publishing interval, 'never' for immediate updates but may be noisy if you don't use filters
     # setpoint_temperature: # Unit setpoint. provided for insight on climate adjustment but probably not useful for users.
     #   name: Setpoint Temperature
     #   filters:

@@ -12,6 +12,7 @@ from esphome.const import (
     CONF_HUMIDITY_SENSOR,
     CONF_MAX_TEMPERATURE,
     CONF_MIN_TEMPERATURE,
+    CONF_NEVER,
     CONF_OFFSET,
     CONF_SENSOR,
     CONF_SUPPORTED_MODES,
@@ -48,17 +49,17 @@ CONFIG_MODE_SCHEMA = cv.Schema({
 
 CONFIG_SCHEMA = (
     climate.climate_schema(DaikinS21Climate)
-    .extend(cv.polling_component_schema("0s"))
+    .extend(cv.polling_component_schema(CONF_NEVER))
     .extend(S21_PARENT_SCHEMA)
     .extend({
-        cv.Optional(CONF_OFFSET_INTERVAL, default="5min"): cv.positive_time_period_milliseconds,
+        cv.Optional(CONF_OFFSET_INTERVAL, default="5min"): cv.update_interval,
         cv.Optional(CONF_SENSOR): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_HUMIDITY_SENSOR): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_SUPPORTED_MODES, default=list(SUPPORTED_CLIMATE_MODES_OPTIONS)): cv.ensure_list(validate_supported_climate_mode),
         cv.Optional(CONF_SUPPORTED_SWING_MODES, default=list(climate.CLIMATE_SWING_MODES)): cv.ensure_list(climate.validate_climate_swing_mode),
         cv.Optional(CONF_HEAT_COOL_MODE, default={}): CONFIG_MODE_SCHEMA,
-        cv.Optional(CONF_COOL_MODE, default={CONF_MAX_TEMPERATURE:"32", CONF_MIN_TEMPERATURE:"18"}): CONFIG_MODE_SCHEMA,
-        cv.Optional(CONF_HEAT_MODE, default={CONF_MAX_TEMPERATURE:"30", CONF_MIN_TEMPERATURE:"10"}): CONFIG_MODE_SCHEMA,
+        cv.Optional(CONF_COOL_MODE, default={CONF_MAX_TEMPERATURE:"32"}): CONFIG_MODE_SCHEMA,
+        cv.Optional(CONF_HEAT_MODE, default={CONF_MIN_TEMPERATURE:"10"}): CONFIG_MODE_SCHEMA,
     })
 )
 

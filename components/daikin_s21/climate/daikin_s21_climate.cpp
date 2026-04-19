@@ -37,46 +37,25 @@ DaikinC10 DaikinSetpointMode::load_target() {
 }
 
 void DaikinS21Climate::setup() {
+  // mitigation, remove when 2026.4.1 released
+  if (this->get_update_interval() <= 1) {
+    this->set_update_interval(SCHEDULER_DONT_RUN);
+    this->stop_poller();
+  }
+
   uint32_t h = this->get_object_id_hash();
   this->heat_cool_params.target_pref = global_preferences->make_preference<int16_t>(h + 1);
   this->cool_params.target_pref = global_preferences->make_preference<int16_t>(h + 2);
   this->heat_params.target_pref = global_preferences->make_preference<int16_t>(h + 3);
   // populate default traits
   this->traits_.add_feature_flags(climate::CLIMATE_SUPPORTS_CURRENT_TEMPERATURE | climate::CLIMATE_SUPPORTS_ACTION);
-#ifdef USE_CLIMATE_VISUAL_OVERRIDES
-  if (std::isfinite(this->visual_min_temperature_override_)) {
-    this->traits_.set_visual_min_temperature(this->visual_min_temperature_override_);
-  } else
-#endif
-  {
-    this->traits_.set_visual_min_temperature(std::min({this->heat_cool_params.min, this->cool_params.min, this->heat_params.min}).f_degc());
-  }
-#ifdef USE_CLIMATE_VISUAL_OVERRIDES
-  if (std::isfinite(this->visual_max_temperature_override_)) {
-    this->traits_.set_visual_max_temperature(this->visual_max_temperature_override_);
-  } else
-#endif
-  {
-    this->traits_.set_visual_max_temperature(std::max({this->heat_cool_params.max, this->cool_params.max, this->heat_params.max}).f_degc());
-  }
-#ifdef USE_CLIMATE_VISUAL_OVERRIDES
-  if (std::isfinite(this->visual_target_temperature_step_override_)) {
-    this->traits_.set_visual_target_temperature_step(this->visual_target_temperature_step_override_);
-  } else
-#endif
-  {
-    this->traits_.set_visual_target_temperature_step(SETPOINT_STEP.f_degc());
-  }
-#ifdef USE_CLIMATE_VISUAL_OVERRIDES
-  if (std::isfinite(this->visual_current_temperature_step_override_)) {
-    this->traits_.set_visual_current_temperature_step(this->visual_current_temperature_step_override_);
-  } else
-#endif
-  {
-    this->traits_.set_visual_current_temperature_step(TEMPERATURE_STEP.f_degc());
-  }
+  this->traits_.set_visual_min_temperature(std::min({this->heat_cool_params.min, this->cool_params.min, this->heat_params.min}).f_degc());  // will be overridden in get_traits()
+  this->traits_.set_visual_max_temperature(std::max({this->heat_cool_params.max, this->cool_params.max, this->heat_params.max}).f_degc());
+  this->traits_.set_visual_target_temperature_step(SETPOINT_STEP.f_degc());
+  this->traits_.set_visual_current_temperature_step(TEMPERATURE_STEP.f_degc());
   this->traits_.set_supported_fan_modes({climate::CLIMATE_FAN_AUTO, climate::CLIMATE_FAN_QUIET});
-  this->traits_.set_supported_custom_fan_modes({
+  // populate local state used in get_traits()
+  this->set_supported_custom_fan_modes({
       daikin_fan_mode_to_cstr(DaikinFan1),
       daikin_fan_mode_to_cstr(DaikinFan2),
       daikin_fan_mode_to_cstr(DaikinFan3),
@@ -95,8 +74,9 @@ void DaikinS21Climate::setup() {
 /**
  * ESPHome Component loop
  *
- * Deferred work when an update occurs.
- * Recalculates the internal setpoint.
+ * Deferred work when an update occurs. Use Component::defer if more work items are added.
+ *
+ * Recalculates the internal setpoint and sends any changes to the unit.
  * Publishes any state changes to Home Assistant.
  */
 void DaikinS21Climate::loop() {
@@ -135,7 +115,7 @@ void DaikinS21Climate::loop() {
       this->unit_setpoint = reported_climate.setpoint;
     }
 
-    // Determine a new target temperature?
+    // Determine if there's any change to the target temperature
     if ((std::isfinite(this->target_temperature) == false) || // controller init or external mode change to a setpoint mode
         (this->unit_setpoint != reported_climate.setpoint)) { // external change to setpoint
       // Assume the reported setpoint (external IR remote change) should be the target temperature
@@ -153,16 +133,19 @@ void DaikinS21Climate::loop() {
       ESP_LOGI(TAG, "Target temperature changed: %.1f -> %.1f",
           this->target_temperature, new_target.f_degc());
       this->target_temperature = new_target.f_degc();
-      this->unit_setpoint = reported_climate.setpoint;  // will be recalculated shortly, but ensure that log statement is sensical
+      this->unit_setpoint = reported_climate.setpoint;  // will be recalculated shortly, but ensure the log statement there is sensical
       do_publish = true;
       update_unit_setpoint = true;
     }
 
-    // Recalculate the unit setpoint if the target temperature changed or it's time to recheck
-    if (update_unit_setpoint || timestamp_passed(App.get_loop_component_start_time(), this->next_offset_check_ms)) {
+    // Periodic sensor-unit offset calculation
+    if ((this->offset_interval == SCHEDULER_DONT_RUN) || timestamp_passed(App.get_loop_component_start_time(), this->next_offset_check_ms)) {
       this->next_offset_check_ms = App.get_loop_component_start_time() + this->offset_interval;
+      update_unit_setpoint = true;
+    }
 
-      // Reuse this flag to mean the setpoint has been updated and should be sent
+    // Setpoint has been flagged for recalculation, see if it results in a change for the unit
+    if (update_unit_setpoint) {
       update_unit_setpoint = this->calc_unit_setpoint(*mode_params, new_temperature);
     }
   } else {
@@ -217,7 +200,12 @@ void DaikinS21Climate::dump_config() {
     ESP_LOGCONFIG(TAG, "  HUMIDITY SENSOR: INVALID UNIT '%s' (must be %%)",
         this->humidity_sensor_->get_unit_of_measurement_ref().c_str());
   }
-  ESP_LOGCONFIG(TAG, "  Setpoint interval: %" PRIu32 "s", this->get_update_interval() / 1000);
+  LOG_UPDATE_INTERVAL(this);
+  if (this->offset_interval == SCHEDULER_DONT_RUN) {
+    ESP_LOGCONFIG(TAG, "  Offset Interval: never");
+  } else {
+    ESP_LOGCONFIG(TAG, "  Offset Interval: %.3fs", this->offset_interval / 1000.0f);
+  }
   for (const climate::ClimateMode mode : {climate::CLIMATE_MODE_HEAT_COOL, climate::CLIMATE_MODE_COOL, climate::CLIMATE_MODE_HEAT}) {
     if (const auto * const params = get_setpoint_mode_params(mode)) {
       ESP_LOGCONFIG(TAG, "  %s parameters\n"
