@@ -41,7 +41,7 @@ class DaikinS21Climate : public climate::Climate,
   climate::ClimateTraits traits_{};
   climate::ClimateTraits traits() final { return traits_; };
 
-  bool is_free_run() const { return this->get_update_interval() == 0; }
+  bool is_free_run() const { return this->get_update_interval() == SCHEDULER_DONT_RUN; }
   bool temperature_sensor_unit_is_valid();
   bool use_temperature_sensor();
   DaikinC10 temperature_sensor_degc();

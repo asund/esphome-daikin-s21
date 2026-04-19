@@ -82,7 +82,7 @@ class DaikinS21Sensor : public PollingComponent,
   }
 
  protected:
-  bool is_free_run() const { return this->get_update_interval() == 0; }
+  bool is_free_run() const { return this->get_update_interval() == SCHEDULER_DONT_RUN; }
 
   sensor::Sensor *energy_sensor_{};
   sensor::Sensor *energy_cooling_sensor_{};

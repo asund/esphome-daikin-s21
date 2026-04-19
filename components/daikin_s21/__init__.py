@@ -8,6 +8,7 @@ from esphome.const import (
   CONF_ID,
   CONF_LED,
   CONF_MOTION,
+  CONF_NEVER,
   ICON_ACCOUNT_CHECK,
 )
 
@@ -52,7 +53,7 @@ UARTComponent = uart_ns.class_("UARTComponent")
 CONFIG_SCHEMA = (
     cv.COMPONENT_SCHEMA
     .extend({cv.GenerateID(): cv.declare_id(DaikinS21)})
-    .extend(cv.polling_component_schema("0s"))
+    .extend(cv.polling_component_schema(CONF_NEVER))
     .extend({
       cv.GenerateID(CONF_DAIKIN_SERIAL_ID): cv.declare_id(DaikinSerial),
       cv.Required(CONF_UART): cv.use_id(UARTComponent),

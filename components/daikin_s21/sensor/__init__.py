@@ -9,6 +9,7 @@ from esphome.const import (
     CONF_ENERGY,
     CONF_HUMIDITY,
     CONF_ID,
+    CONF_NEVER,
     CONF_POWER,
     CONF_TARGET_TEMPERATURE,
     DEVICE_CLASS_ENERGY,
@@ -69,7 +70,7 @@ ENERGY_SENSOR_SCHEMA = sensor.sensor_schema(
 CONFIG_SCHEMA = (
     cv.COMPONENT_SCHEMA
     .extend({cv.GenerateID(): cv.declare_id(DaikinS21Sensor)})
-    .extend(cv.polling_component_schema("10s"))
+    .extend(cv.polling_component_schema(CONF_NEVER))
     .extend(S21_PARENT_SCHEMA)
     .extend({
         cv.Optional(CONF_COIL_TEMP): TEMPERATURE_SENSOR_SCHEMA,
