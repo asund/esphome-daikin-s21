@@ -1,5 +1,4 @@
 #include "daikin_s21_queries.h"
-#include "daikin_s21_serial.h"
 #include "s21.h"
 #include "utils.h"
 

@@ -1,5 +1,4 @@
 #include <cmath>
-#include "esphome/core/application.h"
 #include "esphome/core/defines.h"
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
@@ -12,6 +11,8 @@ using namespace esphome;
 namespace esphome::daikin_s21 {
 
 static const char * const TAG = "daikin_s21.climate";
+
+constexpr uint32_t TIMER_ID_OFFSET = 0U;
 
 /**
  * Save target for the mode to persistent storage.
@@ -66,8 +67,9 @@ void DaikinS21Climate::setup() {
   this->set_fan_mode_(climate::CLIMATE_FAN_AUTO);
   // initialize setpoint, will be loaded from preferences or unit shortly
   this->target_temperature = NAN;
-  // enable event driven updates
-  this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); }); // enable update events from DaikinS21
+
+  // register for update events from DaikinS21
+  this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); });
   this->disable_loop(); // wait for updates
 }
 
@@ -80,6 +82,8 @@ void DaikinS21Climate::setup() {
  * Publishes any state changes to Home Assistant.
  */
 void DaikinS21Climate::loop() {
+  this->disable_loop(); // use loop as a oneshot timer
+
   const float new_humidity = this->get_current_humidity();
   const DaikinC10 prev_temperature = this->current_temperature;
   const DaikinC10 new_temperature = this->get_current_temperature();
@@ -139,8 +143,8 @@ void DaikinS21Climate::loop() {
     }
 
     // Periodic sensor-unit offset calculation
-    if ((this->offset_interval == SCHEDULER_DONT_RUN) || timestamp_passed(App.get_loop_component_start_time(), this->next_offset_check_ms)) {
-      this->next_offset_check_ms = App.get_loop_component_start_time() + this->offset_interval;
+    if (this->freerun_offset || this->check_offset) {
+      this->check_offset = false;
       update_unit_setpoint = true;
     }
 
@@ -174,18 +178,6 @@ void DaikinS21Climate::loop() {
   if (update_unit_setpoint) {
     this->set_s21_climate();
   }
-
-  this->disable_loop(); // wait for updates
-}
-
-/**
- * ESPHome PollingComponent loop
- *
- * Flag to check the setpoint on the next update from the unit
- * when applicable in the current climate mode.
- */
-void DaikinS21Climate::update() {
-  this->check_sensors = true;
 }
 
 void DaikinS21Climate::dump_config() {
@@ -201,11 +193,6 @@ void DaikinS21Climate::dump_config() {
         this->humidity_sensor_->get_unit_of_measurement_ref().c_str());
   }
   LOG_UPDATE_INTERVAL(this);
-  if (this->offset_interval == SCHEDULER_DONT_RUN) {
-    ESP_LOGCONFIG(TAG, "  Offset Interval: never");
-  } else {
-    ESP_LOGCONFIG(TAG, "  Offset Interval: %.3fs", this->offset_interval / 1000.0f);
-  }
   for (const climate::ClimateMode mode : {climate::CLIMATE_MODE_HEAT_COOL, climate::CLIMATE_MODE_COOL, climate::CLIMATE_MODE_HEAT}) {
     if (const auto * const params = get_setpoint_mode_params(mode)) {
       ESP_LOGCONFIG(TAG, "  %s parameters\n"
@@ -215,6 +202,77 @@ void DaikinS21Climate::dump_config() {
     }
   }
   this->dump_traits_(TAG);
+}
+
+/**
+ * ESPHome climate control call handler.
+ *
+ * Populates internal state with contained arguments then applies to the unit.
+ */
+void DaikinS21Climate::control(const climate::ClimateCall &call) {
+  // DaikinClimateSettings changes
+  bool climate_changed{};
+
+  if (call.get_mode().has_value() && (this->mode != call.get_mode().value())) {
+    this->mode = call.get_mode().value();
+    climate_changed = true;
+  }
+  auto * const mode_params = this->get_setpoint_mode_params(this->mode);
+
+  // Target change is only relevant to the unit if it causes a setpoint change, track separately
+  bool target_changed{};
+  const DaikinC10 new_target = call.get_target_temperature().has_value() ? call.get_target_temperature().value() :  // Target provided
+                               (mode_params != nullptr) ? mode_params->load_target() :  // Try to use the saved target if call does not include it
+                               TEMPERATURE_INVALID;
+  if (this->target_temperature != new_target) {
+    this->target_temperature = new_target.f_degc();
+    target_changed = true;
+  }
+
+  // Check for unit setpoint change if mode or target changing
+  if (climate_changed || target_changed) {
+    if ((mode_params != nullptr) && std::isfinite(this->target_temperature)) {
+      if (this->calc_unit_setpoint(*mode_params, this->get_current_temperature())) {
+        climate_changed = true;
+      }
+    } else {
+      if (this->unit_setpoint != TEMPERATURE_INVALID) {
+        this->unit_setpoint = TEMPERATURE_INVALID;
+        climate_changed = true;
+      }
+    }
+  }
+
+  if (call.get_fan_mode().has_value()) {
+    if (this->set_fan_mode_(call.get_fan_mode().value())) {
+      climate_changed = true;
+    }
+  } else if (call.has_custom_fan_mode()) {
+    if (this->set_custom_fan_mode_(call.get_custom_fan_mode())) {
+      climate_changed = true;
+    }
+  }
+
+  if (climate_changed) {
+    this->set_s21_climate();  // mode, unit setpoint and fan required
+  }
+
+  // climate::ClimateSwingMode changes
+  if (call.get_swing_mode().has_value() && (this->swing_mode != call.get_swing_mode().value())) {
+    this->swing_mode = call.get_swing_mode().value();
+    this->get_parent()->set_swing_mode(this->swing_mode);
+  }
+
+  // push back to UI
+  this->publish_state();
+}
+
+void DaikinS21Climate::set_offset_interval(const uint32_t offset_interval) {
+  // start offset recalculation timer if necessary
+  this->freerun_offset = (offset_interval == SCHEDULER_DONT_RUN) || (offset_interval <= 1);
+  if (this->freerun_offset == false) {
+    this->set_interval(TIMER_ID_OFFSET, offset_interval, [this](){ this->check_offset = true; });
+  }
 }
 
 /**
@@ -334,69 +392,6 @@ bool DaikinS21Climate::calc_unit_setpoint(const DaikinSetpointMode& mode_params,
   }
 
   return unit_setpoint_changed;
-}
-
-/**
- * ESPHome climate control call handler.
- *
- * Populates internal state with contained arguments then applies to the unit.
- */
-void DaikinS21Climate::control(const climate::ClimateCall &call) {
-  // DaikinClimateSettings changes
-  bool climate_changed{};
-
-  if (call.get_mode().has_value() && (this->mode != call.get_mode().value())) {
-    this->mode = call.get_mode().value();
-    climate_changed = true;
-  }
-  auto * const mode_params = this->get_setpoint_mode_params(this->mode);
-
-  // Target change is only relevant to the unit if it causes a setpoint change, track separately
-  bool target_changed{};
-  const DaikinC10 new_target = call.get_target_temperature().has_value() ? call.get_target_temperature().value() :  // Target provided
-                               (mode_params != nullptr) ? mode_params->load_target() :  // Try to use the saved target if call does not include it
-                               TEMPERATURE_INVALID;
-  if (this->target_temperature != new_target) {
-    this->target_temperature = new_target.f_degc();
-    target_changed = true;
-  }
-
-  // Check for unit setpoint change if mode or target changing
-  if (climate_changed || target_changed) {
-    if ((mode_params != nullptr) && std::isfinite(this->target_temperature)) {
-      if (this->calc_unit_setpoint(*mode_params, this->get_current_temperature())) {
-        climate_changed = true;
-      }
-    } else {
-      if (this->unit_setpoint != TEMPERATURE_INVALID) {
-        this->unit_setpoint = TEMPERATURE_INVALID;
-        climate_changed = true;
-      }
-    }
-  }
-
-  if (call.get_fan_mode().has_value()) {
-    if (this->set_fan_mode_(call.get_fan_mode().value())) {
-      climate_changed = true;
-    }
-  } else if (call.has_custom_fan_mode()) {
-    if (this->set_custom_fan_mode_(call.get_custom_fan_mode())) {
-      climate_changed = true;
-    }
-  }
-
-  if (climate_changed) {
-    this->set_s21_climate();  // mode, unit setpoint and fan required
-  }
-
-  // climate::ClimateSwingMode changes
-  if (call.get_swing_mode().has_value() && (this->swing_mode != call.get_swing_mode().value())) {
-    this->swing_mode = call.get_swing_mode().value();
-    this->get_parent()->set_swing_mode(this->swing_mode);
-  }
-
-  // push back to UI
-  this->publish_state();
 }
 
 /**

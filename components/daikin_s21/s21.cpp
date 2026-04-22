@@ -12,6 +12,13 @@ namespace esphome::daikin_s21 {
 
 static const char * const TAG = "daikin_s21";
 
+constexpr uint32_t TIMER_ID_SERIAL_EVENT = 0;
+
+constexpr uint32_t ack_delay_period_ms{45};      // official remote delay time before ACKing a response
+constexpr uint32_t next_tx_delay_period_ms{35};  // official remote delay time between commands
+constexpr uint32_t error_delay_period_ms{3000};  // cooldown time when something goes wrong
+constexpr uint32_t rx_timout_period_ms{250};     // waiting for a response from the unit
+
 constexpr uint8_t climate_mode_to_s21(const climate::ClimateMode mode) {
   switch (mode) {
       break;
@@ -175,8 +182,17 @@ auto bytes_to_num(std::span<const uint8_t> bytes, const int base = 10) {
   return std::strtoul(buffer.data(), nullptr, base);
 }
 
-DaikinS21::DaikinS21(DaikinSerial * const serial)
-  : serial(*serial) { // serial required in config, non-null
+constexpr uint8_t STX{2};
+constexpr uint8_t ETX{3};
+constexpr uint8_t ACK{6};
+constexpr uint8_t NAK{21};
+
+constexpr bool is_control_character(const uint8_t ch) {
+  return (ch == STX) || (ch == ETX) || (ch == ACK) || (ch == NAK);
+}
+
+DaikinS21::DaikinS21(uart::UARTComponent * const uart)
+  : uart(*uart) { // uart required in config, non-null
   // populate supported queries
   // this is done in the constructor so debug queries are only ever added to this list
   // see https://codeberg.org/RevK/ESP32-Faikout/wiki/S21-Protocol for documentation
@@ -246,37 +262,127 @@ void DaikinS21::setup() {
     this->stop_poller();
   }
 
+  // start 1min periodic state dump timer
+  this->set_interval(60*1000, [this](){ this->dump_state(); });
+
+  // kick off initial query scan
   this->reset_queries();  // importantly schedules initial queries
   this->defer([this](){ this->trigger_cycle(); });
-  this->disable_loop();
+  this->disable_loop(); // wait for updates
 }
 
 /**
- * Component update loop.
+ * ESPHome Component loop
  *
- * Used for deferred work. Use Component::defer if more work items are added.
+ * Deferred work when an update occurs. Use Component::defer if more work items are added.
  *
- * Dumps the component state to logs. Printing too much in the timer callback context causes warnings about blocking for too long.
+ * Runs the serial state machine when waiting for bytes to be received and handles the results.
  */
 void DaikinS21::loop() {
-  this->dump_state();
-  this->disable_loop();
-}
+  // We're trying the receive data from the unit
+  uint8_t rx_bytes = 0;
+  while (this->uart.available()) {
+    uint8_t byte;
+    this->uart.read_byte(&byte);
+    rx_bytes++;
 
-/**
- * PollingComponent update loop.
- *
- * Disable the component polling loop (this function) if configured to free run.
- * It executes once on startup
- *
- * Trigger a S21 communication cycle.
- */
-void DaikinS21::update() {
-  this->trigger_cycle();
+    // handle the byte
+    switch (this->comm_state) {
+      case CommState::QueryAck:
+      case CommState::CommandAck:
+        switch (byte) {
+          case ACK:
+            if (this->comm_state == CommState::QueryAck) {
+              this->comm_state = CommState::QueryStx; // query results text to follow
+            } else {
+              this->comm_state = CommState::DelayIdle;
+              this->handle_serial_result(SerialResult::Ack);
+              return;
+            }
+            break;
+
+          case NAK:
+            this->comm_state = CommState::DelayIdle;
+            this->handle_serial_result(SerialResult::Nak);
+            return;
+
+          default:
+            ESP_LOGW(TAG, "Rx ACK: Unexpected 0x%02" PRIX8, byte);
+            this->comm_state = CommState::DelayIdle;
+            this->handle_serial_result(SerialResult::Error);
+            return;
+        }
+        break;
+
+      case CommState::QueryStx:
+        switch (byte) {
+          case STX:
+            this->comm_state = CommState::QueryEtx; // query results payload to follow
+            break;
+
+          case ACK:
+            ESP_LOGV(TAG, "Rx STX: Repeated ACK, ignoring"); // on rare occasions my unit will do this, not harmful
+            break;
+
+          default:
+            ESP_LOGW(TAG, "Rx STX: Unexpected 0x%02" PRIX8, byte);
+            this->comm_state = CommState::DelayIdle;
+            this->handle_serial_result(SerialResult::Error);
+            return;
+        }
+        break;
+
+      case CommState::QueryEtx:
+        switch (byte) {
+          case ETX: // frame received, validate checksum
+            {
+              const uint8_t checksum = this->response.back();
+              this->response.pop_back();
+              uint8_t calc_checksum = std::reduce(this->response.begin(), this->response.end(), 0U);
+              // protocol avoids special control characters in the message body by applying an offset
+              if (is_control_character(calc_checksum)) {
+                calc_checksum += 2;
+              }
+              if (calc_checksum == checksum) {
+                this->comm_state = CommState::DelayAck;
+                this->handle_serial_result(SerialResult::Ack);
+                return;
+              } else {
+                ESP_LOGW(TAG, "Rx ETX: Checksum mismatch: 0x%02" PRIX8 " != 0x%02" PRIX8 " (calc from %s)",
+                    checksum, calc_checksum, hex_repr(this->response).c_str());
+                this->comm_state = CommState::DelayIdle;
+                this->handle_serial_result(SerialResult::Error);
+                return;
+              }
+            }
+            break;
+
+          default:  // not the end, add to buffer
+            this->response.push_back(byte);
+            if (this->response.size() > MAX_RESPONSE_SIZE) {
+              ESP_LOGW(TAG, "Rx ETX: Overflow %s %s + 0x%02" PRIX8,
+                  str_repr(this->response).c_str(), hex_repr(this->response).c_str(), byte);
+              this->comm_state = CommState::DelayIdle;
+              this->handle_serial_result(SerialResult::Error);
+              return;
+            }
+            break;
+        }
+        break;
+
+      default:  // delay states, shouldn't get here
+        return;
+    }
+  }
+  // Reset rx timeout if bytes received
+  if (rx_bytes != 0) {
+    this->set_timeout(TIMER_ID_SERIAL_EVENT, rx_timout_period_ms, [this](){ this->serial_timeout_handler(); });
+  }
 }
 
 void DaikinS21::dump_config() {
-  ESP_LOGCONFIG(TAG, "  Debug: %s", ONOFF(this->debug));
+  ESP_LOGCONFIG(TAG, "  Comms Debug: %s", ONOFF(this->debug_comms));
+  ESP_LOGCONFIG(TAG, "  Protocol Debug: %s", ONOFF(this->debug_protocol));
   LOG_UPDATE_INTERVAL(this);
 }
 
@@ -427,6 +533,398 @@ std::span<const uint8_t> DaikinS21::get_query_result(std::string_view query_str)
   return this->get_query(query_str).value();
 }
 
+void DaikinS21::dump_state() {
+  ESP_LOGD(TAG, "Ready: %lX  Protocol: %" PRIu8 ".%" PRIu8 "  ModelV0: %04" PRIX16 "  ModelV2: %04" PRIX16 "  ModelV3: %04" PRIX16,
+      this->ready.to_ulong(),
+      this->protocol_version.major,
+      this->protocol_version.minor,
+      this->modelV0,
+      this->modelV2,
+      this->modelV3);
+  if (this->debug_protocol) {
+    const auto &old_proto = this->get_query(StateQuery::OldProtocol);
+    const auto &new_proto = this->get_query(StateQuery::NewProtocol);
+    const auto &misc_version = this->get_query(MiscQuery::Version);
+    ESP_LOGD(TAG, " G8: %s  GY00: %s  Ver: %s  Rev: %s",
+        str_repr(old_proto.value()).c_str(),
+        str_repr(new_proto.value()).c_str(),
+        this->software_version.data(),
+        this->software_revision.data());
+  }
+  ESP_LOGD(TAG, " Fan: %c  VSwing: %c  HSwing: %c  MI: %c  Humidify: %02" PRIX8 "\n"
+                " Dry: %c  Demand: %c  Powerful: %c  Econo: %c  Streamer: %c",
+      this->support.fan ? 'Y' : 'N',
+      this->support.swing ? 'Y' : 'N',
+      this->support.horiz_swing ? 'Y' : 'N',
+      this->support.model_info,
+      this->support.s_humd,
+      this->support.dry ? 'Y' : 'N',
+      this->support.demand ? 'Y' : 'N',
+      this->support.powerful ? 'Y' : 'N',
+      this->support.econo ? 'Y' : 'N',
+      this->support.streamer ? 'Y' : 'N');
+  if (this->debug_protocol) {
+    const auto &v0_features = this->get_query(StateQuery::OptionalFeatures);
+    const auto &v2_features = this->get_query(StateQuery::V2OptionalFeatures);
+    const auto &v3_features = this->get_query(StateQuery::V3OptionalFeatures);
+    auto v3_features_value = v3_features.value();
+    if (v3_features_value.size() >= 5) {
+      v3_features_value = v3_features_value.first(5);
+    }
+    ESP_LOGD(TAG, " G2: %s  GK: %s  GU00: %s  ActiveSrc: %s  PowerfulSrc: %s",
+        (v0_features.success() ? hex_repr : str_repr)(v0_features.value()).c_str(),
+        (v2_features.success() ? hex_repr : str_repr)(v2_features.value()).c_str(),
+        (v3_features.success() ? hex_repr : str_repr)(v3_features_value).c_str(),
+        active_source_strings[this->support.active_source],
+        powerful_source_strings[this->support.powerful_source]);
+  }
+  ESP_LOGD(TAG, " Mode: %s  Action: %s  Setpoint: %.1fC  Target: %.1fC  Inside: %.1fC  Coil: %.1fC\n"
+                " Cycle Time: %" PRIu32 "ms  UnitState: %" PRIX8 "  SysState: %02" PRIX8,
+      LOG_STR_ARG(climate::climate_mode_to_string(this->get_climate().mode)),
+      LOG_STR_ARG(climate::climate_action_to_string(this->get_climate_action())),
+      this->get_climate().setpoint.f_degc(),
+      this->get_temp_target().f_degc(),
+      this->get_temp_inside().f_degc(),
+      this->get_temp_coil().f_degc(),
+      this->cycle_time_ms,
+      this->unit_state.raw,
+      this->system_state.raw);
+  if (this->debug_protocol) {
+    const auto comma_join = [](auto&& queries) {
+      std::string str;
+      for (const auto &q : queries) {
+        str += q;
+        if (q != queries.back()) {
+          str += ",";
+        }
+      }
+      return str;
+    };
+    ESP_LOGD(TAG, "Enabled: %s\n"
+                  "  Nak'd: %s\n"
+                  " Static: %s",
+        comma_join(this->queries | std::views::filter(DaikinQuery::IsEnabled) | std::views::transform(DaikinQuery::GetCommand)).c_str(),
+        comma_join(this->queries | std::views::filter(DaikinQuery::IsFailed) | std::views::transform(DaikinQuery::GetCommand)).c_str(),
+        comma_join(this->queries | std::views::filter(DaikinQuery::IsAckedStatic) | std::views::transform(DaikinQuery::GetCommand)).c_str());
+  }
+}
+
+/**
+ * Send a frame to the unit.
+ *
+ * Starts the receive loop if successful.
+ */
+void DaikinS21::send_frame(const std::string_view cmd, const std::span<const uint8_t> payload /*= {}*/) {
+  if (cmd.size() > MAX_COMMAND_SIZE) {
+    ESP_LOGE(TAG, "Tx: Command '%" PRI_SV "' too large", PRI_SV_ARGS(cmd));
+    // Prevent spam by handling the error immediately and thus delaying
+    this->comm_state = CommState::DelayIdle;
+    this->handle_serial_result(SerialResult::Error);
+    return;
+  }
+
+  if (this->debug_comms) {
+    if (payload.empty()) {
+      ESP_LOGD(TAG, "Tx: %" PRI_SV, PRI_SV_ARGS(cmd));
+    } else {
+      ESP_LOGD(TAG, "Tx: %" PRI_SV " %s %s",
+               PRI_SV_ARGS(cmd),
+               str_repr(payload).c_str(),
+               hex_repr(payload).c_str());
+    }
+  }
+
+  // clear software and hardware receive buffers
+  this->response.clear();
+  while (this->uart.available()) {
+    uint8_t byte;
+    this->uart.read_byte(&byte);
+  }
+
+  // transmit
+  this->uart.write_byte(STX);
+  this->uart.write_array(reinterpret_cast<const uint8_t *>(cmd.data()), cmd.size());
+  uint8_t checksum = std::reduce(cmd.begin(), cmd.end(), 0U);
+  if (payload.empty() == false) {
+    this->uart.write_array(payload.data(), payload.size());
+    checksum = std::reduce(payload.begin(), payload.end(), checksum);
+  }
+  // mid-message special control characters are offset to avoid framing errors
+  if (is_control_character(checksum)) {
+    checksum += 2;
+  }
+  this->uart.write_byte(checksum);
+  this->uart.write_byte(ETX);
+
+  // wait for result
+  this->comm_state = payload.empty() ? CommState::QueryAck : CommState::CommandAck;
+  this->set_timeout(TIMER_ID_SERIAL_EVENT, rx_timout_period_ms, [this](){ this->serial_timeout_handler(); });
+  this->enable_loop_soon_any_context();  // run serial state machine, could be called from timer context
+}
+
+/**
+ * Handler for serial timeout events
+ */
+void DaikinS21::serial_timeout_handler() {
+  switch (this->comm_state) {
+    case CommState::DelayIdle:  // Waiting for serial idle condition, multiple paths lead here
+      this->handle_serial_idle();
+      break;
+
+    case CommState::DelayAck: // Waiting for turnaround time to send Ack
+      this->comm_state = CommState::DelayIdle;
+      this->set_timeout(TIMER_ID_SERIAL_EVENT, next_tx_delay_period_ms, [this](){ this->serial_timeout_handler(); });
+      this->uart.write_byte(ACK);
+      break;
+
+    default:  // Other states are Rx timeouts
+      this->comm_state = CommState::DelayIdle;
+      this->handle_serial_result(SerialResult::Timeout);
+      break;
+  }
+}
+
+void DaikinS21::handle_serial_result(const SerialResult result) {
+  // End reception and start a timeout for the next event
+  this->disable_loop(); // loop was running for uart rx
+  uint32_t timeout_delay_ms;
+  if (result == SerialResult::Ack) {
+    if (comm_state == CommState::DelayAck) {
+      timeout_delay_ms = ack_delay_period_ms; // query
+    } else {
+      timeout_delay_ms = next_tx_delay_period_ms; // command
+    }
+  } else if (result == SerialResult::Nak) {
+    timeout_delay_ms = next_tx_delay_period_ms;
+  } else if (result == SerialResult::Timeout) {
+    timeout_delay_ms = rx_timout_period_ms;
+  } else {
+    timeout_delay_ms = error_delay_period_ms;
+  }
+  this->set_timeout(TIMER_ID_SERIAL_EVENT, timeout_delay_ms, [this](){ this->serial_timeout_handler(); });
+
+  // Process result
+  const bool is_query = this->current_command.empty();
+  const std::string_view tx_str = is_query ? this->active_query->command : this->current_command;
+
+  // Clip off the echoed query when it's echoed back. Most responses have a different leading character so ignore it.
+  std::span<const uint8_t> payload{};
+  if ((tx_str.size() <= this->response.size()) && std::equal(tx_str.begin() + 1, tx_str.end(), this->response.begin() + 1)) {
+    payload = { this->response.begin() + tx_str.size(), this->response.end() };
+  } else {
+    payload = this->response; // Some queries have parameters that might not be echoed back, like VS000M -> V for protocol 0
+  }
+
+  // Add commands to this array to debug their output. empty string is just a placeholder to compile
+  static constexpr std::array debug_commands{""};
+  const bool is_debug = this->debug_protocol && (std::ranges::find(debug_commands, tx_str) != debug_commands.end());
+
+  switch (result) {
+    case SerialResult::Ack:
+        // debug logging
+      if (/*this->debug_protocol ||*/ is_debug) {  // uncomment to debug all, not just debug_commands
+        ESP_LOGD(TAG, "ACK: %" PRI_SV " -> %s %s",
+                  PRI_SV_ARGS(tx_str),
+                  str_repr(payload).c_str(),
+                  hex_repr(payload).c_str());
+      }
+      if (is_query) {
+        // print changed values
+        if ((/*this->debug_protocol ||*/ is_debug) &&  // uncomment to debug all, not just debug_commands
+            (std::ranges::equal(this->active_query->value(), payload) == false)) {
+          ESP_LOGI(TAG, "%" PRI_SV " changed: %s %s -> %s %s",
+                    PRI_SV_ARGS(this->active_query->command),
+                    str_repr(this->active_query->value()).c_str(),
+                    hex_repr(this->active_query->value()).c_str(),
+                    str_repr(payload).c_str(),
+                    hex_repr(payload).c_str());
+        }
+        // decode payload
+        if ((this->active_query->response_length != 0) && (payload.size() != this->active_query->response_length)) {
+          ESP_LOGW(TAG, "Unexpected payload length for %" PRI_SV " (%s)", PRI_SV_ARGS(this->active_query->command), hex_repr(payload).c_str());
+          this->active_query->nak(payload);
+        } else {
+          if (this->active_query->handler == nullptr) {
+            ESP_LOGI(TAG, "Unhandled command: %s", hex_repr(this->response).c_str());
+          } else {
+            std::invoke(this->active_query->handler, this, payload);
+          }
+          // save a copy of the payload
+          this->active_query->ack(payload);
+        }
+      }
+      break;
+
+    case SerialResult::Nak:
+      ESP_LOGW(TAG, "NAK for %" PRI_SV, PRI_SV_ARGS(tx_str));
+      if (is_query) {
+        this->active_query->nak();
+      }
+      break;
+
+    case SerialResult::Timeout:
+      ESP_LOGW(TAG, "Timeout waiting for response to %" PRI_SV, PRI_SV_ARGS(tx_str));
+      if (is_query) {
+        // It's possible some unsupported queries don't respond at all
+        // Treat these as NAKs if we've established communication
+        // Otherwise, a disconnected or unpowered HVAC unit will quickly cause all queries to fail
+        if (this->ready[ReadyProtocolDetection]) {
+          this->active_query->nak();
+        }
+      }
+      break;
+
+    case SerialResult::Error:
+      ESP_LOGE(TAG, "Error with %" PRI_SV, PRI_SV_ARGS(tx_str));
+      // something went terribly wrong, try to reinitialize communications
+      this->climate.reset();
+      this->swing_humidity.reset();
+      this->special_modes.reset();
+      this->demand_econo.reset();
+      this->vertical_swing_mode.reset();
+      this->active_query = this->queries.end(); // end the query cycle early, let handle_serial_idle resume communication when error state times out
+      break;
+  }
+
+  // update local state for next action
+  this->current_command = {};
+  if ((result != SerialResult::Error) && is_query) {
+    // if communication established and all queries are disabled we had comms then they were lost
+    if (this->ready[ReadyProtocolDetection] && (std::ranges::count_if(this->queries, DaikinQuery::IsEnabled) == 0)) {
+      // reinitialize in order to prepare for the HVAC unit being reconnected
+      this->ready.reset();
+      this->reset_queries();
+      this->cycle_active = false;
+      this->defer([this](){ this->trigger_cycle(); });
+    } else {
+      // advance to next query
+      this->active_query = std::ranges::find_if(this->active_query + 1, this->queries.end(), DaikinQuery::IsEnabled);
+    }
+  }
+}
+
+/**
+ * Perform the next action when the communication state is idle
+ *
+ * Select the next command to issue to the unit. If none, continue with the query cycle.
+ *
+ * Handle the results of the cycle if the last query was already issued:
+ * - Process and report the results if the cycle was just completed
+ * - Start the next cycle if free running or triggered in polling mode
+ */
+void DaikinS21::handle_serial_idle() {
+  std::array<uint8_t, 4U> payload = {'0','0','0','0'};  // all command payloads here are 4 bytes long for now
+
+  // Apply any pending settings
+  const auto cycle_interval = this->get_cycle_interval_ms();
+  if (this->climate.staged()) {
+    payload[0] = (this->climate.pending.mode == climate::CLIMATE_MODE_OFF) ? '0' : '1'; // power
+    payload[1] = climate_mode_to_s21(this->climate.pending.mode);
+    payload[2] = this->climate.pending.setpoint.get_s21_fine();
+    payload[3] = fan_mode_to_s21(this->climate.pending.fan);
+    this->send_command(StateCommand::PowerModeTempFan, payload);
+    this->climate.set_confirm_ms(cycle_interval, 10*1000);  // longer timeout needed for mode changes
+    return;
+  }
+
+  if (this->swing_humidity.staged()) {
+    payload[0] = climate_swing_mode_to_s21(this->swing_humidity.pending.swing);
+    if (this->swing_humidity.pending.swing != climate::CLIMATE_SWING_OFF) {
+      payload[1] = '?';
+    }
+    payload[2] = humidity_mode_encodings[this->swing_humidity.pending.humidity];
+    this->send_command(StateCommand::SwingHumidityModes, payload);
+    this->swing_humidity.set_confirm_ms(cycle_interval);
+    // keep vertical swing mode in sync
+    this->vertical_swing_mode.pending = this->get_vertical_swing_mode();
+    apply_swing_mode(this->swing_humidity.pending.swing, this->vertical_swing_mode.pending);
+    this->vertical_swing_mode.set_confirm_ms(cycle_interval);
+    return;
+  }
+
+  if (this->special_modes.staged()) {
+    if (this->special_modes.value()[ModePowerful]) {
+      payload[0] |= 0b00000010;
+    }
+    if (this->special_modes.value()[ModeComfort]) {
+      payload[0] |= 0b01000000;
+    }
+    if (this->special_modes.value()[ModeQuiet]) {
+      payload[0] |= 0b10000000;
+    }
+    if (this->special_modes.value()[ModeStreamer]) {
+      payload[1] |= 0b10000000;
+    }
+    if (this->special_modes.value()[ModeSensorLED]) {
+      payload[3] |= 0b00000100;
+    }
+    if (this->special_modes.value()[ModeMotionSensor]) {
+      payload[3] |= 0b00001000;
+    }
+    this->send_command(StateCommand::SpecialModes, payload);
+    this->special_modes.set_confirm_ms(cycle_interval);
+    return;
+  }
+
+  if (this->demand_econo.staged()) {
+    payload[0] += 100 - this->demand_econo.pending.demand;
+    if (this->demand_econo.pending.econo) {
+      payload[1] |= 0b00000010;
+    }
+    this->send_command(StateCommand::DemandAndEcono, payload);
+    this->demand_econo.set_confirm_ms(cycle_interval);
+    return;
+  }
+
+  if (this->vertical_swing_mode.staged()) {
+    payload[0] = vertical_swing_mode_encodings[this->vertical_swing_mode.pending];
+    this->send_command(StateCommand::VerticalSwingMode, payload);
+    this->vertical_swing_mode.set_confirm_ms(cycle_interval);
+    // keep regular swing mode state in sync
+    this->swing_humidity.pending.swing = this->get_swing_mode();
+    apply_vertical_swing_mode(this->vertical_swing_mode.pending, this->swing_humidity.pending.swing);
+    this->swing_humidity.set_confirm_ms(cycle_interval);
+    return;
+  }
+
+  // Periodic query cycle
+  if (this->active_query < this->queries.end()) {
+    this->send_frame(this->active_query->command);  // query cycle underway, continue
+    return;
+  }
+
+  // Query cycle complete
+  this->cycle_active = false;
+  this->cycle_time_ms = App.get_loop_component_start_time() - this->cycle_time_start_ms;
+  if (this->is_ready() == false) {
+    this->ready_state_machine();
+  } else {
+    // resolve action
+    if (this->unit_state.defrost() && (this->action_reported == climate::CLIMATE_ACTION_HEATING)) {
+      this->action = climate::CLIMATE_ACTION_COOLING; // report cooling during defrost
+    } else if (this->active || (this->action_reported == climate::CLIMATE_ACTION_FAN) || (this->action_reported == climate::CLIMATE_ACTION_OFF)) {
+      this->action = this->action_reported; // trust the unit when active or in fan only or off
+    } else {
+      this->action = climate::CLIMATE_ACTION_IDLE;
+    }
+
+    // resolve pending commands
+    this->climate.check_confirm();
+    this->swing_humidity.check_confirm();
+    this->special_modes.check_confirm();
+    this->demand_econo.check_confirm();
+    this->vertical_swing_mode.check_confirm();
+
+    // signal there's fresh data to consumers
+    this->update_callbacks.call();
+  }
+
+  // Start fresh polling query cycle (triggered never cleared in free run)
+  if (this->cycle_triggered) {
+    this->start_cycle();
+  }
+}
+
 /**
  * Trigger a query cycle
  *
@@ -449,7 +947,7 @@ void DaikinS21::start_cycle() {
   this->cycle_triggered = this->is_free_run();
   this->cycle_time_start_ms = App.get_loop_component_start_time();
   this->active_query = std::ranges::find_if(this->queries, DaikinQuery::IsEnabled);
-  this->serial.send_frame(this->active_query->command);
+  this->send_frame(this->active_query->command);
 }
 
 /**
@@ -838,134 +1336,7 @@ void DaikinS21::check_ready_powerful_source() {
  */
 void DaikinS21::send_command(const std::string_view command, const std::span<const uint8_t> payload) {
   this->current_command = command;
-  this->serial.send_frame(this->current_command, payload);
-}
-
-/**
- * Perform the next action when the communication state is idle
- *
- * Select the next command to issue to the unit. If none, continue with the query cycle.
- *
- * Handle the results of the cycle if the last query was already issued:
- * - Process and report the results if the cycle was just completed
- * - Start the next cycle if free running or triggered in polling mode
- */
-void DaikinS21::handle_serial_idle() {
-  std::array<uint8_t, 4U> payload = {'0','0','0','0'};  // all command payloads here are 4 bytes long for now
-
-  // Apply any pending settings
-  const auto cycle_interval = this->get_cycle_interval_ms();
-  if (this->climate.staged()) {
-    payload[0] = (this->climate.pending.mode == climate::CLIMATE_MODE_OFF) ? '0' : '1'; // power
-    payload[1] = climate_mode_to_s21(this->climate.pending.mode);
-    payload[2] = this->climate.pending.setpoint.get_s21_fine();
-    payload[3] = fan_mode_to_s21(this->climate.pending.fan);
-    this->send_command(StateCommand::PowerModeTempFan, payload);
-    this->climate.set_confirm_ms(cycle_interval, 10*1000);  // longer timeout needed for mode changes
-    return;
-  }
-
-  if (this->swing_humidity.staged()) {
-    payload[0] = climate_swing_mode_to_s21(this->swing_humidity.pending.swing);
-    if (this->swing_humidity.pending.swing != climate::CLIMATE_SWING_OFF) {
-      payload[1] = '?';
-    }
-    payload[2] = humidity_mode_encodings[this->swing_humidity.pending.humidity];
-    this->send_command(StateCommand::SwingHumidityModes, payload);
-    this->swing_humidity.set_confirm_ms(cycle_interval);
-    // keep vertical swing mode in sync
-    this->vertical_swing_mode.pending = this->get_vertical_swing_mode();
-    apply_swing_mode(this->swing_humidity.pending.swing, this->vertical_swing_mode.pending);
-    this->vertical_swing_mode.set_confirm_ms(cycle_interval);
-    return;
-  }
-
-  if (this->special_modes.staged()) {
-    if (this->special_modes.value()[ModePowerful]) {
-      payload[0] |= 0b00000010;
-    }
-    if (this->special_modes.value()[ModeComfort]) {
-      payload[0] |= 0b01000000;
-    }
-    if (this->special_modes.value()[ModeQuiet]) {
-      payload[0] |= 0b10000000;
-    }
-    if (this->special_modes.value()[ModeStreamer]) {
-      payload[1] |= 0b10000000;
-    }
-    if (this->special_modes.value()[ModeSensorLED]) {
-      payload[3] |= 0b00000100;
-    }
-    if (this->special_modes.value()[ModeMotionSensor]) {
-      payload[3] |= 0b00001000;
-    }
-    this->send_command(StateCommand::SpecialModes, payload);
-    this->special_modes.set_confirm_ms(cycle_interval);
-    return;
-  }
-
-  if (this->demand_econo.staged()) {
-    payload[0] += 100 - this->demand_econo.pending.demand;
-    if (this->demand_econo.pending.econo) {
-      payload[1] |= 0b00000010;
-    }
-    this->send_command(StateCommand::DemandAndEcono, payload);
-    this->demand_econo.set_confirm_ms(cycle_interval);
-    return;
-  }
-
-  if (this->vertical_swing_mode.staged()) {
-    payload[0] = vertical_swing_mode_encodings[this->vertical_swing_mode.pending];
-    this->send_command(StateCommand::VerticalSwingMode, payload);
-    this->vertical_swing_mode.set_confirm_ms(cycle_interval);
-    // keep regular swing mode state in sync
-    this->swing_humidity.pending.swing = this->get_swing_mode();
-    apply_vertical_swing_mode(this->vertical_swing_mode.pending, this->swing_humidity.pending.swing);
-    this->swing_humidity.set_confirm_ms(cycle_interval);
-    return;
-  }
-
-  // Periodic query cycle
-  if (this->active_query < this->queries.end()) {
-    this->serial.send_frame(this->active_query->command);  // query cycle underway, continue
-    return;
-  }
-
-  // Query cycle complete
-  this->cycle_active = false;
-  this->cycle_time_ms = App.get_loop_component_start_time() - this->cycle_time_start_ms;
-  if (this->is_ready() == false) {
-    this->ready_state_machine();
-  } else {
-    // resolve action
-    if (this->unit_state.defrost() && (this->action_reported == climate::CLIMATE_ACTION_HEATING)) {
-      this->action = climate::CLIMATE_ACTION_COOLING; // report cooling during defrost
-    } else if (this->active || (this->action_reported == climate::CLIMATE_ACTION_FAN) || (this->action_reported == climate::CLIMATE_ACTION_OFF)) {
-      this->action = this->action_reported; // trust the unit when active or in fan only or off
-    } else {
-      this->action = climate::CLIMATE_ACTION_IDLE;
-    }
-
-    // resolve pending commands
-    this->climate.check_confirm();
-    this->swing_humidity.check_confirm();
-    this->special_modes.check_confirm();
-    this->demand_econo.check_confirm();
-    this->vertical_swing_mode.check_confirm();
-
-    // signal there's fresh data to consumers
-    this->update_callbacks.call();
-  }
-
-  if (timestamp_passed(App.get_loop_component_start_time(), this->next_state_dump_ms)) {
-    this->next_state_dump_ms = App.get_loop_component_start_time() + (60 * 1000); // every minute
-    this->enable_loop_soon_any_context();  // dump state in foreground, blocks for too long here
-  }
-
-  // Start fresh polling query cycle (triggered never cleared in free run)
-  if (this->cycle_triggered) {
-    this->start_cycle();
-  }
+  this->send_frame(this->current_command, payload);
 }
 
 void DaikinS21::handle_state_basic(const std::span<const uint8_t> payload) {
@@ -1184,185 +1555,6 @@ void DaikinS21::handle_misc_software_version(std::span<const uint8_t> payload) {
   if (payload.size() <= (this->software_version.size()-1)) {
     std::ranges::reverse_copy(payload, this->software_version.begin());
     this->software_version[payload.size()] = 0;
-  }
-}
-
-void DaikinS21::handle_serial_result(const DaikinSerial::Result result, const std::span<const uint8_t> response /*= {}*/) {
-  const bool is_query = this->current_command.empty();
-  const std::string_view tx_str = is_query ? this->active_query->command : this->current_command;
-
-  // Clip off the echoed query when it's echoed back. Most responses have a different leading character so ignore it.
-  std::span<const uint8_t> payload{};
-  if ((tx_str.size() <= response.size()) && std::equal(tx_str.begin() + 1, tx_str.end(), response.begin() + 1)) {
-    payload = { response.begin() + tx_str.size(), response.end() };
-  } else {
-    payload = response; // Some queries have parameters that might not be echoed back, like VS000M -> V for protocol 0
-  }
-
-  // Add commands to this array to debug their output. empty string is just a placeholder to compile
-  static constexpr std::array debug_commands{""};
-  const bool is_debug = this->debug && (std::ranges::find(debug_commands, tx_str) != debug_commands.end());
-
-  switch (result) {
-    case DaikinSerial::Result::Ack:
-        // debug logging
-      if (/*this->debug ||*/ is_debug) {  // uncomment to debug all, not just debug_commands
-        ESP_LOGD(TAG, "ACK: %" PRI_SV " -> %s %s",
-                  PRI_SV_ARGS(tx_str),
-                  str_repr(payload).c_str(),
-                  hex_repr(payload).c_str());
-      }
-      if (is_query) {
-        // print changed values
-        if ((/*this->debug ||*/ is_debug) &&  // uncomment to debug all, not just debug_commands
-            (std::ranges::equal(this->active_query->value(), payload) == false)) {
-          ESP_LOGI(TAG, "%" PRI_SV " changed: %s %s -> %s %s",
-                    PRI_SV_ARGS(this->active_query->command),
-                    str_repr(this->active_query->value()).c_str(),
-                    hex_repr(this->active_query->value()).c_str(),
-                    str_repr(payload).c_str(),
-                    hex_repr(payload).c_str());
-        }
-        // decode payload
-        if ((this->active_query->response_length != 0) && (payload.size() != this->active_query->response_length)) {
-          ESP_LOGW(TAG, "Unexpected payload length for %" PRI_SV " (%s)", PRI_SV_ARGS(this->active_query->command), hex_repr(payload).c_str());
-          this->active_query->nak(payload);
-        } else {
-          if (this->active_query->handler == nullptr) {
-            ESP_LOGI(TAG, "Unhandled command: %s", hex_repr(response).c_str());
-          } else {
-            std::invoke(this->active_query->handler, this, payload);
-          }
-          // save a copy of the payload
-          this->active_query->ack(payload);
-        }
-      }
-      break;
-
-    case DaikinSerial::Result::Nak:
-      ESP_LOGW(TAG, "NAK for %" PRI_SV, PRI_SV_ARGS(tx_str));
-      if (is_query) {
-        this->active_query->nak();
-      }
-      break;
-
-    case DaikinSerial::Result::Timeout:
-      ESP_LOGW(TAG, "Timeout waiting for response to %" PRI_SV, PRI_SV_ARGS(tx_str));
-      if (is_query) {
-        // It's possible some unsupported queries don't respond at all
-        // Treat these as NAKs if we've established communication
-        // Otherwise, a disconnected or unpowered HVAC unit will quickly cause all queries to fail
-        if (this->ready[ReadyProtocolDetection]) {
-          this->active_query->nak();
-        }
-      }
-      break;
-
-    case DaikinSerial::Result::Error:
-      ESP_LOGE(TAG, "Error with %" PRI_SV, PRI_SV_ARGS(tx_str));
-      // something went terribly wrong, try to reinitialize communications
-      this->climate.reset();
-      this->swing_humidity.reset();
-      this->special_modes.reset();
-      this->demand_econo.reset();
-      this->vertical_swing_mode.reset();
-      this->active_query = this->queries.end(); // end the query cycle early, let handle_serial_idle resume communication when error state times out
-      break;
-
-    default:
-      break;
-  }
-
-  // update local state for next action
-  this->current_command = {};
-  if ((result != DaikinSerial::Result::Error) && is_query) {
-    // if communication established and all queries are disabled we had comms then they were lost
-    if (this->ready[ReadyProtocolDetection] && (std::ranges::count_if(this->queries, DaikinQuery::IsEnabled) == 0)) {
-      // reinitialize in order to prepare for the HVAC unit being reconnected
-      this->ready.reset();
-      this->reset_queries();
-      this->cycle_active = false;
-      this->defer([this](){ this->trigger_cycle(); });
-    } else {
-      // advance to next query
-      this->active_query = std::ranges::find_if(this->active_query + 1, this->queries.end(), DaikinQuery::IsEnabled);
-    }
-  }
-}
-
-void DaikinS21::dump_state() {
-  ESP_LOGD(TAG, "Ready: %lX  Protocol: %" PRIu8 ".%" PRIu8 "  ModelV0: %04" PRIX16 "  ModelV2: %04" PRIX16 "  ModelV3: %04" PRIX16,
-      this->ready.to_ulong(),
-      this->protocol_version.major,
-      this->protocol_version.minor,
-      this->modelV0,
-      this->modelV2,
-      this->modelV3);
-  if (this->debug) {
-    const auto &old_proto = this->get_query(StateQuery::OldProtocol);
-    const auto &new_proto = this->get_query(StateQuery::NewProtocol);
-    const auto &misc_version = this->get_query(MiscQuery::Version);
-    ESP_LOGD(TAG, " G8: %s  GY00: %s  Ver: %s  Rev: %s",
-        str_repr(old_proto.value()).c_str(),
-        str_repr(new_proto.value()).c_str(),
-        this->software_version.data(),
-        this->software_revision.data());
-  }
-  ESP_LOGD(TAG, " Fan: %c  VSwing: %c  HSwing: %c  MI: %c  Humidify: %02" PRIX8 "\n"
-                " Dry: %c  Demand: %c  Powerful: %c  Econo: %c  Streamer: %c",
-      this->support.fan ? 'Y' : 'N',
-      this->support.swing ? 'Y' : 'N',
-      this->support.horiz_swing ? 'Y' : 'N',
-      this->support.model_info,
-      this->support.s_humd,
-      this->support.dry ? 'Y' : 'N',
-      this->support.demand ? 'Y' : 'N',
-      this->support.powerful ? 'Y' : 'N',
-      this->support.econo ? 'Y' : 'N',
-      this->support.streamer ? 'Y' : 'N');
-  if (this->debug) {
-    const auto &v0_features = this->get_query(StateQuery::OptionalFeatures);
-    const auto &v2_features = this->get_query(StateQuery::V2OptionalFeatures);
-    const auto &v3_features = this->get_query(StateQuery::V3OptionalFeatures);
-    auto v3_features_value = v3_features.value();
-    if (v3_features_value.size() >= 5) {
-      v3_features_value = v3_features_value.first(5);
-    }
-    ESP_LOGD(TAG, " G2: %s  GK: %s  GU00: %s  ActiveSrc: %s  PowerfulSrc: %s",
-        (v0_features.success() ? hex_repr : str_repr)(v0_features.value()).c_str(),
-        (v2_features.success() ? hex_repr : str_repr)(v2_features.value()).c_str(),
-        (v3_features.success() ? hex_repr : str_repr)(v3_features_value).c_str(),
-        active_source_strings[this->support.active_source],
-        powerful_source_strings[this->support.powerful_source]);
-  }
-  ESP_LOGD(TAG, " Mode: %s  Action: %s  Setpoint: %.1fC  Target: %.1fC  Inside: %.1fC  Coil: %.1fC\n"
-                " Cycle Time: %" PRIu32 "ms  UnitState: %" PRIX8 "  SysState: %02" PRIX8,
-      LOG_STR_ARG(climate::climate_mode_to_string(this->get_climate().mode)),
-      LOG_STR_ARG(climate::climate_action_to_string(this->get_climate_action())),
-      this->get_climate().setpoint.f_degc(),
-      this->get_temp_target().f_degc(),
-      this->get_temp_inside().f_degc(),
-      this->get_temp_coil().f_degc(),
-      this->cycle_time_ms,
-      this->unit_state.raw,
-      this->system_state.raw);
-  if (this->debug) {
-    const auto comma_join = [](auto&& queries) {
-      std::string str;
-      for (const auto &q : queries) {
-        str += q;
-        if (q != queries.back()) {
-          str += ",";
-        }
-      }
-      return str;
-    };
-    ESP_LOGD(TAG, "Enabled: %s\n"
-                  "  Nak'd: %s\n"
-                  " Static: %s",
-        comma_join(this->queries | std::views::filter(DaikinQuery::IsEnabled) | std::views::transform(DaikinQuery::GetCommand)).c_str(),
-        comma_join(this->queries | std::views::filter(DaikinQuery::IsFailed) | std::views::transform(DaikinQuery::GetCommand)).c_str(),
-        comma_join(this->queries | std::views::filter(DaikinQuery::IsAckedStatic) | std::views::transform(DaikinQuery::GetCommand)).c_str());
   }
 }
 

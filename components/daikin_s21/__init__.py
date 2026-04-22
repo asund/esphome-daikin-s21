@@ -36,7 +36,6 @@ ICON_VERTICAL_SWING = "mdi:pan-vertical"
 
 daikin_s21_ns = cg.esphome_ns.namespace("daikin_s21")
 DaikinS21 = daikin_s21_ns.class_("DaikinS21", cg.PollingComponent)
-DaikinSerial = daikin_s21_ns.class_("DaikinSerial", cg.Component)
 DaikinS21Modes = daikin_s21_ns.enum("DaikinMode")
 DAIKIN_MODE_CONFIG_ENUMS = {
     CONF_POWERFUL: DaikinS21Modes.ModePowerful,
@@ -55,7 +54,6 @@ CONFIG_SCHEMA = (
     .extend({cv.GenerateID(): cv.declare_id(DaikinS21)})
     .extend(cv.polling_component_schema(CONF_NEVER))
     .extend({
-      cv.GenerateID(CONF_DAIKIN_SERIAL_ID): cv.declare_id(DaikinSerial),
       cv.Required(CONF_UART): cv.use_id(UARTComponent),
       cv.Optional(CONF_DEBUG_COMMS, default=False): cv.boolean,
       cv.Optional(CONF_DEBUG_PROTOCOL, default=False): cv.boolean,
@@ -66,10 +64,7 @@ S21_PARENT_SCHEMA = cv.Schema({cv.GenerateID(CONF_S21_ID): cv.use_id(DaikinS21)}
 
 async def to_code(config):
     uart = await cg.get_variable(config[CONF_UART])
-    serial = cg.new_Pvariable(config[CONF_DAIKIN_SERIAL_ID], uart)
-    cg.add(serial.set_debug(config[CONF_DEBUG_COMMS]))
-    await cg.register_component(serial, {})
-    s21 = cg.new_Pvariable(config[CONF_ID], serial)
+    s21 = cg.new_Pvariable(config[CONF_ID], uart)
     await cg.register_component(s21, config)
-    await cg.register_parented(serial, config[CONF_ID])
-    cg.add(s21.set_debug(config[CONF_DEBUG_PROTOCOL]))
+    cg.add(s21.set_debug_comms(config[CONF_DEBUG_COMMS]))
+    cg.add(s21.set_debug_protocol(config[CONF_DEBUG_PROTOCOL]))

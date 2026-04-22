@@ -13,6 +13,11 @@ namespace esphome::daikin_s21 {
 // forward declaration
 class DaikinS21;
 
+inline constexpr std::size_t MAX_COMMAND_SIZE{6}; // MiscQuery::SoftwareVersion
+inline constexpr std::size_t STANDARD_PAYLOAD_SIZE{5};
+inline constexpr std::size_t EXTENDED_PAYLOAD_SIZE{32};
+inline constexpr std::size_t MAX_RESPONSE_SIZE{MAX_COMMAND_SIZE + EXTENDED_PAYLOAD_SIZE + 1U};  // +1 for checksum
+
 struct ProtocolVersion {
   uint8_t major{};
   uint8_t minor{};
