@@ -10,19 +10,27 @@ void DaikinS21NumberDemand::control(const float value) {
 }
 
 void DaikinS21Number::setup() {
-  this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); }); // enable update events from DaikinS21
+  // register for update events from DaikinS21
+  this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); });
   this->disable_loop(); // wait for updates
 }
 
+/**
+ * ESPHome Component loop
+ *
+ * Deferred work when an update occurs. Use Component::defer if more work items are added.
+ *
+ * Publishes any state changes to Home Assistant.
+ */
 void DaikinS21Number::loop() {
+  this->disable_loop(); // use loop as a oneshot timer
+
   if (this->demand_number_ != nullptr) {
     const float new_val = this->get_parent()->get_demand_control();
     if (this->demand_number_->state != new_val) {
       this->demand_number_->publish_state(new_val);
     }
   }
-
-  this->disable_loop(); // wait for further updates
 }
 
 void DaikinS21Number::dump_config() {

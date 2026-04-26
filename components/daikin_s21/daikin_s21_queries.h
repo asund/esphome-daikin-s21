@@ -5,7 +5,6 @@
 #include <functional>
 #include <string_view>
 #include <span>
-#include "daikin_s21_serial.h"
 #include "daikin_s21_types.h"
 
 namespace esphome::daikin_s21 {
@@ -167,7 +166,7 @@ class DaikinQuery {
   void set_value(std::span<const uint8_t> payload);
 
   union {
-    std::array<uint8_t, DaikinSerial::STANDARD_PAYLOAD_SIZE> internal;
+    std::array<uint8_t, STANDARD_PAYLOAD_SIZE> internal;
     uint8_t* external;
   } buffer{};  // last received value
   uint8_t size{};

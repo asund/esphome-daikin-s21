@@ -6,18 +6,21 @@ namespace esphome::daikin_s21 {
 static const char * const TAG = "daikin_s21.binary_sensor";
 
 void DaikinS21BinarySensor::setup() {
-  this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); }); // enable update events from DaikinS21
+  // register for update events from DaikinS21
+  this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); });
   this->disable_loop(); // wait for updates
 }
 
 /**
  * ESPHome Component loop
  *
- * Deferred work when an update occurs.
+ * Deferred work when an update occurs. Use Component::defer if more work items are added.
  *
- * Publish the sensors and wait for further updates.
+ * Publishes any state changes to Home Assistant.
  */
 void DaikinS21BinarySensor::loop() {
+  this->disable_loop(); // use loop as a oneshot timer
+
   const DaikinUnitState unit = this->get_parent()->get_unit_state();
   const DaikinSystemState system = this->get_parent()->get_system_state();
 
@@ -50,8 +53,6 @@ void DaikinS21BinarySensor::loop() {
   if (this->serial_error_sensor_ != nullptr) {
     this->serial_error_sensor_->publish_state(this->get_parent()->get_serial_error());
   }
-
-  this->disable_loop(); // wait for further updates
 }
 
 void DaikinS21BinarySensor::dump_config() {

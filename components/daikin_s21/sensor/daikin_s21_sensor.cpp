@@ -12,8 +12,9 @@ void DaikinS21Sensor::setup() {
     this->stop_poller();
   }
 
+  // register for update events from DaikinS21
   if (this->is_free_run()) {
-    this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); });  // enable update events from DaikinS21
+    this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); });
   }
   this->disable_loop(); // wait for updates
 }
@@ -23,11 +24,12 @@ void DaikinS21Sensor::setup() {
  *
  * Deferred work when an update occurs. Use Component::defer if more work items are added.
  *
- * Publish the sensors and wait for further updates.
+ * Publishes any state changes to Home Assistant.
  */
 void DaikinS21Sensor::loop() {
+  this->disable_loop(); // use loop as a oneshot timer
+
   this->publish_sensors();
-  this->disable_loop();
 }
 
 /**
