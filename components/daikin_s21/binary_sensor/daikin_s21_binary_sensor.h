@@ -31,20 +31,24 @@ class DaikinS21BinarySensor : public Component,
       this->get_parent()->request_readout(DaikinS21::ReadoutSpecialModes);
     }
   }
+  void set_active_sensor(binary_sensor::BinarySensor * const sensor) {
+    this->active_sensor_ = sensor;
+  }
   void set_defrost_sensor(binary_sensor::BinarySensor * const sensor) {
     this->defrost_sensor_ = sensor;
     this->get_parent()->request_readout(DaikinS21::ReadoutUnitStateBits);
   }
-  void set_active_sensor(binary_sensor::BinarySensor * const sensor) {
-    this->active_sensor_ = sensor;
+  void set_multizone_online_sensor(binary_sensor::BinarySensor * const sensor) {
+    this->multizone_online_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutSystemStateBits);
   }
   void set_online_sensor(binary_sensor::BinarySensor * const sensor) {
     this->online_sensor_ = sensor;
     this->get_parent()->request_readout(DaikinS21::ReadoutUnitStateBits);
   }
-  void set_valve_sensor(binary_sensor::BinarySensor * const sensor) {
-    this->valve_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutSystemStateBits);
+  void set_serial_error_sensor(binary_sensor::BinarySensor * const sensor) {
+    this->serial_error_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutErrorStatus);
   }
   void set_short_cycle_sensor(binary_sensor::BinarySensor * const sensor) {
     this->short_cycle_sensor_ = sensor;
@@ -54,25 +58,22 @@ class DaikinS21BinarySensor : public Component,
     this->system_defrost_sensor_ = sensor;
     this->get_parent()->request_readout(DaikinS21::ReadoutSystemStateBits);
   }
-  void set_multizone_conflict_sensor(binary_sensor::BinarySensor * const sensor) {
-    this->multizone_conflict_sensor_ = sensor;
+  void set_system_online_sensor(binary_sensor::BinarySensor * const sensor) {
+    this->system_online_sensor_ = sensor;
+    this->get_parent()->request_readout(DaikinS21::ReadoutUnitStateBits);
     this->get_parent()->request_readout(DaikinS21::ReadoutSystemStateBits);
-  }
-  void set_serial_error_sensor(binary_sensor::BinarySensor * const sensor) {
-    this->serial_error_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutErrorStatus);
   }
 
  protected:
   DaikinS21BinarySensorMode *mode_sensors_[DaikinModeCount]{};
-  binary_sensor::BinarySensor *defrost_sensor_{};
   binary_sensor::BinarySensor *active_sensor_{};
+  binary_sensor::BinarySensor *defrost_sensor_{};
+  binary_sensor::BinarySensor *multizone_online_sensor_{};
   binary_sensor::BinarySensor *online_sensor_{};
-  binary_sensor::BinarySensor *valve_sensor_{};
+  binary_sensor::BinarySensor *serial_error_sensor_{};
   binary_sensor::BinarySensor *short_cycle_sensor_{};
   binary_sensor::BinarySensor *system_defrost_sensor_{};
-  binary_sensor::BinarySensor *multizone_conflict_sensor_{};
-  binary_sensor::BinarySensor *serial_error_sensor_{};
+  binary_sensor::BinarySensor *system_online_sensor_{};
 };
 
 } // namespace esphome::daikin_s21
