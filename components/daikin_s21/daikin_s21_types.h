@@ -295,10 +295,13 @@ class DaikinUnitState {
 class DaikinSystemState {
  public:
   constexpr DaikinSystemState(const uint8_t value = 0U) : raw(value) {}
+  // this unit:
+  constexpr bool idle() const { return (this->raw & 0x0F) == 0; } // just this unit
   constexpr bool locked() const { return (this->raw & 0x01) != 0; }
-  constexpr bool active() const { return (this->raw & 0x04) != 0; }
+  constexpr bool active() const { return (this->raw & 0x04) != 0; } // todo another active indicator in case UnitState fails
   constexpr bool defrost() const { return (this->raw & 0x08) != 0; }
-  constexpr bool multizone_conflict() const { return (this->raw & 0x20) != 0; }
+  // other units:
+  constexpr bool multizone_online() const { return (this->raw & 0x20) != 0; }
   uint8_t raw{};
 };
 

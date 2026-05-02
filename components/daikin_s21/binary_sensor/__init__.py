@@ -39,14 +39,14 @@ from .. import (
 DaikinS21BinarySensor = daikin_s21_ns.class_("DaikinS21BinarySensor", cg.Component)
 DaikinS21BinarySensorMode = daikin_s21_ns.class_("DaikinS21BinarySensorMode", binary_sensor.BinarySensor)
 
-CONF_DEFROST = "defrost"
 CONF_ACTIVE = "active"
+CONF_DEFROST = "defrost"
+CONF_MULTIZONE_ONLINE = "multizone_online"
 CONF_ONLINE = "online"
-CONF_VALVE = "valve"
+CONF_SERIAL_ERROR = "serial_error"
 CONF_SHORT_CYCLE = "short_cycle"
 CONF_SYSTEM_DEFROST = "system_defrost"
-CONF_MULTIZONE_CONFLICT = "multizone_conflict"
-CONF_SERIAL_ERROR = "serial_error"
+CONF_SYSTEM_ONLINE = "system_online"
 
 CONFIG_SCHEMA = (
     cv.COMPONENT_SCHEMA
@@ -81,17 +81,20 @@ CONFIG_SCHEMA = (
             DaikinS21BinarySensorMode,
             icon=ICON_ECONO,
         ),
+        cv.Optional(CONF_ACTIVE): binary_sensor.binary_sensor_schema(
+            device_class=DEVICE_CLASS_RUNNING,
+        ),
         cv.Optional(CONF_DEFROST): binary_sensor.binary_sensor_schema(
             device_class=DEVICE_CLASS_COLD,
         ),
-        cv.Optional(CONF_ACTIVE): binary_sensor.binary_sensor_schema(
-            device_class=DEVICE_CLASS_RUNNING,
+        cv.Optional(CONF_MULTIZONE_ONLINE): binary_sensor.binary_sensor_schema(
+            device_class=DEVICE_CLASS_POWER,
         ),
         cv.Optional(CONF_ONLINE): binary_sensor.binary_sensor_schema(
             device_class=DEVICE_CLASS_POWER,
         ),
-        cv.Optional(CONF_VALVE): binary_sensor.binary_sensor_schema(
-            device_class=DEVICE_CLASS_OPENING,
+        cv.Optional(CONF_SERIAL_ERROR): binary_sensor.binary_sensor_schema(
+            device_class=DEVICE_CLASS_PROBLEM,
         ),
         cv.Optional(CONF_SHORT_CYCLE): binary_sensor.binary_sensor_schema(
             device_class=DEVICE_CLASS_LOCK,
@@ -99,11 +102,8 @@ CONFIG_SCHEMA = (
         cv.Optional(CONF_SYSTEM_DEFROST): binary_sensor.binary_sensor_schema(
             device_class=DEVICE_CLASS_COLD,
         ),
-        cv.Optional(CONF_MULTIZONE_CONFLICT): binary_sensor.binary_sensor_schema(
-            device_class=DEVICE_CLASS_LOCK,
-        ),
-        cv.Optional(CONF_SERIAL_ERROR): binary_sensor.binary_sensor_schema(
-            device_class=DEVICE_CLASS_PROBLEM,
+        cv.Optional(CONF_SYSTEM_ONLINE): binary_sensor.binary_sensor_schema(
+            device_class=DEVICE_CLASS_POWER,
         ),
     })
 )
@@ -119,14 +119,14 @@ async def to_code(config):
             cg.add(var.set_mode_sensor(sens))
 
     binary_sensors = (
-        (CONF_DEFROST, var.set_defrost_sensor),
         (CONF_ACTIVE, var.set_active_sensor),
+        (CONF_DEFROST, var.set_defrost_sensor),
+        (CONF_MULTIZONE_ONLINE, var.set_multizone_online_sensor),
         (CONF_ONLINE, var.set_online_sensor),
-        (CONF_VALVE, var.set_valve_sensor),
+        (CONF_SERIAL_ERROR, var.set_serial_error_sensor),
         (CONF_SHORT_CYCLE, var.set_short_cycle_sensor),
         (CONF_SYSTEM_DEFROST, var.set_system_defrost_sensor),
-        (CONF_MULTIZONE_CONFLICT, var.set_multizone_conflict_sensor),
-        (CONF_SERIAL_ERROR, var.set_serial_error_sensor),
+        (CONF_SYSTEM_ONLINE, var.set_system_online_sensor),
     )
     for key, func in binary_sensors:
         if key in config:

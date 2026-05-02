@@ -26,6 +26,10 @@ A big thanks to:
 A short changelog of sorts, I'll keep things here where a user might encounter
 breaking or significant changes, including configuration updates.
 
+* Binary sensor changes: Removed "valve", use unit "active" instead for the
+  same info. Renamed "multizone_conflict" to "multizone_online", inverting
+  logic and changing the device class. Added "system_online" to track all units
+  on a compressor.
 * Bumped minimum ESPHome version to 2026.4.0 in order to address a few issues.
   If you have an `update_interval` of 0s specified in any polling components
   (s21, climate, sensor) please change this to `never` to indicate the intent
@@ -251,12 +255,13 @@ you see nonsense output then we are likely reading random memory. Your debug
 logs can let me blacklist your model and let others avoid this.
 
 * Defrost
-* Active (Actively controlling climate, climate action can tell us this)
-* Online (In a climate controlling mode, climate mode can tell us this)
-* Refrigerant Valve (shadows active?)
-* Short Cycle Lock (3 minute compressor lockout when changing operation)
-* System Defrost (shadows defrost?)
-* Multizone settings conflict
+* Active (Actively controlling climate, climate action can also tell us this)
+* Multizone Online (Other units are in a compressor dependent mode, useful for
+  resolving conflicts affecting this unit)
+* Online (In a climate controlling mode, climate mode can also tell us this)
+* Short Cycle Lock (2:30-3:00 minute compressor lockout when changing activity)
+* System Defrost (shadows defrost? need to wait for winter to determine this)
+* System Online (Any unit is in a compressor dependent mode)
 
 Additional binary sensors:
 
@@ -644,21 +649,21 @@ binary_sensor:
     # unit and system state bitfield derived, not always supported or reliable:
     defrost:
       name: Defrost
+    multizone_online:
+      name: Multizone Online
     online:
       name: Online
-    valve:
-      name: Valve
+    # serial_error:
+    #   name: Serial Error
     short_cycle:
       name: Short Cycle
       device_id: daikin_outdoor
     system_defrost:
       name: System Defrost
       device_id: daikin_outdoor
-    multizone_conflict:
-      name: Multizone Conflict
+    system_online:
+      name: System Online
       device_id: daikin_outdoor
-    # serial_error:
-    #   name: Serial Error
 
 text_sensor:
   - platform: daikin_s21
