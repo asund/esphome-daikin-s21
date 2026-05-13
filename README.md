@@ -328,6 +328,19 @@ Cheap level shifter modules are available that can make use of the provided 5V
 reference to do this if you'd prefer. If you are powering your device
 externally you should still connect a ground reference for the communications.
 
+The ESP8266 platform is quite limited. Since the cost of boards are in the same
+ballpark, please use an ESP32 (or something with a free hardware UART). ESP8266
+boards often have a USB-Serial chip wired to their only hardware UART. This
+chip can interfere with the Rx pin on the microcontroller, driving it to levels
+that override the open drain output mode used by the Daikin unit, making it
+unable to pull the Rx line to ground and signalling responses to the ESP. If
+you want to use one anyways, a user has reported lifting the pads on this chip
+allows the single hardware UART to be used for communication with the unit.
+ESPHome's software UART implementation isn't viable for this application as it
+uses delays inside an interrupt routine. This might be accpetable at higher
+baud rates, but at 1200 baud the delays become too long and the system will
+watchdog out and reset. Just get an ESP32 board.
+
 ### S21 Port
 
 On my Daikin units, the S21 port has the following pins:
