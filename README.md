@@ -26,10 +26,12 @@ A big thanks to:
 A short changelog of sorts, I'll keep things here where a user might encounter
 breaking or significant changes, including configuration updates.
 
-* Binary sensor changes: Removed "valve", use unit "active" instead for the
-  same info. Renamed "multizone_conflict" to "multizone_online", inverting
-  logic and changing the device class. Added "system_online" to track all units
-  on a compressor.
+* Binary sensor changes: Removed `valve`, use unit `active` instead for the
+  same info. Renamed `multizone_conflict` to `multizone_online`, inverting
+  logic and changing the device class. Added `system_online` to track all units
+  on a compressor. Compressor `short_cycle` device class of lock removed; this
+  was showing up in the HA Security dashboard. History will be inverted and
+  should be purged if it matters to you.
 * Bumped minimum ESPHome version to 2026.4.0 in order to address a few issues.
   If you have an `update_interval` of 0s specified in any polling components
   (s21, climate, sensor) please change this to `never` to indicate the intent
