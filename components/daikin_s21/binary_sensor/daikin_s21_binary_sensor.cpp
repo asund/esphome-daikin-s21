@@ -45,7 +45,7 @@ void DaikinS21BinarySensor::loop() {
     this->serial_error_sensor_->publish_state(this->get_parent()->get_serial_error());
   }
   if (this->short_cycle_sensor_ != nullptr) {
-    this->short_cycle_sensor_->publish_state(!system.locked());  // invert for Home Assistant locked/unlocked logic
+    this->short_cycle_sensor_->publish_state(system.locked());
   }
   if (this->system_defrost_sensor_ != nullptr) {
     this->system_defrost_sensor_->publish_state(system.defrost());

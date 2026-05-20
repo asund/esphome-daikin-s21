@@ -26,10 +26,12 @@ A big thanks to:
 A short changelog of sorts, I'll keep things here where a user might encounter
 breaking or significant changes, including configuration updates.
 
-* Binary sensor changes: Removed "valve", use unit "active" instead for the
-  same info. Renamed "multizone_conflict" to "multizone_online", inverting
-  logic and changing the device class. Added "system_online" to track all units
-  on a compressor.
+* Binary sensor changes: Removed `valve`, use unit `active` instead for the
+  same info. Renamed `multizone_conflict` to `multizone_online`, inverting
+  logic and changing the device class. Added `system_online` to track all units
+  on a compressor. Compressor `short_cycle` device class of lock removed; this
+  was showing up in the HA Security dashboard. History will be inverted and
+  should be purged if it matters to you.
 * Bumped minimum ESPHome version to 2026.4.0 in order to address a few issues.
   If you have an `update_interval` of 0s specified in any polling components
   (s21, climate, sensor) please change this to `never` to indicate the intent
@@ -327,6 +329,19 @@ need to add your own external pullups or make use of a level shifting circuit.
 Cheap level shifter modules are available that can make use of the provided 5V
 reference to do this if you'd prefer. If you are powering your device
 externally you should still connect a ground reference for the communications.
+
+The ESP8266 platform is quite limited. Since the cost of boards are in the same
+ballpark, please use an ESP32 (or something with a free hardware UART). ESP8266
+boards often have a USB-Serial chip wired to their only hardware UART. This
+chip can interfere with the Rx pin on the microcontroller, driving it to levels
+that override the open drain output mode used by the Daikin unit, making it
+unable to pull the Rx line to ground and signalling responses to the ESP. If
+you want to use one anyways, a user has reported lifting the pads on this chip
+allows the single hardware UART to be used for communication with the unit.
+ESPHome's software UART implementation isn't viable for this application as it
+uses delays inside an interrupt routine. This might be accpetable at higher
+baud rates, but at 1200 baud the delays become too long and the system will
+watchdog out and reset. Just get an ESP32 board.
 
 ### S21 Port
 

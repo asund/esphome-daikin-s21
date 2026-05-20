@@ -96,9 +96,7 @@ CONFIG_SCHEMA = (
         cv.Optional(CONF_SERIAL_ERROR): binary_sensor.binary_sensor_schema(
             device_class=DEVICE_CLASS_PROBLEM,
         ),
-        cv.Optional(CONF_SHORT_CYCLE): binary_sensor.binary_sensor_schema(
-            device_class=DEVICE_CLASS_LOCK,
-        ),
+        cv.Optional(CONF_SHORT_CYCLE): binary_sensor.binary_sensor_schema(),
         cv.Optional(CONF_SYSTEM_DEFROST): binary_sensor.binary_sensor_schema(
             device_class=DEVICE_CLASS_COLD,
         ),
