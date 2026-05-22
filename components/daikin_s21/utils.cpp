@@ -1,4 +1,5 @@
-#include "esphome/core/helpers.h"
+#include <cinttypes>
+#include "esphome/core/alloc_helpers.h"
 #include "utils.h"
 
 namespace esphome::daikin_s21 {
