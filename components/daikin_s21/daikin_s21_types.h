@@ -122,34 +122,34 @@ constexpr uint8_t enum_to_encoding(const T index) {
  */
 template<typename T>
 class CommandState {
-  static constexpr uint8_t active_value = std::numeric_limits<uint8_t>::min();
-  static constexpr uint8_t staged_value = std::numeric_limits<uint8_t>::max();
-  uint8_t state{active_value};
+  static constexpr uint8_t Active = std::numeric_limits<uint8_t>::min();
+  static constexpr uint8_t Staged = std::numeric_limits<uint8_t>::max();
+  uint8_t state{Active};
 
  public:
   // command state tracking
-  constexpr bool staged() const { return this->state == staged_value; } // the pending value should be sent to the unit
+  constexpr bool staged() const { return this->state == Staged; } // the pending value should be sent to the unit
   constexpr void reset() {
-    this->state = active_value;
+    this->state = Active;
     this->pending = this->active;
   }
   constexpr void set_confirm_ms(const uint32_t cycle_interval_ms, const uint32_t timeout_ms = 1000) {
-    this->state = std::min(static_cast<int>(timeout_ms / cycle_interval_ms) + 2, staged_value - 1); // +2 for truncation and short first cycle
+    this->state = std::min(static_cast<int>(timeout_ms / cycle_interval_ms) + 2, Staged - 1); // +2 for truncation and short first cycle
   }
 
   // values
   T pending{};
   T active{};
 
-  constexpr const T& value() const { return (this->state == active_value) ? this->active : this->pending; }
+  constexpr const T& value() const { return (this->state == Active) ? this->active : this->pending; }
   constexpr void stage(const T& value) {
     this->pending = value;
-    this->state = staged_value;
+    this->state = Staged;
   }
   constexpr void check_confirm() {
-    if ((this->state != active_value) && (this->staged() == false)) {
+    if ((this->state != Active) && (this->staged() == false)) {
       if (this->pending == this->active) {
-        this->state = active_value;
+        this->state = Active;
       } else {
         this->state--;
       }
@@ -286,6 +286,37 @@ enum DaikinVerticalSwingMode : uint8_t {
   DaikinVerticalSwingModeCount, // for array sizing
 };
 
+using VerticalAngleSetpoints = std::array<uint8_t, (DaikinVerticalSwingBottom - DaikinVerticalSwingTop) + 1>;
+
+/**
+ * State tracker for the externally visible vertical swing mode, a synthetic
+ * sensor derived from multiple Daikin commands.
+ *
+ * Internal categories of states are as follows:
+ * - Swing Off
+ * - Swing On
+ * - Stopped at a discrete setpoint
+ * - Seeking to a discrete setpoint
+ * - Comfort mode (todo)
+ */
+struct LouvreState {
+  static constexpr uint32_t PauseTimeoutMs{60*1000};
+  static constexpr uint32_t CommandTimeoutMs{PauseTimeoutMs / 2};  // TODO hopefully temporary pending user feedback
+  static constexpr uint8_t SwingPauseTolerance{5};
+
+  constexpr bool is_command_active() const { return enabled && command_support; }
+  constexpr bool is_pause_active() const { return enabled && (command_support == false); }
+
+  uint32_t timeout_ms{};          /**< Expiry timeout */
+  int16_t pause_setpoint{};       /**< Angle setpoint used in swing paused mode. */
+  DaikinVerticalSwingMode mode{}; /**< The external vertical swing mode */
+  bool enabled{};                 /**< Angle control is active. */
+  bool command_support{};         /**< Support for the direct vertical swing mode command, captured on startup. */
+  // saved state to reapply
+  bool horizontal_swing{};        /**< Horizontal swing should be (re)enabled when done in setpoint command mode. */
+  bool angle_query{};             /**< Angle query was enabled already. */
+};
+
 /**
  * Possible sources of active flag.
  */
@@ -330,7 +361,7 @@ class DaikinSystemState {
   // this unit:
   constexpr bool idle() const { return (this->raw & 0x0F) == 0; } // just this unit
   constexpr bool locked() const { return (this->raw & 0x01) != 0; }
-  constexpr bool active() const { return (this->raw & 0x04) != 0; } // todo another active indicator in case UnitState fails
+  constexpr bool active() const { return (this->raw & 0x04) != 0; } // TODO another active indicator in case UnitState fails
   constexpr bool defrost() const { return (this->raw & 0x08) != 0; }
   // other units:
   constexpr bool multizone_online() const { return (this->raw & 0x20) != 0; }

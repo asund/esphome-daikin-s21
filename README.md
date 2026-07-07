@@ -26,6 +26,13 @@ A big thanks to:
 A short changelog of sorts, I'll keep things here where a user might encounter
 breaking or significant changes, including configuration updates.
 
+* Added vertical angle setpoint emulation for units that lack the setpoint
+  command. Horizontal swing setting is now preserved while using this control
+  for both methods. The discrete step should be preserved in the UI afterwards
+  if vertical swing isn't changed.
+* Climate action can now report defrosting instead of a short cooling period.
+  If this is always on while heating your unit doesn't support the state
+  reporting bits and can be blacklisted. Open an issue.
 * Added enforcement for a non-zero update interval at compile time. If you have
   an `update_interval` of 0s specified in any polling components (s21, climate,
   sensor) please change this to `never` to indicate the intent is to free run.
@@ -151,9 +158,16 @@ changes.
   there's no need to enable the Sensor LED or Sensor Mode switches or binary
   sensors.
 
-* Vertical swing setpoint. v2+ may support this. Preset values can be selected
-  for the vertical louver, including the standard on and off for the varrying
-  setting.
+* Vertical swing setpoint. Command the vertical louvre to a preset angle and
+  stop there. Horizontal swing is preserved during this time. Some units (v2+)
+  may support a command to do this directly. On those that don't, vertical
+  swing is temporarily enabled and an attempt is made to pause the louvre in
+  the general area of the desired angle. This is only going to work well if the
+  core query rate is in free run or else the polled angle will be stale. These
+  angles can be optionally configured per action and are only used when there's
+  no command support. The range may vary on your unit, turn on vertical swing
+  and monitor the angles for your mode and unit to come up with your presets.
+  Dry action uses cool's angles.
 
 * Humidity operation. v2+ may support this on "Ururu Sarara" units. Controls
   humidity while in heating and cooling modes to provide dry cooling or humid
@@ -550,6 +564,10 @@ select:
       name: Humidity
     vertical_swing:
       name: Vertical Swing
+      # angles for vertical swing setpoint angles, from top to bottom
+      # cool_action: [80, 70, 60, 50, 44] # shared with dry
+      # fan_only_action: [87, 66, 46, 26, 5]
+      # heat_action: [66, 53, 40, 27, 14]
 
 sensor:
   - platform: daikin_s21

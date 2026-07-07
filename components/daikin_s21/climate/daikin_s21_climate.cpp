@@ -192,7 +192,7 @@ void DaikinS21Climate::dump_config() {
   }
   LOG_UPDATE_INTERVAL(this);
   for (const climate::ClimateMode mode : {climate::CLIMATE_MODE_HEAT_COOL, climate::CLIMATE_MODE_COOL, climate::CLIMATE_MODE_HEAT}) {
-    if (const auto * const params = setpoint_params.get(mode)) {
+    if (const auto * const params = this->setpoint_params.get(mode)) {
       ESP_LOGCONFIG(TAG, "  %s parameters\n"
                          "    Unit setpoint range: %.1f-%.1f\n"
                          "    User offset: %+.1f",

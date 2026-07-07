@@ -44,6 +44,7 @@ class DaikinS21Select : public Component,
 
   void set_vertical_swing_select(DaikinS21SelectVerticalSwing * const vertical_swing_select) {
     this->vertical_swing_select_ = vertical_swing_select;
+    this->get_parent()->request_readout(DaikinS21::ReadoutSwingHumidty);
     this->get_parent()->request_readout(DaikinS21::ReadoutVerticalSwingMode);
   }
 
