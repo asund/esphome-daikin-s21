@@ -292,9 +292,7 @@ details if you want a sensor or control added.
 If flashed OTA you may lose communication and require a physical reflashing
 (annoying if your board in inside your air handler). Please stick to the
 ESP-IDF PlatformIO framework for now (Arduino is an extra shim over the ESP-IDF
-SDK anyways). See the framework selection in the configuration example. As of
-this writing, independent UART pin inversion control also wasn't possible with
-Arduino.
+SDK anyways). See the framework selection in the configuration example.
 
 * Aforementioned S21 control limitations. Your unit may support a mode but
   support for controlling over S21 may not be there. See your model's
@@ -329,6 +327,10 @@ need to add your own external pullups or make use of a level shifting circuit.
 Cheap level shifter modules are available that can make use of the provided 5V
 reference to do this if you'd prefer. If you are powering your device
 externally you should still connect a ground reference for the communications.
+A word of warning about very cheap level shifters: a user reported intermittent
+communication, probably due to bad FETs. The ESP chip is 5V tolerant, but a
+passive circuit with a voltage divider on the ESP Rx side should also be
+possible. Said user is using 1K/2K to bring 5V down closer to 3.3V logic levels.
 
 The ESP8266 platform is quite limited. Since the cost of boards are in the same
 ballpark, please use an ESP32 (or something with a free hardware UART). ESP8266
@@ -449,7 +451,7 @@ The default is 1.0°C to match Daikin's internal granularity.
 
 ```yaml
 esphome:
-  min_version: "2026.4.0"
+  min_version: "2026.5.0"
   devices:
     - id: daikin_outdoor
       name: "Daikin Compressor"
