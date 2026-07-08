@@ -533,6 +533,14 @@ std::span<const uint8_t> DaikinS21::get_query_result(std::string_view query_str)
   return this->get_query(query_str).value();
 }
 
+/**
+ * Whether the unit is answering the IR counter query, making the counter usable
+ * as an indicator of IR remote activity.
+ */
+bool DaikinS21::ir_counter_available() {
+  return this->get_query(StateQuery::IRCounter).success();
+}
+
 void DaikinS21::dump_state() {
   ESP_LOGD(TAG, "Ready: %lX  Protocol: %" PRIu8 ".%" PRIu8 "  ModelV0: %04" PRIX16 "  ModelV2: %04" PRIX16 "  ModelV3: %04" PRIX16,
       this->ready.to_ulong(),

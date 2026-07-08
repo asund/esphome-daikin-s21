@@ -68,6 +68,9 @@ void DaikinS21Climate::setup() {
   // initialize setpoint, will be loaded from preferences or unit shortly
   this->target_temperature = NAN;
 
+  // poll the IR counter so remote activity can be distinguished from unit-side setpoint shifts
+  this->get_parent()->request_readout(DaikinS21::ReadoutIRCounter);
+
   // register for update events from DaikinS21
   this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); });
   this->disable_loop(); // wait for updates
@@ -91,6 +94,17 @@ void DaikinS21Climate::loop() {
   const auto reported_swing = this->get_parent()->get_swing_mode();
   bool do_publish{};
   bool update_unit_setpoint{};
+
+  // IR receiver activity since the last pass. Used to distinguish a setpoint changed by
+  // the user's remote from one the unit shifted on its own (or a readback artifact).
+  // The counter can lag the setpoint readback by a few seconds and increments in
+  // unit-specific strides (10 per command observed), so any change counts as activity.
+  // A mismatch that arrives before the counter catches up is left unadopted with
+  // unit_setpoint unsynced, so adoption completes on a later pass once the counter moves.
+  const uint16_t ir_counter = this->get_parent()->get_ir_counter();
+  const bool ir_activity = this->ir_counter_primed && (ir_counter != this->last_ir_counter);
+  this->last_ir_counter = ir_counter;
+  this->ir_counter_primed = true;
 
   // See if there's a reason to publish an update
   // Temperature and humidity can be noisy, only publish because of them if the component update interval has passed
@@ -119,9 +133,18 @@ void DaikinS21Climate::loop() {
       this->unit_setpoint = reported_climate.setpoint;
     }
 
-    // Determine if there's any change to the target temperature
+    // Determine if there's any change to the target temperature.
+    // A reported setpoint that differs from the last commanded one is only adopted as a new
+    // user target when the IR receiver saw traffic: some units shift their reported setpoint
+    // autonomously (e.g. around thermostat on/off), and serial glitches can drop a command or
+    // corrupt a readback. Without this gate those events masquerade as remote changes and,
+    // combined with a reference sensor offset, re-derive the target from the unit's shifted
+    // value on every occurrence. Units that don't answer the IR counter query keep the old
+    // adopt-always behavior.
     if ((std::isfinite(this->target_temperature) == false) || // controller init or external mode change to a setpoint mode
-        (this->unit_setpoint != reported_climate.setpoint)) { // external change to setpoint
+        ((this->unit_setpoint != reported_climate.setpoint) && // external change to setpoint...
+         (ir_activity || (this->target_resolved == false) || // ...seen alongside remote activity (or still resolving after boot)
+          (this->get_parent()->ir_counter_available() == false)))) { // ...or IR activity is unknowable on this unit
       // Assume the reported setpoint (external IR remote change) should be the target temperature
       auto new_target = reported_climate.setpoint;
       // When first initializing, we don't know if the reported setpoint is from the IR remote or an offset value from a

@@ -104,6 +104,7 @@ class DaikinS21 : public PollingComponent {
   bool get_mode(DaikinMode mode) const;
   DaikinLEDBrightnessMode get_brightness_mode() const;
   std::span<const uint8_t> get_query_result(std::string_view query_str);
+  bool ir_counter_available();
   auto get_cycle_interval_ms() const { return std::max(this->cycle_time_ms, this->is_free_run() ? 0 : this->get_update_interval()); }
 
  protected:
