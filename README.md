@@ -111,6 +111,12 @@ The main control interface. Supported features:
     target temperature at a steady state so I add a +1.0C offset here.
   * Range limits for values sent to the unit. Defaults should work fine, but if
     your unit is different they can be overridden.
+* Optional `setpoint_dither` (default `true`). When the ideal setpoint falls
+  between the unit's 0.5C steps, the commanded value is rounded in the
+  direction of change so it oscillates over the ideal value over time. Set to
+  `false` to always round down instead, trading the oscillation (and its
+  periodic setpoint writes while the temperature hovers around the target) for
+  a steady command up to half a step below the ideal value.
 
 Daikin's modes don't neatly fit into the discrete "preset" category modelled by
 ESPHome as they function more like mode modifiers. Switches are provided for
