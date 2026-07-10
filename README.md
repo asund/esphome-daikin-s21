@@ -112,11 +112,11 @@ The main control interface. Supported features:
   * Range limits for values sent to the unit. Defaults should work fine, but if
     your unit is different they can be overridden.
 * Optional `setpoint_dither` (default `true`). When the ideal setpoint falls
-  between the unit's 0.5C steps, the commanded value is rounded in the
-  direction of change so it oscillates over the ideal value over time. Set to
-  `false` to always round down instead, trading the oscillation (and its
-  periodic setpoint writes while the temperature hovers around the target) for
-  a steady command up to half a step below the ideal value.
+  between the unit's steps, the commanded value is rounded in the direction of
+  change so it oscillates over the ideal value over time. Set to `false` to
+  round to the nearest step instead, trading the oscillation (and its periodic
+  setpoint writes while the temperature hovers around the target) for a steady
+  command within half a step of the ideal value.
 
 Daikin's modes don't neatly fit into the discrete "preset" category modelled by
 ESPHome as they function more like mode modifiers. Switches are provided for
