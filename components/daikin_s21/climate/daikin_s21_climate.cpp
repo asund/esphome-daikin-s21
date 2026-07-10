@@ -377,6 +377,11 @@ bool DaikinS21Climate::calc_unit_setpoint(const DaikinSetpointMode& mode_params,
     } else {
       // no difference, no rounding necessary
     }
+  } else {
+    // No dither: round to the nearest step. Truncation alone would bias the command
+    // down by up to a full step, which compounds with units that already regulate
+    // below their commanded setpoint.
+    new_unit_setpoint = new_unit_setpoint + (SETPOINT_STEP / 2);
   }
   new_unit_setpoint = (new_unit_setpoint / SETPOINT_STEP) * SETPOINT_STEP;  // complete round by truncating fractional component of step
 
