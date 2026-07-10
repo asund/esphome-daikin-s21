@@ -55,6 +55,8 @@ class DaikinS21Climate : public climate::Climate,
   sensor::Sensor *temperature_sensor_{};
   sensor::Sensor *humidity_sensor_{};
   DaikinC10 unit_setpoint{TEMPERATURE_INVALID};
+  uint16_t last_ir_counter{};
+  bool ir_counter_primed{};
   bool check_sensors{true};
   bool check_offset{true};
   bool freerun_offset{};
