@@ -99,10 +99,9 @@ void DaikinS21Climate::loop() {
   // the user's remote from one the unit shifted on its own (or a readback artifact).
   // The counter can lag the setpoint readback by a few seconds and increments in
   // unit-specific strides (10 per command observed), so any change counts as activity.
-  // It is also volatile on the unit side: a unit power loss resets it to zero
-  // (observed 1040 -> 10), so a large DROP is expected data, not corruption. Treating
-  // any change as activity deliberately fails open for one pass in that case, which
-  // matches the unit reverting to its own power-on state anyway.
+  // The unit-side counter can also reset to near zero without warning (observed
+  // 1040 -> 10; cause unconfirmed), so a large DROP is expected data, not corruption.
+  // Treating any change as activity deliberately fails open for one pass in that case.
   // A mismatch that arrives before the counter catches up is left unadopted with
   // unit_setpoint unsynced, so adoption completes on a later pass once the counter moves.
   const uint16_t ir_counter = this->get_parent()->get_ir_counter();
