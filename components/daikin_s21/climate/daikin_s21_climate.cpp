@@ -367,21 +367,18 @@ bool DaikinS21Climate::calc_unit_setpoint(const DaikinSetpointMode& mode_params,
   auto new_unit_setpoint = static_cast<DaikinC10>(this->target_temperature) + sensor_offset + mode_params.offset;
 
   // Round to Daikin's internal setpoint resolution
-  if (this->setpoint_dither) {
-    // When the ideal setpoint is between steps force it in the direction of change by controlling rounding. Over time it should oscillate over the ideal setpoint.
-    if (new_unit_setpoint < unit_temperature) {
-      // commanding the unit lower, round down
-    } else if (new_unit_setpoint > unit_temperature) {
-      // commanding the unit higher, round up by adding almost a full step
-      new_unit_setpoint = new_unit_setpoint + (SETPOINT_STEP - 1);
-    } else {
-      // no difference, no rounding necessary
-    }
-  } else {
+  if (this->setpoint_dither == false) {
     // No dither: round to the nearest step. Truncation alone would bias the command
     // down by up to a full step, which compounds with units that already regulate
     // below their commanded setpoint.
     new_unit_setpoint = new_unit_setpoint + (SETPOINT_STEP / 2);
+  } else if (new_unit_setpoint < unit_temperature) {
+    // commanding the unit lower, round down
+  } else if (new_unit_setpoint > unit_temperature) {
+    // commanding the unit higher, round up by adding almost a full step
+    new_unit_setpoint = new_unit_setpoint + (SETPOINT_STEP - 1);
+  } else {
+    // no difference, no rounding necessary
   }
   new_unit_setpoint = (new_unit_setpoint / SETPOINT_STEP) * SETPOINT_STEP;  // complete round by truncating fractional component of step
 
