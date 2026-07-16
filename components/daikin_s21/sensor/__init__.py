@@ -23,6 +23,7 @@ from esphome.const import (
     ICON_WATER_PERCENT,
     STATE_CLASS_MEASUREMENT,
     STATE_CLASS_MEASUREMENT_ANGLE,
+    STATE_CLASS_TOTAL_INCREASING,
     UNIT_CELSIUS,
     UNIT_DEGREES,
     UNIT_HERTZ,
@@ -64,7 +65,7 @@ ENERGY_SENSOR_SCHEMA = sensor.sensor_schema(
     unit_of_measurement=UNIT_KILOWATT_HOURS,
     accuracy_decimals=1,
     device_class=DEVICE_CLASS_ENERGY,
-    state_class=STATE_CLASS_MEASUREMENT,
+    state_class=STATE_CLASS_TOTAL_INCREASING,
 )
 
 CONFIG_SCHEMA = (
