@@ -159,6 +159,36 @@ class CommandState {
   }
 };
 
+/**
+ * Accumulator for total_increasing lifetime measurements.
+ *
+ * Base type is used as the value, there should be no need to handle rollover if it's wide enough.
+ *
+ * @tparam T the underlying type to wrap
+ */
+template <std::unsigned_integral T>
+class TotalIncreasing {
+  T initial{};
+  T current{};
+
+public:
+  /**
+   * Add a new sample. First sample will initialize the zero point.
+   *
+   * @param meas the new reading
+   */
+  void add_sample(const T meas) {
+    if ((this->initial == 0) && (this->current == 0)) {
+      this->initial = meas; // init
+    } else {
+      this->current = static_cast<T>(meas - this->initial);
+    }
+  }
+
+  /** Get the rolling accumulator value. */
+  uint32_t value() const { return this->current; }
+};
+
 enum DaikinFanMode : uint8_t {
   DaikinFanAuto,
   DaikinFanSilent,

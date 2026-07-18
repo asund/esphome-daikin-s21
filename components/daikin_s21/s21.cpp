@@ -1401,7 +1401,7 @@ void DaikinS21::handle_state_ir_counter(const std::span<const uint8_t> payload) 
 }
 
 void DaikinS21::handle_state_energy_consumption_total(const std::span<const uint8_t> payload) {
-  this->energy_consumption_total = bytes_to_num(payload, 16);
+  this->energy_consumption_total.add_sample(bytes_to_num(payload, 16));
 }
 
 void DaikinS21::handle_state_vertical_swing_mode(const std::span<const uint8_t> payload) {
@@ -1415,8 +1415,8 @@ void DaikinS21::handle_state_outdoor_capacity(const std::span<const uint8_t> pay
 }
 
 void DaikinS21::handle_state_energy_consumption_climate_modes(const std::span<const uint8_t> payload) {
-  this->energy_consumption_cooling = bytes_to_num(payload.first(8), 16);
-  this->energy_consumption_heating = bytes_to_num(payload.subspan(8, 8), 16);
+  this->energy_consumption_cooling.add_sample(bytes_to_num(payload.first(8), 16));
+  this->energy_consumption_heating.add_sample(bytes_to_num(payload.subspan(8, 8), 16));
 }
 
 void DaikinS21::handle_state_model_name(std::span<const uint8_t> payload) {
