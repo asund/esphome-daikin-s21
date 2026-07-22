@@ -26,11 +26,15 @@ A big thanks to:
 A short changelog of sorts, I'll keep things here where a user might encounter
 breaking or significant changes, including configuration updates.
 
-* Updated the state class of energy sensors to total_increasing. These values
-  will no longer represent the total lifetime energy use of your system, now it
-  will be the nergy use while they're being monitored. They should integrate
-  into the energy dashboard. After upgrading you might want to look at or fix
-  your HA history to ensure accurate historical values.
+* Updated the state class of energy sensors to total_increasing so they
+  integrate into the Home Assistant Energy dashboard. The values still track the
+  unit's lifetime totals; they are seeded from the Daikin's own counter and
+  accumulated monotonically on-device, so the small backward dips the unit
+  reports on power loss are absorbed rather than published as a decrease, and
+  energy consumed after a dip is still counted. The totals are persisted
+  to flash to survive reboots and power loss. If flash wear is a concern (writes
+  are already coalesced and rate-limited by the 0.1 kWh resolution), raise the
+  `flash_write_interval` on the esp32 platform to reduce write frequency.
 * Binary sensor changes: Removed `valve`, use unit `active` instead for the
   same info. Renamed `multizone_conflict` to `multizone_online`, inverting
   logic and changing the device class. Added `system_online` to track all units
