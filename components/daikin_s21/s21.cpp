@@ -2,6 +2,7 @@
 #include <numeric>
 #include <ranges>
 #include "esphome/core/application.h"
+#include "esphome/core/helpers.h"
 #include "daikin_s21_queries.h"
 #include "s21.h"
 #include "utils.h"
@@ -256,6 +257,11 @@ DaikinS21::DaikinS21(uart::UARTComponent * const uart)
 }
 
 void DaikinS21::setup() {
+  // restore persisted energy accumulators (survives reboots and power loss)
+  // constant key: assumes one DaikinS21 per node (one ESP32 per indoor unit)
+  this->energy_pref_ = global_preferences->make_preference<EnergyCounters>(fnv1_hash("daikin_s21_energy"));
+  this->energy_pref_.load(&this->energy_);  // leaves defaults (unseeded) if nothing stored
+
   // mitigation, remove when 2026.4.1 released
   if (this->get_update_interval() <= 1) {
     this->set_update_interval(SCHEDULER_DONT_RUN);
@@ -1401,7 +1407,8 @@ void DaikinS21::handle_state_ir_counter(const std::span<const uint8_t> payload) 
 }
 
 void DaikinS21::handle_state_energy_consumption_total(const std::span<const uint8_t> payload) {
-  this->energy_consumption_total = bytes_to_num(payload, 16);
+  this->energy_.total.add_sample(bytes_to_num(payload, 16));
+  this->save_energy_state_();
 }
 
 void DaikinS21::handle_state_vertical_swing_mode(const std::span<const uint8_t> payload) {
@@ -1415,8 +1422,15 @@ void DaikinS21::handle_state_outdoor_capacity(const std::span<const uint8_t> pay
 }
 
 void DaikinS21::handle_state_energy_consumption_climate_modes(const std::span<const uint8_t> payload) {
-  this->energy_consumption_cooling = bytes_to_num(payload.first(8), 16);
-  this->energy_consumption_heating = bytes_to_num(payload.subspan(8, 8), 16);
+  this->energy_.cooling.add_sample(bytes_to_num(payload.first(8), 16));
+  this->energy_.heating.add_sample(bytes_to_num(payload.subspan(8, 8), 16));
+  this->save_energy_state_();
+}
+
+// Persist the energy accumulators. Cheap to call often: ESPHome coalesces writes to
+// flash on flash_write_interval, and the 0.1 kWh resolution rate-limits changes anyway.
+void DaikinS21::save_energy_state_() {
+  this->energy_pref_.save(&this->energy_);
 }
 
 void DaikinS21::handle_state_model_name(std::span<const uint8_t> payload) {

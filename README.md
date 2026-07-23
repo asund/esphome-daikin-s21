@@ -26,6 +26,15 @@ A big thanks to:
 A short changelog of sorts, I'll keep things here where a user might encounter
 breaking or significant changes, including configuration updates.
 
+* Updated the state class of energy sensors to total_increasing so they
+  integrate into the Home Assistant Energy dashboard. The values still track the
+  unit's lifetime totals; they are seeded from the Daikin's own counter and
+  accumulated monotonically on-device, so the small backward dips the unit
+  reports on power loss are absorbed rather than published as a decrease, and
+  energy consumed after a dip is still counted. The totals are persisted
+  to flash to survive reboots and power loss. If flash wear is a concern (writes
+  are already coalesced and rate-limited by the 0.1 kWh resolution), raise the
+  `flash_write_interval` on the esp32 platform to reduce write frequency.
 * Binary sensor changes: Removed `valve`, use unit `active` instead for the
   same info. Renamed `multizone_conflict` to `multizone_online`, inverting
   logic and changing the device class. Added `system_online` to track all units
@@ -52,22 +61,6 @@ breaking or significant changes, including configuration updates.
   update rate that aren't actually that interesting. Changes to other values
   (action, fan mode, etc.) will still be published immediately. It can be
   omitted for free run operation if desired.
-* Added instantaneous unit power sensor.
-* Fixed compressor frequency sensor scaling. Please purge your history for this
-  sensor, the values will be incorrect.
-* Added additional energy consumption sensors for protocol 3.20+. Renamed
-  existing `power_consumption` to `energy_indoor` (briefly) to `energy`. Sorry.
-  Update your YAML.
-* Checksum calculation was fixed. There's a faint chance that a command or
-  query that was previously NAK'd actually now works.
-* Custom Silent fan mode changed to standard Quiet. Custom Automatic was also
-  updated to standard Auto to work around a validation issue, which results in
-  a nicer icon. Update any automations to specify these new mode settings.
-* Configuration schema for the climate component (specifically the unit
-  temperature range limits) has changed to organize them by mode as well as
-  adding a temperature offset to be applied when commanding the unit. Update
-  your configurations to the new schema (see example) if your project now fails
-  to compile.
 
 ## Features
 

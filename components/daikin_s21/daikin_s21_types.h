@@ -159,6 +159,40 @@ class CommandState {
   }
 };
 
+/**
+ * Monotonic accumulator for a lifetime counter that can move backward.
+ *
+ * The Daikin energy counters drop by up to ~1 kWh on power loss and wrap at their
+ * type width. Accumulating only the rises keeps the value increasing and counts
+ * energy re-consumed after a dip; seeding to the first reading keeps it aligned
+ * with the unit's absolute lifetime.
+ *
+ * @tparam T the underlying type to wrap
+ */
+template <std::unsigned_integral T>
+class TotalIncreasing {
+public:
+  /** Add a new sample. Seeds on the first reading, then adds only positive deltas. */
+  void add_sample(const T meas) {
+    if (this->seeded == false) {
+      this->total = meas;  // seed to the unit's lifetime
+    } else if (meas >= this->last) {
+      this->total += static_cast<uint32_t>(meas - this->last);
+    }
+    // meas < last (power-loss remainder, reset or rollover): rebaseline, add nothing.
+    // A T-width rollover thus drops <1 kWh once per full cycle, not worth reconstructing.
+    this->last = meas;
+    this->seeded = true;
+  }
+
+  uint32_t value() const { return this->total; }
+
+private:
+  uint32_t total{};  // wide enough not to wrap
+  T last{};          // previous raw reading
+  bool seeded{};
+};
+
 enum DaikinFanMode : uint8_t {
   DaikinFanAuto,
   DaikinFanSilent,
