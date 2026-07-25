@@ -4,6 +4,7 @@
 #include "esphome/core/application.h"
 #include "esphome/core/helpers.h"
 #include "daikin_s21_queries.h"
+#include "daikin_s21_types.h"
 #include "s21.h"
 #include "utils.h"
 
@@ -93,17 +94,26 @@ static constexpr std::array<uint8_t, climate::CLIMATE_SWING_HORIZONTAL + 1> clim
   '1',  // CLIMATE_SWING_VERTICAL
   '2',  // CLIMATE_SWING_HORIZONTAL
 }};
-constexpr auto s21_to_climate_swing_mode = encoding_to_enum<climate::ClimateSwingMode, climate::CLIMATE_SWING_HORIZONTAL + 1, climate_swing_encodings>;
-constexpr auto climate_swing_mode_to_s21 = enum_to_encoding_checked<climate::ClimateSwingMode, climate::CLIMATE_SWING_HORIZONTAL + 1, climate_swing_encodings>;
+constexpr auto s21_to_climate_swing_mode = encoding_to_enum<climate::ClimateSwingMode, climate_swing_encodings>;
+constexpr auto climate_swing_mode_to_s21 = enum_to_encoding<climate::ClimateSwingMode, climate_swing_encodings>;
 
-static constexpr std::array<uint8_t, DaikinHumidityModeCount> humidity_mode_encodings = {{
-  '0',
-  0x3A,
-  0x3B,
-  0x3C,
-  0xFF,
+static constexpr std::array<uint8_t, DaikinHumidityModeCount> humid_heat_encodings = {{
+  '0',  // off
+  0x38, // humid heat low
+  0x39, // humid heat standard
+  0x3A, // humid heat high
+  0xFF, // continuous
 }};
-constexpr auto s21_to_humidity_mode = encoding_to_enum<DaikinHumidityMode, DaikinHumidityModeCount, humidity_mode_encodings>;
+constexpr auto s21_to_humid_heat_mode = encoding_to_enum<DaikinHumidityMode, humid_heat_encodings>;
+
+static constexpr std::array<uint8_t, DaikinHumidityModeCount> dry_cool_encodings = {{
+  '0',  // off
+  0x3A, // dry cool low
+  0x3B, // dry cool standard
+  0x3C, // dry cool high
+  0xFF, // continuous
+}};
+constexpr auto s21_to_dry_cool_mode = encoding_to_enum<DaikinHumidityMode, dry_cool_encodings>;
 
 static constexpr std::array<uint8_t, DaikinVerticalSwingModeCount> vertical_swing_mode_encodings = {{
   '0',
@@ -114,7 +124,7 @@ static constexpr std::array<uint8_t, DaikinVerticalSwingModeCount> vertical_swin
   '5',
   '?',
 }};
-constexpr auto s21_to_vertical_swing_mode = encoding_to_enum<DaikinVerticalSwingMode, DaikinVerticalSwingModeCount, vertical_swing_mode_encodings>;
+constexpr auto s21_to_vertical_swing_mode = encoding_to_enum<DaikinVerticalSwingMode, vertical_swing_mode_encodings>;
 
 static constexpr std::array<const char *, ActiveSourceCount> active_source_strings = {{
   "unknown",
@@ -396,12 +406,19 @@ void DaikinS21::dump_config() {
  * Set the climate settings bundle and trigger a write to the unit.
  */
 void DaikinS21::set_climate_settings(const DaikinClimateSettings climate) {
-  if (this->get_climate() != climate) {
+  const auto prev_climate = this->get_climate();
+  if (prev_climate != climate) {
     ESP_LOGD(TAG, "Mode: %s  Setpoint: %.1f  Fan: %s",
       LOG_STR_ARG(climate::climate_mode_to_string(climate.mode)),
       climate.setpoint.f_degc(),
       daikin_fan_mode_to_cstr(climate.fan));
     this->climate.stage(climate);
+    // stage the humidity value as well if changing to heating or cooling
+    if ((prev_climate.mode != climate.mode) &&
+        (this->swing_humidity.value().humidity != DaikinHumidityOff) &&
+        ((climate.mode == climate::CLIMATE_MODE_HEAT) || (climate.mode == climate::CLIMATE_MODE_COOL))) {
+        this->swing_humidity.stage({ this->get_swing_mode(), this->get_humidity_mode() });
+    }
     this->trigger_cycle();
   }
 }
@@ -838,7 +855,11 @@ void DaikinS21::handle_serial_idle() {
     if (this->swing_humidity.pending.swing != climate::CLIMATE_SWING_OFF) {
       payload[1] = '?';
     }
-    payload[2] = humidity_mode_encodings[this->swing_humidity.pending.humidity];
+    if (this->climate.value().mode == climate::CLIMATE_MODE_HEAT) {
+      payload[2] = humid_heat_encodings[this->swing_humidity.pending.humidity];
+    } else if (this->climate.value().mode == climate::CLIMATE_MODE_COOL) {
+      payload[2] = dry_cool_encodings[this->swing_humidity.pending.humidity];
+    }
     this->send_command(StateCommand::SwingHumidityModes, payload);
     this->swing_humidity.set_confirm_ms(cycle_interval);
     // keep vertical swing mode in sync
@@ -1366,7 +1387,13 @@ void DaikinS21::handle_state_error_status(const std::span<const uint8_t> payload
 
 void DaikinS21::handle_state_swing_humidity_modes(const std::span<const uint8_t> payload) {
   this->swing_humidity.active.swing = s21_to_climate_swing_mode(payload[0]);
-  this->swing_humidity.active.humidity = s21_to_humidity_mode(payload[2]);
+  if (this->climate.active.mode == climate::CLIMATE_MODE_HEAT) {
+    this->swing_humidity.active.humidity = s21_to_humid_heat_mode(payload[2]);
+  } else if (this->climate.active.mode == climate::CLIMATE_MODE_COOL) {
+    this->swing_humidity.active.humidity = s21_to_dry_cool_mode(payload[2]);
+  } else {
+    this->swing_humidity.active.humidity = this->swing_humidity.pending.humidity; // keep the current humidity setting in other modes
+  }
   // keep vertical swing mode in sync
   apply_swing_mode(this->swing_humidity.active.swing, this->vertical_swing_mode.active);
 }

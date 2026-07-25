@@ -26,6 +26,9 @@ A big thanks to:
 A short changelog of sorts, I'll keep things here where a user might encounter
 breaking or significant changes, including configuration updates.
 
+* Modified humidity control to add support for humid heating. The setting is
+  now also applied when switching to heating or cooling modes and only updated
+  in those modes so the setting is preserved over mode changes.
 * Updated the state class of energy sensors to total_increasing so they
   integrate into the Home Assistant Energy dashboard. The values still track the
   unit's lifetime totals; they are seeded from the Daikin's own counter and
@@ -160,11 +163,13 @@ changes.
   for the vertical louver, including the standard on and off for the varrying
   setting.
 
-* Humidity setpoint. v2+ may support this. The operation of this isn't well
-  understood. There may be protocol sequencing work required to maintain
-  control in the desired mode. If you have an "Ururu Sarara" unit and want to
-  help, please post your findings in the discussions section. For now the
-  setting is sent to the unit when changed in HA and nothing else done.
+* Humidity operation. v2+ may support this on "Ururu Sarara" units. Controls
+  humidity while in heating and cooling modes to provide dry cooling or humid
+  heating. The operation of this isn't well understood due to lack of user
+  feedback. There may be protocol sequencing work required to maintain control
+  in the desired mode. I am monitoring support being added to the Faikout
+  project for this feature. If you want to help, please post your findings in
+  the discussions section or open an issue.
 
 ### Switch
 

@@ -76,18 +76,20 @@ inline constexpr DaikinC10 SETPOINT_STEP{1.0F}; // Daikin setpoint granularity
 inline constexpr DaikinC10 TEMPERATURE_STEP{0.5F}; // Daikin temperature sensor granularity
 inline constexpr DaikinC10 TEMPERATURE_INVALID{DaikinC10::nan_sentinel}; // NaN
 
+template<size_t N>
+using uint8_array = std::array<uint8_t, N>;
+
 /**
  * Function template for looking up an index enum value from an encoding.
  *
  * Encoding is checked and the first index is returned if out of range.
  *
  * @tparam T enum type
- * @tparam N size of enum and encoding table
  * @tparam &encoding_table encoding table
  * @param encoding encoding to look up
  * @return associated index enum value
  */
-template <typename T, size_t N, const std::array<uint8_t, N> &encoding_table>
+template <typename T, const uint8_array &encoding_table>
 constexpr T encoding_to_enum(const uint8_t encoding) {
   const auto iter = std::ranges::find(encoding_table, encoding);
   if (iter != std::ranges::end(encoding_table)) {
@@ -102,14 +104,13 @@ constexpr T encoding_to_enum(const uint8_t encoding) {
  * Index is checked and the first value is returned if out of range.
  *
  * @tparam T enum type
- * @tparam N size of enum and encoding table
  * @tparam &encoding_table encoding table
  * @param index index to look up
  * @return associated encoding
  */
-template <typename T, size_t N, const std::array<uint8_t, N> &encoding_table>
-constexpr uint8_t enum_to_encoding_checked(const T index) {
-  if (index < N) {
+template <typename T, const uint8_array &encoding_table>
+constexpr uint8_t enum_to_encoding(const T index) {
+  if (index < encoding_table.size()) {
     return encoding_table[index];
   }
   return encoding_table[0];
@@ -251,7 +252,7 @@ enum DaikinHumidityMode : uint8_t {
 
 struct DaikinSwingHumiditySettings {
   climate::ClimateSwingMode swing{climate::ClimateSwingMode::CLIMATE_SWING_OFF};
-  DaikinHumidityMode humidity{DaikinHumidityOff};
+  DaikinHumidityMode humidity{DaikinHumidityOff}; // special, encoding depends on climate mode
 
   constexpr bool operator==(const DaikinSwingHumiditySettings &other) const = default;
 };
