@@ -144,10 +144,15 @@ void DaikinS21Climate::loop() {
     // combined with a reference sensor offset, re-derive the target from the unit's shifted
     // value on every occurrence. Units that don't answer the IR counter query keep the old
     // adopt-always behavior.
-    if ((std::isfinite(this->target_temperature) == false) || // controller init or external mode change to a setpoint mode
-        ((this->unit_setpoint != reported_climate.setpoint) && // external change to setpoint...
-         (ir_activity || (this->target_resolved == false) || // ...seen alongside remote activity (or still resolving after boot)
-          (this->get_parent()->ir_counter_available() == false)))) { // ...or IR activity is unknowable on this unit
+    // The NaN-target arm is gated too: control() nulls the target on OFF, and if the
+    // power-off write is lost on the wire (or the unit lags applying it), the next pass
+    // still reports a setpoint mode - adopting there overwrites the user's target with
+    // the unit's (offset-shifted) setpoint and save_target() persists it. Boot init still
+    // adopts via target_resolved == false.
+    if (((std::isfinite(this->target_temperature) == false) || // controller init or external mode change to a setpoint mode
+         (this->unit_setpoint != reported_climate.setpoint)) && // external change to setpoint...
+        (ir_activity || (this->target_resolved == false) || // ...seen alongside remote activity (or still resolving after boot)
+         (this->get_parent()->ir_counter_available() == false))) { // ...or IR activity is unknowable on this unit
       // Assume the reported setpoint (external IR remote change) should be the target temperature
       auto new_target = reported_climate.setpoint;
       // When first initializing, we don't know if the reported setpoint is from the IR remote or an offset value from a
@@ -174,9 +179,13 @@ void DaikinS21Climate::loop() {
       update_unit_setpoint = true;
     }
 
-    // Setpoint has been flagged for recalculation, see if it results in a change for the unit
+    // Setpoint has been flagged for recalculation, see if it results in a change for the unit.
+    // Never compute from a NaN target: with adoption gated, the target can legitimately be
+    // NaN while a mode transition is in flight, and calc would derive a garbage setpoint
+    // from the NaN cast (violating its precondition).
     if (update_unit_setpoint) {
-      update_unit_setpoint = this->calc_unit_setpoint(*mode_params, new_temperature);
+      update_unit_setpoint = std::isfinite(this->target_temperature) &&
+                             this->calc_unit_setpoint(*mode_params, new_temperature);
     }
   } else {
     // Not a setpoint mode
@@ -463,7 +472,11 @@ void DaikinS21Climate::set_s21_climate() {
   // Command new settings
   this->get_parent()->set_climate_settings({this->mode, this->get_daikin_fan_mode(), this->unit_setpoint});
   if (auto * const mode_params = this->get_setpoint_mode_params(this->mode)) {
-    mode_params->save_target(this->target_temperature);
+    // Never persist a NaN target: the int16 cast turns it into garbage that poisons the
+    // saved dial, and the next mode engage then loads an invalid target.
+    if (std::isfinite(this->target_temperature)) {
+      mode_params->save_target(this->target_temperature);
+    }
   }
 }
 
