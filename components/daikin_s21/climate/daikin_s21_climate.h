@@ -18,6 +18,7 @@ class DaikinSetpointMode {
 
   void save_target(DaikinC10 value);
   DaikinC10 load_target();
+  static_assert(std::is_trivially_copyable_v<DaikinC10>, "persisted verbatim to flash");
 };
 
 class DaikinS21Climate : public climate::Climate,
@@ -35,6 +36,7 @@ class DaikinS21Climate : public climate::Climate,
   void set_supported_modes(climate::ClimateModeMask modes);
   void set_supported_swing_modes(climate::ClimateSwingModeMask swing_modes);
   void set_temperature_reference_sensor(sensor::Sensor * const sensor) { this->temperature_sensor_ = sensor; }
+  void set_enable_presets(bool enable);
   void set_humidity_reference_sensor(sensor::Sensor * sensor);
   void set_setpoint_mode_config(climate::ClimateMode mode, DaikinC10 offset, DaikinC10 min, DaikinC10 max);
 
@@ -48,19 +50,21 @@ class DaikinS21Climate : public climate::Climate,
   DaikinC10 temperature_sensor_degc();
   DaikinC10 get_current_temperature();
   bool calc_unit_setpoint(const DaikinSetpointMode &mode_params, DaikinC10 current_temperature);
+  bool synchronize_special_setpoint(DaikinC10 setpoint);
   float get_current_humidity() const;
   DaikinFanMode get_daikin_fan_mode() const;
   bool set_daikin_fan_mode(DaikinFanMode fan);
+  DaikinPreset get_daikin_preset() const;
+  bool set_daikin_preset(DaikinPreset preset);
   void set_s21_climate() const;
 
   sensor::Sensor *temperature_sensor_{};
   sensor::Sensor *humidity_sensor_{};
-  DaikinC10 unit_setpoint{TEMPERATURE_INVALID};
+  DaikinC10 unit_setpoint{};
   bool setpoint_dither{true};
   bool check_sensors{true};
   bool check_offset{true};
   bool freerun_offset{};
-  bool target_resolved{};
 
   struct SetpointModeParams {
     DaikinSetpointMode cool{};

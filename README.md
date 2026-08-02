@@ -26,6 +26,8 @@ A big thanks to:
 A short changelog of sorts, I'll keep things here where a user might encounter
 breaking or significant changes, including configuration updates.
 
+* Added Ururu/Sarara humidity control modes via climate presets. The presets
+  need to be enabled in your config to use them if you have one of these units.
 * Added vertical angle setpoint emulation for units that lack the setpoint
   command. Horizontal swing setting is now preserved while using this control
   for both methods. The discrete step should be preserved in the UI afterwards
@@ -91,21 +93,22 @@ The main control interface. Supported features:
 * Climate modes OFF, HEAT_COOL, COOL, HEAT, FAN_ONLY and DRY. The list is
   configurable in case your unit doesn't support them all or you otherwise want
   to restrict the ones available.
-* Climate action reporting.
+* Climate action, current temperature and humidity reporting.
 * Fan modes auto, quiet and 1-5.
 * Swing modes off, horizontal, vertical, and both. These can also be restricted
-  to a specified list.
-* Optional external temperature and humidity reporting and use in an secondary
-  control loop. You can use a sensor placed in your living space to get a
-  better reflection of the temperature you feel.
+  to a specified list using configuration.
+* Optional external temperature and humidity sensor reporting, integrating a
+  sensor placed in your living space to get a better reflection of the
+  temperature you feel. The external temperature can be used in a secondary
+  control loop so you can set what you want to feel.
 * Optional setpoint mode (HEAT_COOL, COOL, HEAT) configuration:
-  * Offset to apply to commanded value. If you find your unit adequately
-    conditions your living space, Daikin's control loop will overshoot the
+  * Offset to apply to commanded value. If your unit is adequately sized to
+    condition your living space, Daikin's control loop will overshoot the
     setpoint. It can also not achieve the desired setpoint based on the space
     and reference sensor placement. e.g. One of my rooms is 1.0C less than the
     target temperature at a steady state so I add a +1.0C offset here.
-  * Range limits for values sent to the unit. Defaults should work fine, but if
-    your unit is different they can be overridden.
+  * Temperature range limits for values sent to the unit. Defaults should work
+    fine, but if your unit is different they can be overridden.
 * Optional `offset_interval` (default `5min`). period to recalculate the offset
   between the "ideal" external reference sensor and the internal Daikin sensor.
 * Optional `setpoint_dither` (default `true`). When the ideal setpoint falls
@@ -113,12 +116,23 @@ The main control interface. Supported features:
   change so it oscillates over the ideal value over time. Set to `false` to
   round to the nearest step instead, trading the oscillation (and its periodic
   setpoint writes while the temperature hovers around the target) for a steady
-  command within half a step of the ideal value.
+  commanded value within half a step of the ideal value.
+* Optionl `preset` (default `false`). Enable preset control of "Ururu Sarara"
+  special humidity modes on models that support them. Due to the command format
+  only "Ururu" Humidify is uniquely available using this control, "Sarara" Dry
+  is available in the regular climate mode. These are humidty first modes that
+  don't attempt to reach a target setpoint. The value is only used and updated
+  in relevant climate modes. Use the separate `humidity` select component for
+  the temperature subordinate Dry Cooling and Humid Heating modes. If your unit
+  doesn't support it you can be prevented switching into heating mode if Ururu
+  Humidify is active as the command will fail. Disable the preset first or
+  better yet, don't enable presets at all.
 
-Daikin's modes don't neatly fit into the discrete "preset" category modelled by
-ESPHome as they function more like mode modifiers. Switches are provided for
-individual control of these modifiers instead of climate presets. The only one
-that's exclusive is Powerful, but I felt the interface should be uniform.
+Daikin's other modes don't neatly fit into the discrete "preset" category
+modelled by ESPHome as they function more like mode modifiers. Switches are
+provided for individual control of these modifiers instead of climate presets.
+The only one that's exclusive to other modes is Powerful, but I felt the
+interface should be uniform.
 
 The standard Daikin control loop has a few deficiencies:
 * The setpoint value has 1.0°C granularity.
@@ -153,10 +167,12 @@ changes.
 
 ### Select
 
+Dropdown controls for additional settings with multiple choices.
+
 * LED brightness. v2+ may support this. The value may change when using IR
   remote modes that make use of the PIR sensor. If this control works for you,
   there's no need to enable the Sensor LED or Sensor Mode switches or binary
-  sensors.
+  sensors as the functions are mutually exclusive.
 
 * Vertical swing setpoint. Command the vertical louvre to a preset angle and
   stop there. Horizontal swing is preserved during this time. Some units (v2+)
@@ -167,15 +183,15 @@ changes.
   angles can be optionally configured per action and are only used when there's
   no command support. The range may vary on your unit, turn on vertical swing
   and monitor the angles for your mode and unit to come up with your presets.
-  Dry action uses cool's angles.
+  Dry action uses cool's angles. You may find that stopping vertical swing
+  causes this control to snap to the nearest discrete setpoint.
 
-* Humidity operation. v2+ may support this on "Ururu Sarara" units. Controls
-  humidity while in heating and cooling modes to provide dry cooling or humid
-  heating. The operation of this isn't well understood due to lack of user
-  feedback. There may be protocol sequencing work required to maintain control
-  in the desired mode. I am monitoring support being added to the Faikout
-  project for this feature. If you want to help, please post your findings in
-  the discussions section or open an issue.
+* Humidity operation. v2+ may support this, though you may need an "Ururu
+  Sarara" unit. Controls humidity while in heating and cooling modes to provide
+  dry cooling or humid heating. The operation of this isn't well understood due
+  to lack of user feedback. If you want to help, please post your findings in
+  the discussions section or open an issue if you're willing to assist further
+  development.
 
 ### Switch
 
@@ -203,36 +219,37 @@ case for you and I can try to implement better control.
 
 * Demand Control (v2+, unverified). Select from 30%-100% of conditioning power
   output. As a reference point, the built in Econo mode limits this to around
-  70%.
+  70%. Note that this isn't direclty energy consumption.
 
 ## Feedback
 
 ### Sensor
 
 Sensors in ESPHome are geared more towards a periodic ADC value that can be
-filtered as necessary. The values read from the Daikin unit are pre-processed
-and won't normally require averaging filters and the like. The sensor component
-supports a configurable update interval that will publish the current values
-at a chosen rate. To make this reporting more responsive, the user can set this
-value to zero and every update from the unit, interesting or not, will be
-published. To reduce spam when doing this, please configure a delta filter on
-your sensors and only changes will be published over the network. See the
-example configuration.
+filtered as necessary the pre-processed values from the Daikin unit and won't
+normally require averaging filters and the like. The sensor component supports
+a configurable update interval that will publish the current values at a chosen
+rate. To make this reporting more responsive, the user can set this value to
+`never` and every update from the unit, interesting or not, will be published.
+To reduce spam when doing this, please configure a delta filter on your sensors
+and only changes will be published over the network. See the example
+configuration.
 
 * Inside temperature, usually measured at indoor air handler return.
 * Outside temperature from the exchanger.
-* Coil temperature of indoor air handler. These will be very similar for units
-  sharing an outdoor compressor. You may only want to enable this on a single
-  indoor unit to reduce UI clutter.
+* Coil temperature of indoor air handler. These will be very similar for active
+  units sharing an outdoor exchanger. You may only want to enable this on a
+  single indoor unit to reduce UI clutter.
 * Target temperature (internal setpoint, modified by special modes). This is
-  not the user setpoint and not that interesting to me but may be useful for
-  your automations.
+  not the user setpoint and usually not that interesting but may help in your
+  automations.
 * Fan speed of inside blower.
 * Vertical swing angle of louvre. This uses Daikin's reference frame.
 * Compressor frequency of the outside exchanger.
 * Humidity. Not supported on all units, can report a consistent 50% or 0% if
   not present.
-* Unit's demand from outside exchanger.
+* Unit's demand from outside exchanger, a 0-15 value representing the draw from
+  the outside exchanger.
 
 v2+ protocol units may also support:
 
@@ -291,7 +308,7 @@ As always, actual support may vary.
 * Software Version (v2+)
 
 If you've read the Faikout wiki you'll see many more queries available than
-what this project supports. I've added a text_sensor component to read these
+what this project supports. I've added a `text_sensor` component to read these
 raw values out for debugging and protocol decoding use, without having to add
 a dedicated sensor. Normally you wouldn't need to use this, but if a value
 looks interesting you can see the value change over time in Home Assistant.
@@ -305,16 +322,15 @@ details if you want a sensor or control added.
   support for controlling over S21 may not be there. See your model's
   documentation for supported wired remotes and their feature sets to confirm.
 * This code has only been tested on ESP32 pico and ESP32-S3. It compiles for
-  ESP8266.
+  ESP8266 and has been reported to work, but only on a hardware UART.
 * Tested with my 4MXL36TVJU outdoor unit and CTXS07LVJU, FTXS12LVJU, FTXS15LVJU
-  indoor units. These are protocol v0.
+  indoor units. These are protocol v0, so anything more featureful requires
+  your feedback and help.
 * Presence detection is limited to mode configuration. I haven't found a way to
   detect the state of the sensor and expose a motion detector sensor. If you're
-  handy with electronics, the PIR sensor output can be wired to a spare GPIO
-  and used that way.
+  handy with electronics, the active low PIR sensor output can be wired to a
+  spare GPIO and used that way.
 * Does not interact with the indoor units schedules. Do that with HA instead.
-* Higher protocol versions have limited support for their features due to the
-  equipment available to me, though I'm happy to try to work with you.
 * Daikin's internal R&D departments must be a bit chaotic. The latest models
   might have inferior command sets to those released years ago.
 
@@ -322,7 +338,7 @@ details if you want a sensor or control added.
 
 Please see the Faikout [wiring](https://codeberg.org/RevK/ESP32-Faikout/wiki/Wiring)
 page for detailed documentation including pinouts, alternate connectors with
-images. The below is just a quick reference overview.
+images. Below is just a quick reference overview.
 
 **NOTE:** The Daikin connector's Vcc provides >5V, so if you intend to power
 your board with this pin, be sure to test its output and regulate voltage
@@ -340,17 +356,17 @@ passive circuit with a voltage divider on the ESP Rx side should also be
 possible. Said user is using 1K/2K to bring 5V down closer to 3.3V logic levels.
 
 The ESP8266 platform is quite limited. Since the cost of boards are in the same
-ballpark, please use an ESP32 (or something with a free hardware UART). ESP8266
-boards often have a USB-Serial chip wired to their only hardware UART. This
-chip can interfere with the Rx pin on the microcontroller, driving it to levels
-that override the open drain output mode used by the Daikin unit, making it
-unable to pull the Rx line to ground and signalling responses to the ESP. If
-you want to use one anyways, a user has reported lifting the pads on this chip
-allows the single hardware UART to be used for communication with the unit.
-ESPHome's software UART implementation isn't viable for this application as it
-uses delays inside an interrupt routine. This might be accpetable at higher
-baud rates, but at 1200 baud the delays become too long and the system will
-watchdog out and reset. Just get an ESP32 board.
+ballpark, please use an ESP32 (or at least something with a free hardware UART).
+ESP8266 boards often have a USB-Serial chip wired to their only hardware UART.
+This chip can interfere with the Rx pin on the microcontroller, driving it to
+levels that override the open drain output mode used by the Daikin unit, making
+it unable to pull the Rx line to ground and signalling responses to the
+processor. If you want to use one anyways, a user has reported lifting the pads
+on this chip allows the single hardware UART to be used for communication with
+the unit. ESPHome's software UART implementation isn't viable for this
+application as it uses delays inside an interrupt routine. This might be
+accpetable at higher baud rates, but at 1200 baud the delays become too long
+and the system will watchdog out and reset. Just get an ESP32 board.
 
 ESPHome preferences (and the associated flash memory wear) are used in the
 following ways to save information over power cycles:
@@ -386,7 +402,7 @@ and precrimped wire leads on Aliexpress for a low cost.
 ### S403 Port
 
 The project has been reported to work on a unit with the S403 connecter as
-This has the same communication interface with a little additional
+this has the same communication interface with a little additional
 functionality, and most importantly to note, mains voltage exposed on a pin.
 Do not connect anything to pin 10. Don't populate it in your plug.
 
@@ -418,8 +434,8 @@ schema, see the example configuration.
 I am using ESP32-S3 mini dev boards and directly wiring communication to the
 S21 port. My Daikin unit pulls the TX line up to 5V, so I've configured my pin
 as open drain to work with it. The RX line relies on the ESP32's 5V tolerant
-GPIO pins. For power I am using a cheap 5V -> 3.3V switching module wired into
-Vcc on the dev board.
+GPIO pins. For power I am using a cheap switching regulator module to take
+14.5V from the Daikin unit down to 3.3V wired into Vcc on the dev board.
 
 ## Contributing
 
@@ -530,6 +546,7 @@ climate:
     #   - both
     # update_interval: never # Interval used to limit sensor publishing rate, 'never' for free run
     # offset_interval: 5min # Interval used to adjust the unit's setpoint using finer grained control, 'never' for free run
+    # preset: true  # Enable preset selection for Ururu Sarara humidity control modes
     # Optional sensors to use for temperature and humidity references
     sensor: daikin_temperature  # Internal, see indoor temperature sensor below
     # sensor: room_temp  # External, see homeassistant sensor below
