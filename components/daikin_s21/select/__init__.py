@@ -68,7 +68,7 @@ async def to_code(config):
             sel = await select.new_select(config[key], options=options)
             await cg.register_parented(sel, config[CONF_S21_ID])
             cg.add(func(sel))
-
-    cg.add(parent.set_vertical_angle_setpoints(ClimateAction.CLIMATE_ACTION_COOLING, config[CONF_VERTICAL_SWING][CONF_COOL_ACTION]))
-    cg.add(parent.set_vertical_angle_setpoints(ClimateAction.CLIMATE_ACTION_FAN, config[CONF_VERTICAL_SWING][CONF_FAN_ONLY_ACTION]))
-    cg.add(parent.set_vertical_angle_setpoints(ClimateAction.CLIMATE_ACTION_HEATING, config[CONF_VERTICAL_SWING][CONF_HEAT_ACTION]))
+    if CONF_VERTICAL_SWING in config:
+        cg.add(parent.set_vertical_angle_setpoints(ClimateAction.CLIMATE_ACTION_COOLING, config[CONF_VERTICAL_SWING][CONF_COOL_ACTION]))
+        cg.add(parent.set_vertical_angle_setpoints(ClimateAction.CLIMATE_ACTION_FAN, config[CONF_VERTICAL_SWING][CONF_FAN_ONLY_ACTION]))
+        cg.add(parent.set_vertical_angle_setpoints(ClimateAction.CLIMATE_ACTION_HEATING, config[CONF_VERTICAL_SWING][CONF_HEAT_ACTION]))

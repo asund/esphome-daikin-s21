@@ -417,7 +417,7 @@ void DaikinS21::set_climate_settings(const DaikinClimateSettings climate) {
     if ((prev_climate.mode != climate.mode) &&
         (this->get_humidity_mode() != DaikinHumidityOff) &&
         ((climate.mode == climate::CLIMATE_MODE_HEAT) || (climate.mode == climate::CLIMATE_MODE_COOL))) {
-        this->swing_humidity.stage({ this->get_swing_mode(), this->get_humidity_mode() });  // bypass change detection
+        this->swing_humidity.stage({ this->get_swing_mode(), this->get_humidity_mode() });  // bypass change detection, climate hasn't been processed yet
     }
     this->trigger_cycle();
   }
