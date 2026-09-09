@@ -88,6 +88,10 @@ constexpr climate::ClimateAction s21_to_climate_action(const uint8_t action) {
   }
 }
 
+constexpr bool is_vertical_setpoint_action(const climate::ClimateAction action) {
+  return (action == climate::CLIMATE_ACTION_COOLING) || (action == climate::CLIMATE_ACTION_HEATING) || (action == climate::CLIMATE_ACTION_FAN) || (action == climate::CLIMATE_ACTION_DRYING);
+}
+
 static constexpr std::array<uint8_t, climate::CLIMATE_SWING_HORIZONTAL + 1> climate_swing_encodings = {{
   '0',  // CLIMATE_SWING_OFF
   '7',  // CLIMATE_SWING_BOTH
@@ -1011,7 +1015,7 @@ void DaikinS21::louvre_runtime() {
       }
       this->louvre_terminate();
     } else if (this->louvres.command_support == is_vertical_active(this->get_swing_mode())) {
-      // override vertical control if swing being enabled in command mode or disabled in setpoint pause mode
+      // override vertical control if swing being enabled in command mode or disabled in swing pause mode
       this->louvre_terminate();
     }
     if ((this->louvres.enabled == false) && (this->louvres.command_support == false)) {
@@ -1034,6 +1038,15 @@ void DaikinS21::louvre_runtime() {
       this->louvres.mode = DaikinVerticalSwingOn;
     } else if (is_vertical_setpoint(this->louvres.mode)) {
       // preserve last discrete step when off is reported
+    } else if ((this->louvres.command_support == false) && is_vertical_setpoint_action(this->action_reported)) {  // attempt to recover setpoint if swing pause
+      // find the closest setpoint for the current range, then see if it's close enough to the current angle
+      auto &setpoints = this->angle_setpoints.get(this->action_reported);
+      auto closest = std::ranges::min_element(setpoints, {}, [this](const auto &setpoint){ return std::abs(this->vertical_angle - setpoint); });  // don't have to search them all, but it's only 5
+      if (std::abs(this->vertical_angle - *closest) <= LouvreState::SwingPauseTolerance) {
+        this->louvres.mode = static_cast<DaikinVerticalSwingMode>(DaikinVerticalSwingTop + std::ranges::distance(setpoints.begin(), closest));
+      } else {
+        this->louvres.mode = DaikinVerticalSwingOff;  // not at a setpoint
+      }
     } else {
       this->louvres.mode = DaikinVerticalSwingOff;
     }
