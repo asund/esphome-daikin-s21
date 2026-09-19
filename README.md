@@ -301,12 +301,6 @@ details if you want a sensor or control added.
 
 ## Limitations
 
-**NOTE:** There was a serious issue when using the Arduino framework.
-If flashed OTA you may lose communication and require a physical reflashing
-(annoying if your board in inside your air handler). Please stick to the
-ESP-IDF framework for now (Arduino is an extra shim over the ESP-IDF SDK
-anyways). See the framework selection in the configuration example.
-
 * Aforementioned S21 control limitations. Your unit may support a mode but
   support for controlling over S21 may not be there. See your model's
   documentation for supported wired remotes and their feature sets to confirm.
