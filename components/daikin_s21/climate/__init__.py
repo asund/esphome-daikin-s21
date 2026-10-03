@@ -14,6 +14,7 @@ from esphome.const import (
     CONF_MIN_TEMPERATURE,
     CONF_NEVER,
     CONF_OFFSET,
+    CONF_PRESET,
     CONF_SENSOR,
     CONF_SUPPORTED_MODES,
     CONF_SUPPORTED_SWING_MODES,
@@ -65,6 +66,7 @@ CONFIG_SCHEMA = (
         cv.Optional(CONF_HEAT_COOL_MODE, default={}): CONFIG_MODE_SCHEMA,
         cv.Optional(CONF_COOL_MODE, default={CONF_MAX_TEMPERATURE:"32"}): CONFIG_MODE_SCHEMA,
         cv.Optional(CONF_HEAT_MODE, default={CONF_MIN_TEMPERATURE:"10"}): CONFIG_MODE_SCHEMA,
+        cv.Optional(CONF_PRESET, default=False): cv.boolean,
     })
 )
 
@@ -75,6 +77,7 @@ async def to_code(config):
 
     cg.add(var.set_offset_interval(config[CONF_OFFSET_INTERVAL]))
     cg.add(var.set_setpoint_dither(config[CONF_SETPOINT_DITHER]))
+    cg.add(var.set_enable_presets(config[CONF_PRESET]))
 
     if CONF_SENSOR in config:
         sens = await cg.get_variable(config[CONF_SENSOR])

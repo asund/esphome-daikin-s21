@@ -410,20 +410,15 @@ void DaikinS21::dump_config() {
  * Set the climate settings bundle and trigger a write to the unit.
  */
 void DaikinS21::set_climate_settings(const DaikinClimateSettings climate) {
-  const auto prev_climate = this->get_climate();
-  if (prev_climate != climate) {
+  if (this->get_climate() != climate) {
     ESP_LOGD(TAG, "Mode: %s  Setpoint: %.1f  Fan: %s",
       LOG_STR_ARG(climate::climate_mode_to_string(climate.mode)),
       climate.setpoint.f_degc(),
       daikin_fan_mode_to_cstr(climate.fan));
     this->climate.stage(climate);
-    // stage the humidity value as well if changing to heating or cooling
-    if ((prev_climate.mode != climate.mode) &&
-        (this->get_humidity_mode() != DaikinHumidityOff) &&
-        ((climate.mode == climate::CLIMATE_MODE_HEAT) || (climate.mode == climate::CLIMATE_MODE_COOL))) {
-        this->swing_humidity.stage({ this->get_swing_mode(), this->get_humidity_mode() });  // bypass change detection, climate hasn't been processed yet
-    }
     this->trigger_cycle();
+    // ensure humidity mode is clamped to operation bounds when changing to dry, nop if not
+    this->set_humidity_mode(this->get_humidity_mode());
   }
 }
 
@@ -434,14 +429,18 @@ void DaikinS21::set_swing_mode(const climate::ClimateSwingMode swing) {
       this->louvres.horizontal_swing = is_horizontal_active(swing);
     }
     // apply the new swing mode now
-    this->swing_humidity.stage({ swing, this->get_humidity_mode() }); // shares D6 with humidity, stage complete command
+    this->swing_humidity.stage({ swing, this->get_humidity_mode() }); // shares D5 with humidity, stage complete command
     this->trigger_cycle();
   }
 }
 
-void DaikinS21::set_humidity_mode(const DaikinHumidityMode humidity) {
+void DaikinS21::set_humidity_mode(DaikinHumidityMode humidity) {
+  // reconcile the new humidty with the current mode
+  if (this->get_climate_mode() == climate::CLIMATE_MODE_DRY) {
+    humidity = std::clamp(humidity, DaikinHumidityLow, DaikinHumidityHigh); // no off or continous
+  }
   if (this->get_humidity_mode() != humidity) {
-    this->swing_humidity.stage({ this->get_swing_mode(), humidity }); // shares D6 with swing, stage complete command
+    this->swing_humidity.stage({ this->get_swing_mode(), humidity }); // shares D5 with swing, stage complete command
     this->trigger_cycle();
   }
 }
@@ -648,7 +647,7 @@ void DaikinS21::dump_state() {
   }
   ESP_LOGD(TAG, " Mode: %s  Action: %s  Setpoint: %.1fC  Target: %.1fC  Inside: %.1fC  Coil: %.1fC\n"
                 " Cycle Time: %" PRIu32 "ms  UnitState: %" PRIX8 "  SysState: %02" PRIX8,
-      LOG_STR_ARG(climate::climate_mode_to_string(this->get_climate().mode)),
+      LOG_STR_ARG(climate::climate_mode_to_string(this->get_climate_mode())),
       LOG_STR_ARG(climate::climate_action_to_string(this->get_climate_action())),
       this->get_climate().setpoint.f_degc(),
       this->get_temp_target().f_degc(),
@@ -658,13 +657,14 @@ void DaikinS21::dump_state() {
       this->unit_state.raw,
       this->system_state.raw);
   if (this->debug_protocol) {
-    const auto comma_join = [](auto&& queries) {
+    const auto comma_join = [](auto&& queries) {  // todo c++23 join_with
       std::string str;
       for (const auto &q : queries) {
         str += q;
-        if (q != queries.back()) {
-          str += ",";
-        }
+        str += ",";
+      }
+      if (str.empty() == false) {
+        str.pop_back();
       }
       return str;
     };
@@ -902,9 +902,9 @@ void DaikinS21::handle_serial_idle() {
     if (this->swing_humidity.pending.swing != climate::CLIMATE_SWING_OFF) {
       payload[1] = '?';
     }
-    if (this->climate.value().mode == climate::CLIMATE_MODE_HEAT) {
+    if (this->get_climate_mode() == climate::CLIMATE_MODE_HEAT) {
       payload[2] = humid_heat_encodings[this->swing_humidity.pending.humidity];
-    } else if (this->climate.value().mode == climate::CLIMATE_MODE_COOL) {
+    } else if ((this->get_climate_mode() == climate::CLIMATE_MODE_COOL) || (this->get_climate_mode() == climate::CLIMATE_MODE_DRY)) {
       payload[2] = dry_cool_encodings[this->swing_humidity.pending.humidity];
     }
     this->send_command(StateCommand::SwingHumidityModes, payload);
@@ -1496,6 +1496,7 @@ void DaikinS21::send_command(const std::string_view command, const std::span<con
 
 void DaikinS21::handle_state_basic(const std::span<const uint8_t> payload) {
   const auto prev_mode = this->climate.active.mode;
+
   if (payload[0] == '0') {
     this->climate.active.mode = climate::CLIMATE_MODE_OFF;
     this->action_reported = climate::CLIMATE_ACTION_OFF;
@@ -1508,10 +1509,11 @@ void DaikinS21::handle_state_basic(const std::span<const uint8_t> payload) {
   if (this->support.fan_mode_query == false) {
     this->climate.active.fan = s21_to_fan_mode(payload[3]);
   }
+
   // cancel setpoint swing modes when changing operation
   if ((prev_mode != this->climate.active.mode) && is_vertical_setpoint(this->louvres.mode)) {
-      this->louvre_terminate();
-      this->louvres.mode = DaikinVerticalSwingOff;
+    this->louvre_terminate();
+    this->louvres.mode = DaikinVerticalSwingOff;
   }
 }
 
@@ -1523,10 +1525,10 @@ void DaikinS21::handle_state_swing_humidity_modes(const std::span<const uint8_t>
   this->swing_humidity.active.swing = s21_to_climate_swing_mode(payload[0]);
   if (this->climate.active.mode == climate::CLIMATE_MODE_HEAT) {
     this->swing_humidity.active.humidity = s21_to_humid_heat_mode(payload[2]);
-  } else if (this->climate.active.mode == climate::CLIMATE_MODE_COOL) {
+  } else if ((this->climate.active.mode == climate::CLIMATE_MODE_COOL) || (this->climate.active.mode == climate::CLIMATE_MODE_DRY)) {
     this->swing_humidity.active.humidity = s21_to_dry_cool_mode(payload[2]);
   } else {
-    this->swing_humidity.active.humidity = this->swing_humidity.pending.humidity; // keep the current humidity setting in other modes
+    this->swing_humidity.active.humidity = this->swing_humidity.pending.humidity; // preserve humidity in non-humidity modes
   }
   // keep related state in sync
   apply_swing_mode(this->swing_humidity.active.swing, this->vertical_swing.active);
