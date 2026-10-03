@@ -219,7 +219,7 @@ case for you and I can try to implement better control.
 
 * Demand Control (v2+, unverified). Select from 30%-100% of conditioning power
   output. As a reference point, the built in Econo mode limits this to around
-  70%. Note that this isn't direclty energy consumption.
+  70%. Note that this isn't a direct control of energy consumption.
 
 ## Feedback
 
@@ -435,7 +435,8 @@ I am using ESP32-S3 mini dev boards and directly wiring communication to the
 S21 port. My Daikin unit pulls the TX line up to 5V, so I've configured my pin
 as open drain to work with it. The RX line relies on the ESP32's 5V tolerant
 GPIO pins. For power I am using a cheap switching regulator module to take
-14.5V from the Daikin unit down to 3.3V wired into Vcc on the dev board.
+14.5V from the Daikin unit down to 5V wired into VBUS on the dev board and
+the on board regulator takes it to 3.3V.
 
 ## Contributing
 
