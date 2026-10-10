@@ -27,11 +27,11 @@ class DaikinS21Switch : public Component,
   void set_mode_switch(DaikinS21SwitchMode * const mode_switch) {
     this->mode_switches_[mode_switch->mode] = mode_switch;
     if (mode_switch->mode == ModePowerful) {
-      this->get_parent()->request_readout(DaikinS21::ReadoutPowerful);
+      this->get_parent()->request_readout(ReadoutPowerful);
     } else if (mode_switch->mode == ModeEcono) {
-      this->get_parent()->request_readout(DaikinS21::ReadoutDemandAndEcono);
+      this->get_parent()->request_readout(ReadoutDemandAndEcono);
     } else {
-      this->get_parent()->request_readout(DaikinS21::ReadoutSpecialModes);
+      this->get_parent()->request_readout(ReadoutSpecialModes);
     }
   }
 

@@ -34,34 +34,6 @@ class DaikinS21 : public PollingComponent {
   void set_demand_control(uint8_t percent);
   void set_vertical_swing_mode(DaikinVerticalSwingMode swing);
 
-  enum ReadoutRequest : uint8_t {
-    // binary sensor
-    ReadoutErrorStatus,
-    ReadoutUnitStateBits,
-    ReadoutSystemStateBits,
-    // sensor
-    ReadoutTemperatureTarget,
-    ReadoutTemperatureOutside,
-    ReadoutTemperatureCoil,
-    ReadoutFanSpeed,
-    ReadoutSwingAngle,
-    ReadoutCompressorFrequency,
-    ReadoutHumidity,
-    ReadoutDemand,
-    ReadoutIRCounter,
-    ReadoutEnergyConsumptionTotal,
-    ReadoutOutdoorCapacity,
-    ReadoutEnergyConsumptionClimateModes,
-    ReadoutUnitPower,
-    // select
-    ReadoutVerticalSwingMode,
-    // multiple components
-    ReadoutPowerful,
-    ReadoutSwingHumidty,
-    ReadoutSpecialModes,
-    ReadoutDemandAndEcono,
-    ReadoutCount, // just for bitset sizing
-  };
   void request_readout(const ReadoutRequest request) { this->readout_requests.set(request); }
   void set_vertical_angle_setpoints(const climate::ClimateAction action, const VerticalAngleSetpoints &&setpoints) { this->angle_setpoints.get(action) = setpoints; }
   void add_debug_query(std::string_view query_str);
@@ -108,41 +80,7 @@ class DaikinS21 : public PollingComponent {
   std::span<const uint8_t> get_query_result(std::string_view query_str);
   auto get_cycle_interval_ms() const { return std::max(this->cycle_time_ms, this->is_free_run() ? 0 : this->get_update_interval()); }
 
- protected:
-  void dump_state();
-
-  // serial state
-  enum class SerialResult : uint8_t {
-    Ack,
-    Nak,
-    Timeout,
-    Error,
-  };
-  void send_frame(std::string_view cmd, std::span<const uint8_t> payload = {});
-  void serial_timeout_handler();
-  void handle_serial_result(SerialResult result);
-
-  // communication state
-  void handle_serial_idle();
-  void louvre_runtime();
-  void louvre_terminate();
-  bool is_free_run() const { return this->get_update_interval() == SCHEDULER_DONT_RUN; }
-  void trigger_cycle();
-  void start_cycle();
-  void reset_queries();
-  DaikinQuery& get_query(std::string_view query_str);
-  void enable_query(std::string_view query_str);
-  void ready_state_machine();
-  void check_ready_protocol_detection();
-  void check_ready_optional_features();
-  void check_ready_sensor_readout();
-  void check_ready_model_detection();
-  void check_ready_active_source();
-  void check_ready_powerful_source();
-  void send_command(std::string_view command, std::span<const uint8_t> payload);
-
   // query handlers
-  void handle_nop(std::span<const uint8_t> payload) {}
   void handle_state_basic(std::span<const uint8_t> payload);
   void handle_state_error_status(std::span<const uint8_t> payload);
   void handle_state_swing_humidity_modes(std::span<const uint8_t> payload);
@@ -182,6 +120,39 @@ class DaikinS21 : public PollingComponent {
   void handle_misc_model_v0(std::span<const uint8_t> payload);
   void handle_misc_software_version(std::span<const uint8_t> payload);
 
+ protected:
+  void dump_state();
+
+  // serial state
+  enum class SerialResult : uint8_t {
+    Ack,
+    Nak,
+    Timeout,
+    Error,
+  };
+  void send_frame(std::string_view cmd, std::span<const uint8_t> payload = {});
+  void serial_timeout_handler();
+  void handle_serial_result(SerialResult result);
+
+  // communication state
+  void handle_serial_idle();
+  void louvre_runtime();
+  void louvre_terminate();
+  bool is_free_run() const { return this->get_update_interval() == SCHEDULER_DONT_RUN; }
+  void trigger_cycle();
+  void start_cycle();
+  void reset_queries();
+  DaikinQueryState& get_query(const DaikinQueryParams &query);
+  void enable_query(const DaikinQueryParams &query);
+  void ready_state_machine();
+  void check_ready_protocol_detection();
+  void check_ready_optional_features();
+  void check_ready_sensor_readout();
+  void check_ready_model_detection();
+  void check_ready_active_source();
+  void check_ready_powerful_source();
+  void send_command(std::string_view command, std::span<const uint8_t> payload);
+
   // serial
   uart::UARTComponent& uart;
   FixedVector<uint8_t> response{};
@@ -206,9 +177,9 @@ class DaikinS21 : public PollingComponent {
     ReadyCount, // just for bitset sizing
   };
   std::bitset<ReadyCount> ready{};
-  std::bitset<ReadoutCount> readout_requests{};
+  ReadoutRequests readout_requests{1<<ReadoutBasic};
   std::string_view current_command{};
-  std::vector<DaikinQuery> queries{}; // pool of possible queries, can't be touched during a query cycle
+  std::vector<DaikinQueryState> queries{}; // pool of possible queries, can't be touched during a query cycle
   decltype(queries)::iterator active_query{queries.begin()};  // current active query, valid for lifetime of query cycle
   uint32_t cycle_time_start_ms{};
   uint32_t cycle_time_ms{};

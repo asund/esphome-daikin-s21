@@ -34,18 +34,18 @@ class DaikinS21Select : public Component,
 
   void set_brightness_select(DaikinS21SelectLEDBrightness * const brightness_select) {
     this->brightness_select_ = brightness_select;
-    this->get_parent()->request_readout(DaikinS21::ReadoutSpecialModes);
+    this->get_parent()->request_readout(ReadoutSpecialModes);
   }
 
   void set_humidity_select(DaikinS21SelectHumidity * const humidity_select) {
     this->humidity_select_ = humidity_select;
-    this->get_parent()->request_readout(DaikinS21::ReadoutSwingHumidty);
+    this->get_parent()->request_readout(ReadoutSwingHumidty);
   }
 
   void set_vertical_swing_select(DaikinS21SelectVerticalSwing * const vertical_swing_select) {
     this->vertical_swing_select_ = vertical_swing_select;
-    this->get_parent()->request_readout(DaikinS21::ReadoutSwingHumidty);
-    this->get_parent()->request_readout(DaikinS21::ReadoutVerticalSwingMode);
+    this->get_parent()->request_readout(ReadoutSwingHumidty);
+    this->get_parent()->request_readout(ReadoutVerticalSwingMode);
   }
 
  protected:

@@ -23,7 +23,7 @@ class DaikinS21Number : public Component,
 
   void set_demand(DaikinS21NumberDemand * const number) {
     this->demand_number_ = number;
-    this->get_parent()->request_readout(DaikinS21::ReadoutDemandAndEcono);
+    this->get_parent()->request_readout(ReadoutDemandAndEcono);
   }
 
  protected:
