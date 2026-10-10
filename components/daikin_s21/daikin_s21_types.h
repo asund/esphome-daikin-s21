@@ -33,34 +33,33 @@ inline constexpr ProtocolVersion ProtocolUnknown{0,0xFF};  // treat as a protoco
  */
 class DaikinC10 {
  public:
-  static constexpr int16_t nan_sentinel = std::numeric_limits<int16_t>::min();
+  static constexpr int16_t off_sentinel = -140;     // encodes to 0x00
+  static constexpr int16_t dry_sentinel = 500;      // encodes to 0x80
+  static constexpr int16_t humidify_sentinel = 820; // encodes to 0xC0
 
   constexpr DaikinC10() = default;
 
   template <std::floating_point T>
-  constexpr DaikinC10(const T valf) : value(std::isfinite(valf) ? ((static_cast<int16_t>(valf * 10 * 2) + 1) / 2) : nan_sentinel) {} // round to nearest 0.1C
+  constexpr DaikinC10(const T valf) : value(std::isfinite(valf) ? ((static_cast<int16_t>(valf * 10 * 2) + 1) / 2) : off_sentinel) {} // round to nearest 0.1C
 
   template <std::integral T>
   constexpr DaikinC10(const T vali) : value(vali) {}
 
-  explicit constexpr operator float() const { return (value == nan_sentinel) ? NAN : (value / 10.0F); }
+  explicit constexpr operator float() const { return this->is_valid_setpoint() ? (value / 10.0F) : NAN; }
   explicit constexpr operator int16_t() const { return value; }
   constexpr float f_degc() const { return static_cast<float>(*this); }
 
   /** Get the fine (0.5C) encoding of the temperature value. */
-  constexpr uint8_t get_s21_fine() const {
-    return (value == DaikinC10::nan_sentinel) ? 0x80 : ((value / 5) + 28);
-  }
+  constexpr uint8_t get_s21_fine() const { return (value / 5) + 28; }
 
   /** Set the temperature value from the fine (0.5C) encoding. */
-  constexpr void set_s21_fine(const uint8_t raw) {
-    this->value = (raw == 0x80) ? DaikinC10::nan_sentinel : ((raw - 28) * 5);
-  }
+  constexpr void set_s21_fine(const uint8_t raw) { this->value = (raw - 28) * 5; }
 
   /** Set the temperature value from the coarse (1.0C) encoding. */
-  constexpr void set_s21_coarse(const uint8_t raw) {
-    this->value = (raw == 0xFF) ? DaikinC10::nan_sentinel : ((raw - 0x80) * 5); // danijelt reports 0xFF when unsupported
-  }
+  constexpr void set_s21_coarse(const uint8_t raw) { this->value = (raw - 0x80) * 5; }  // danijelt reports 0xFF when unsupported, result is out of vald range
+
+  /** Determine if the stored value represents a setpoint to expose to users, i.e. if it's outside of the special sentinel value ranges. */
+  constexpr bool is_valid_setpoint() const { return (this->value > off_sentinel) && (this->value < dry_sentinel); }
 
   constexpr auto operator<=>(const DaikinC10 &other) const = default;
   constexpr DaikinC10 operator+(const DaikinC10 &arg) const { return this->value + arg.value; }
@@ -69,12 +68,14 @@ class DaikinC10 {
   constexpr DaikinC10 operator/(const DaikinC10 &arg) const { return this->value / arg.value; }
 
  private:
-  int16_t value{};
+  int16_t value{off_sentinel};
 };
 
 inline constexpr DaikinC10 SETPOINT_STEP{1.0F}; // Daikin setpoint granularity
 inline constexpr DaikinC10 TEMPERATURE_STEP{0.5F}; // Daikin temperature sensor granularity
-inline constexpr DaikinC10 TEMPERATURE_INVALID{DaikinC10::nan_sentinel}; // NaN
+inline constexpr DaikinC10 SETPOINT_OFF{DaikinC10::off_sentinel};
+inline constexpr DaikinC10 SETPOINT_DRY{DaikinC10::dry_sentinel};
+inline constexpr DaikinC10 SETPOINT_HUMIDIFY{DaikinC10::humidify_sentinel};
 
 /**
  * Function template for looking up an index enum value from an encoding.
@@ -222,6 +223,27 @@ constexpr DaikinFanMode stringref_to_daikin_fan_mode(const StringRef mode) {
     return static_cast<DaikinFanMode>(std::ranges::distance(std::begin(supported_daikin_fan_modes), iter));
   }
   return DaikinFanAuto;
+}
+
+enum DaikinPreset : uint8_t {
+  DaikinPresetNone,
+  DaikinPresetUruru,
+  DaikinPresetSarara,
+  DaikinPresetCount, // for array sizing
+};
+
+inline constexpr std::array<const char *, DaikinPresetCount> daikin_preset_strings = {{
+  "None",
+  "Ururu Humidify",
+  "Sarara Dry"
+}};
+
+constexpr DaikinPreset stringref_to_daikin_preset(const StringRef preset) {
+  const auto iter = std::ranges::find(daikin_preset_strings, preset, [](const auto &elem){ return static_cast<StringRef>(elem); });
+  if (iter != std::ranges::end(daikin_preset_strings)) {
+    return static_cast<DaikinPreset>(std::ranges::distance(std::begin(daikin_preset_strings), iter));
+  }
+  return DaikinPresetNone;
 }
 
 struct DaikinClimateSettings {

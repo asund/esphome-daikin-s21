@@ -72,6 +72,7 @@ class DaikinS21 : public PollingComponent {
   // value accessors
   bool is_ready() const { return this->ready.all(); }
   auto get_climate() const { return this->climate.value(); }
+  auto get_climate_mode() const { return this->climate.value().mode; }
   auto get_climate_action() const { return this->action; }
   auto get_swing_mode() const { return this->swing_humidity.value().swing; }
   auto get_humidity_mode() const { return this->swing_humidity.value().humidity; }

@@ -16,25 +16,22 @@ constexpr uint32_t TIMER_ID_OFFSET = 0U;
 
 /**
  * Save target for the mode to persistent storage.
-*
+ *
  * Only save if value is different from what's already saved. Some platforms don't support this internally.
  */
 void DaikinSetpointMode::save_target(const DaikinC10 value) {
   if (value != this->load_target()) {
-    const int16_t save_val = static_cast<int16_t>(value);
-    this->target_pref.save(&save_val);
+    this->target_pref.save(&value);
   }
 }
 
 /**
- * Load target for the mode from persistent storage.
+ * Load target setpont for the mode from persistent storage.
  */
 DaikinC10 DaikinSetpointMode::load_target() {
-  int16_t load_val{};
-  if (this->target_pref.load(&load_val)) {
-    return load_val;
-  }
-  return TEMPERATURE_INVALID;
+  DaikinC10 load_val{SETPOINT_OFF};
+  (void)this->target_pref.load(&load_val);
+  return load_val;
 }
 
 void DaikinS21Climate::setup() {
@@ -59,6 +56,7 @@ void DaikinS21Climate::setup() {
   });
   // ensure optionals are populated with defaults
   this->set_fan_mode_(climate::CLIMATE_FAN_AUTO);
+  this->set_preset_(climate::CLIMATE_PRESET_NONE);
   // initialize setpoint, will be loaded from preferences or unit shortly
   this->target_temperature = NAN;
 
@@ -70,7 +68,7 @@ void DaikinS21Climate::setup() {
 /**
  * ESPHome Component loop
  *
- * Deferred work when an update occurs. Use Component::defer if more work items are added.
+ * Deferred work when an update from the DaikinS21 hub occurs. Use Component::defer if more work items are added.
  *
  * Recalculates the internal setpoint and sends any changes to the unit.
  * Publishes any state changes to Home Assistant.
@@ -78,104 +76,110 @@ void DaikinS21Climate::setup() {
 void DaikinS21Climate::loop() {
   this->disable_loop(); // use loop as a oneshot timer
 
-  const float new_humidity = this->get_current_humidity();
-  const DaikinC10 prev_temperature = this->current_temperature;
-  const DaikinC10 new_temperature = this->get_current_temperature();
+  DaikinS21ClimateChanges changes{};
+  const auto new_temperature = this->get_current_temperature();
+  const auto new_humidity = this->get_current_humidity();
   const auto reported_climate = this->get_parent()->get_climate();
-  const auto reported_swing = this->get_parent()->get_swing_mode();
-  bool do_publish{};
-  bool update_unit_setpoint{};
 
   // See if there's a reason to publish an update
   // Temperature and humidity can be noisy, only publish because of them if the component update interval has passed
   if (this->check_sensors) {
     this->check_sensors = this->is_free_run();
-    if ((prev_temperature != new_temperature) ||
+    if ((static_cast<DaikinC10>(this->current_temperature) != new_temperature) ||
         (std::isfinite(this->current_humidity) != std::isfinite(new_humidity)) || // differ in finite-ness
         (std::isfinite(this->current_humidity) && (this->current_humidity != new_humidity))) {  // differ in finite value
-      do_publish = true;
+      changes.external = true;
     }
   }
   // Always publish other changes
   if ((this->mode != reported_climate.mode) ||
       (this->action != this->get_parent()->get_climate_action()) ||
-      (this->swing_mode != reported_swing)) {
-    do_publish = true;
+      (this->swing_mode != this->get_parent()->get_swing_mode())) {
+    this->mode = reported_climate.mode;
+    this->action = this->get_parent()->get_climate_action();
+    this->swing_mode = this->get_parent()->get_swing_mode();
+    changes.external = true;
   }
   if (this->set_daikin_fan_mode(reported_climate.fan)) {
-    do_publish = true;
+    changes.external = true;
   }
 
-  // Update target temperature (user's desire) and unit setpoint (after offset) in setpoint modes
-  auto * const mode_params = this->setpoint_params.get(reported_climate.mode);
-  if (mode_params != nullptr) {
-    // Initialize setpoint so chenge detection can work
-    if (this->unit_setpoint == TEMPERATURE_INVALID) {
-      this->unit_setpoint = reported_climate.setpoint;
+  // Process mode and setpoint
+
+  /* Non-setpoint modes or special setpoint mode/preset combos:
+   * - Hide setpoint in UI
+   * - Select a unit setpoint in case it needs correcting (IR remote)
+   * - Recover preset if dominanted by mode
+   */
+  if ((this->mode == climate::CLIMATE_MODE_OFF) || (this->mode == climate::CLIMATE_MODE_FAN_ONLY)) {
+    changes |= this->synchronize_special_setpoint(SETPOINT_OFF);
+  } else if ((this->mode == climate::CLIMATE_MODE_HEAT) && (reported_climate.setpoint == SETPOINT_HUMIDIFY)) {
+    changes |= this->synchronize_special_setpoint(SETPOINT_HUMIDIFY);
+    if (this->set_daikin_preset(DaikinPresetUruru)) {
+      changes.external = true;
     }
+  } else if (this->mode == climate::CLIMATE_MODE_DRY) {
+    changes |= this->synchronize_special_setpoint(SETPOINT_DRY);
+    if (this->set_daikin_preset(DaikinPresetSarara)) {
+      changes.external = true;
+    }
+  }
+  /* Finite setpoint modes:
+   * - Update and publish changes to target temperature (user's desire)
+   * - Update and command changes to unit setpoint (after offsets)
+   */
+  else if (auto * const mode_params = this->setpoint_params.get(this->mode)) { // should always succeed in remaining modes
+    // Determine if the unit setpoint should be recalculated
+    bool recalc_unit_setpoint{};
 
     // Determine if there's any change to the target temperature
-    if ((std::isfinite(this->target_temperature) == false) || // controller init or external mode change to a setpoint mode
-        (this->unit_setpoint != reported_climate.setpoint)) { // external change to setpoint
-      // Assume the reported setpoint (external IR remote change) should be the target temperature
+    if ((std::isfinite(this->target_temperature) == false) || // first time in this mode (init or mode switch)
+        (this->unit_setpoint != reported_climate.setpoint)) { // IR remote change
+      // Assume the reported setpoint should be the target temperature (IR remote change or fallback if target recovery fails)
       auto new_target = reported_climate.setpoint;
-      // When first initializing, we don't know if the reported setpoint is from the IR remote or an offset value from a
-      // previous ESPHome run. Use the saved target to resolve this once and in the future we can trust that we have set
-      // target_temperature and unit_setpoint when commanding the unit and so any changes must be from the IR remote.
-      if (this->target_resolved == false) {
-        this->target_resolved = true;
+      // If the target temperature is NAN we can assume we're initializing or entering a finite setpoint mode.
+      // The reported setpoint could be an offset setpoint from a previous ESPHome run or an offset setpoint from the last time
+      // the unit was in this mode. Either way it could be affected by an offset which may have since changed. Use the saved
+      // target to recover the target and in future loops we can trust it to calculate the offset and unit setpoint.
+      if (std::isfinite(this->target_temperature) == false) {
         const auto saved_target = mode_params->load_target();
-        if (saved_target != TEMPERATURE_INVALID) {
+        if (saved_target.is_valid_setpoint()) {
           new_target = saved_target;
-        }
+        } // else could try to unapply the current offset but this is unlikely to be too useful
       }
       ESP_LOGI(TAG, "Target temperature changed: %.1f -> %.1f",
-          this->target_temperature, new_target.f_degc());
+        this->target_temperature, new_target.f_degc());
       this->target_temperature = new_target.f_degc();
-      this->unit_setpoint = reported_climate.setpoint;  // will be recalculated shortly, but ensure the log statement there is sensical
-      do_publish = true;
-      update_unit_setpoint = true;
+      changes.external = true;
+      recalc_unit_setpoint = true;
     }
 
     // Periodic sensor-unit offset calculation
     if (this->freerun_offset || this->check_offset) {
       this->check_offset = false;
-      update_unit_setpoint = true;
+      recalc_unit_setpoint = true;
     }
 
     // Setpoint has been flagged for recalculation, see if it results in a change for the unit
-    if (update_unit_setpoint) {
-      update_unit_setpoint = this->calc_unit_setpoint(*mode_params, new_temperature);
+    this->unit_setpoint = reported_climate.setpoint;
+    if (recalc_unit_setpoint && this->calc_unit_setpoint(*mode_params, new_temperature)) {
+      changes.internal = true;
+      mode_params->save_target(this->target_temperature); // save the target temperature that got us this setpoint in preferences
     }
-  } else {
-    // Not a setpoint mode
-    // No previous target to recover
-    this->target_resolved = true;
-    // Clear setpoints and publish
-    if (std::isfinite(this->target_temperature)) {
-      this->target_temperature = NAN;
-      this->unit_setpoint = TEMPERATURE_INVALID;
-      do_publish = true;
+
+    // Clear preset in finite setpoint heating mode
+    if ((this->mode == climate::CLIMATE_MODE_HEAT) && this->set_daikin_preset(DaikinPresetNone)) {
+      changes.external = true;
     }
   }
 
-  // Publish when state changed
-  if (do_publish) {
-    // Save local state so we know what was last published
-    this->mode = reported_climate.mode;
-    this->action = this->get_parent()->get_climate_action();
+  // Handle any changes
+  if (changes.external) { // Update sensor values only when publishing changes so periodic sensor checking sees the last published values
     this->current_temperature = new_temperature.f_degc();
     this->current_humidity = new_humidity;
-    this->swing_mode = reported_swing;
-    this->publish_state();
   }
-  // Command unit when setpoint changed
-  if (update_unit_setpoint) {
-    this->set_s21_climate();
-    if (mode_params != nullptr) {
-      mode_params->save_target(this->target_temperature);
-    }
-  }
+
+  this->handle_climate_changes(changes);
 }
 
 void DaikinS21Climate::dump_config() {
@@ -205,55 +209,71 @@ void DaikinS21Climate::dump_config() {
 /**
  * ESPHome climate control call handler.
  *
- * Populates internal state with contained arguments then applies to the unit.
+ * Reconciles internal state with contained arguments.
+ * Commands any resulting changes to the unit.
+ * Publishes any resulting changes to Home Assistant.
  */
 void DaikinS21Climate::control(const climate::ClimateCall &call) {
+  DaikinS21ClimateChanges changes{ false, true }; // always publish commanded settings to Home Assistant
+  bool mode_changed{};
+
   // DaikinClimateSettings changes
-  bool climate_changed = (call.get_mode().has_value() && (this->mode != call.get_mode().value()));
-  if (climate_changed) {
+  if (call.get_mode().has_value() && (this->mode != call.get_mode().value())) {
     this->mode = call.get_mode().value();
+    mode_changed = true;
+    changes.internal = true;
   }
-  auto * const mode_params = this->setpoint_params.get(this->mode);
 
-  // Target change is only relevant to the unit if it causes a setpoint change, track separately
-  const DaikinC10 new_target = call.get_target_temperature().has_value() ? call.get_target_temperature().value() :  // Target provided by call
-                               (climate_changed == false) ? this->target_temperature :  // Otherwise preserve the existing target if not a mode change
-                               (mode_params != nullptr) ? mode_params->load_target() :  // Otherwise try to use the saved target if a setpoint mode
-                               TEMPERATURE_INVALID;
-  const bool target_changed = (this->target_temperature != new_target);
-  if (target_changed) {
-    if (mode_params != nullptr) {
-      mode_params->save_target(new_target); // save the new target if in a setpoint mode
+  if ((call.get_fan_mode().has_value() && this->set_fan_mode_(call.get_fan_mode().value())) ||
+      (call.has_custom_fan_mode() && this->set_custom_fan_mode_(call.get_custom_fan_mode()))) {
+    changes.internal = true;
+  }
+
+  if (this->mode == climate::CLIMATE_MODE_DRY) {
+    if (this->set_daikin_preset(DaikinPresetSarara)) {
+      changes.internal = true; // ignore any commanded preset if in dry mode, DaikinPresetSarara forced on if not already
     }
-    this->target_temperature = new_target.f_degc();
+  } else if ((call.get_preset().has_value() && this->set_preset_(call.get_preset().value())) ||
+             (call.has_custom_preset() && this->set_custom_preset_(call.get_custom_preset()))) {
+    changes.internal = true;
   }
 
-  // Check for unit setpoint change if mode or target changing
-  if (climate_changed || target_changed) {
-    if ((mode_params != nullptr) && std::isfinite(this->target_temperature)) {
-      if (this->calc_unit_setpoint(*mode_params, this->get_current_temperature())) {
-        climate_changed = true;
+  // Select target and unit setpoints based on mode
+  // Ignore commanded setpoint when not in a finite setpoint mode, use the special value
+  if ((this->mode == climate::CLIMATE_MODE_OFF) || (this->mode == climate::CLIMATE_MODE_FAN_ONLY)) {
+    changes |= this->synchronize_special_setpoint(SETPOINT_OFF);
+  } else if ((this->mode == climate::CLIMATE_MODE_HEAT) && (this->get_daikin_preset() == DaikinPresetUruru)) {
+    changes |= this->synchronize_special_setpoint(SETPOINT_HUMIDIFY);
+  } else if (this->mode == climate::CLIMATE_MODE_DRY) {
+    changes |= this->synchronize_special_setpoint(SETPOINT_DRY);
+  } else if (auto * const mode_params = this->setpoint_params.get(this->mode)) {
+    // Finite setpoint mode, see if there's a target or setpoint change
+
+    // Determine a new target temperature
+    const DaikinC10 prev_target{this->target_temperature};
+    DaikinC10 new_target{prev_target};  // Assume it isn't being changed
+    if (call.get_target_temperature().has_value()) {
+      new_target = call.get_target_temperature().value(); // New target provided by call
+    } else if (mode_changed) {
+      const auto saved_target = mode_params->load_target();
+      if (saved_target.is_valid_setpoint()) {
+        new_target = saved_target;  // Use the saved target if a change to finite setpoint mode
       }
-    } else {
-      if (this->unit_setpoint != TEMPERATURE_INVALID) {
-        this->unit_setpoint = TEMPERATURE_INVALID;
-        climate_changed = true;
-      }
     }
-  }
+    const bool target_changed = (prev_target != new_target);
 
-  if (call.get_fan_mode().has_value()) {
-    if (this->set_fan_mode_(call.get_fan_mode().value())) {
-      climate_changed = true;
+    // Save and use the new target if it changed
+    if (target_changed) {
+      mode_params->save_target(new_target);
+      this->target_temperature = new_target.f_degc();
     }
-  } else if (call.has_custom_fan_mode()) {
-    if (this->set_custom_fan_mode_(call.get_custom_fan_mode())) {
-      climate_changed = true;
-    }
-  }
 
-  if (climate_changed) {
-    this->set_s21_climate();
+    // Check for unit setpoint change if mode or target changing
+    if ((mode_changed || target_changed) &&
+        std::isfinite(this->target_temperature) &&
+        this->calc_unit_setpoint(*mode_params, this->get_current_temperature())) {
+      changes.internal = true;
+    }
   }
 
   // climate::ClimateSwingMode changes
@@ -262,8 +282,8 @@ void DaikinS21Climate::control(const climate::ClimateCall &call) {
     this->get_parent()->set_swing_mode(this->swing_mode);
   }
 
-  // push back to UI
-  this->publish_state();
+  // Handle any changes
+  this->handle_climate_changes(changes);
 }
 
 void DaikinS21Climate::set_offset_interval(const uint32_t offset_interval) {
@@ -304,7 +324,22 @@ void DaikinS21Climate::set_humidity_reference_sensor(sensor::Sensor * const sens
 }
 
 /**
- * Set parameters for a given setpoint mode.
+ * Enable support for presets, control over special humidity modes.
+ *
+ * @note Modifies traits, call during setup only
+ */
+void DaikinS21Climate::set_enable_presets(const bool enable) {
+  if (enable) {
+    this->traits_.set_supported_presets({climate::CLIMATE_PRESET_NONE});
+    this->set_supported_custom_presets({
+        daikin_preset_strings[DaikinPresetUruru],
+        daikin_preset_strings[DaikinPresetSarara],
+    });
+  }
+}
+
+/**
+ * Set finite setpoint parameters for a given mode.
  */
 void DaikinS21Climate::set_setpoint_mode_config(const climate::ClimateMode mode, const DaikinC10 offset, const DaikinC10 min, const DaikinC10 max) {
   if (auto * const mode_params = this->setpoint_params.get(mode)) {
@@ -314,34 +349,30 @@ void DaikinS21Climate::set_setpoint_mode_config(const climate::ClimateMode mode,
   }
 }
 
+/**
+ * Check if the temperature sensor and unit are valid
+ */
 bool DaikinS21Climate::temperature_sensor_unit_is_valid() {
   if (this->temperature_sensor_ != nullptr) {
-    auto u = this->temperature_sensor_->get_unit_of_measurement_ref();
-    return u == "°C" || u == "°F";
+    const auto u = this->temperature_sensor_->get_unit_of_measurement_ref();
+    return (u == "°C") || (u == "°F");
   }
   return false;
 }
 
-bool DaikinS21Climate::use_temperature_sensor() {
-  return this->temperature_sensor_unit_is_valid() &&
-         this->temperature_sensor_->has_state() &&
-         std::isfinite(this->temperature_sensor_->get_state());
-}
-
-DaikinC10 DaikinS21Climate::temperature_sensor_degc() {
-  float temp = this->temperature_sensor_->get_state();
-  if (this->temperature_sensor_->get_unit_of_measurement_ref() == "°F") {
-    temp = fahrenheit_to_celsius(temp);
-  }
-  return temp;
-}
-
 /**
- * Get the current temperature, either from the external reference or the Daikin unit.
+ * Get the current temperature, either from the external reference sensor or the Daikin unit.
  */
 DaikinC10 DaikinS21Climate::get_current_temperature() {
-  if (this->use_temperature_sensor()) {
-    return this->temperature_sensor_degc();
+  if (this->temperature_sensor_unit_is_valid() && this->temperature_sensor_->has_state()) {
+    const auto temp = this->temperature_sensor_->get_state();
+    if (std::isfinite(temp)) {
+      if (this->temperature_sensor_->get_unit_of_measurement_ref() == "°F") {
+        return fahrenheit_to_celsius(temp);
+      } else {
+        return temp;
+      }
+    }
   }
   return this->get_parent()->get_temp_inside();
 }
@@ -386,14 +417,13 @@ bool DaikinS21Climate::calc_unit_setpoint(const DaikinSetpointMode& mode_params,
   // Also, when large offsets are used, the value can be so far out of range it will be NAK'd
   new_unit_setpoint = std::clamp(new_unit_setpoint, mode_params.min, mode_params.max);
 
-  // Log results if changing
   const bool unit_setpoint_changed = (this->unit_setpoint != new_unit_setpoint);
   if (unit_setpoint_changed) {
+    // Log results if changing
     ESP_LOGI(TAG, "Unit setpoint recalculated: %.1f -> %.1f%+.1f%+.1f = %.1f",
         this->unit_setpoint.f_degc(), this->target_temperature, sensor_offset.f_degc(), mode_params.offset.f_degc(), new_unit_setpoint.f_degc());
     this->unit_setpoint = new_unit_setpoint;
   }
-
   return unit_setpoint_changed;
 }
 
@@ -431,17 +461,39 @@ bool DaikinS21Climate::set_daikin_fan_mode(const DaikinFanMode fan) {
   }
 }
 
-/**
- * Apply ESPHome Climate state to the unit.
- *
- * Converts to internal settings format and forwards to DaikinS21 component to apply.
- */
-void DaikinS21Climate::set_s21_climate() const {
-  this->get_parent()->set_climate_settings({this->mode, this->get_daikin_fan_mode(), this->unit_setpoint});
+DaikinPreset DaikinS21Climate::get_daikin_preset() const {
+  if (this->preset.has_value()) {
+    return DaikinPresetNone;  // only one standard preset supported
+  } else {
+    return stringref_to_daikin_preset(this->get_custom_preset());
+  }
+}
+
+bool DaikinS21Climate::set_daikin_preset(const DaikinPreset preset) {
+  if (preset == DaikinPresetNone) {
+    return this->set_preset_(climate::CLIMATE_PRESET_NONE);
+  } else {
+    return this->set_custom_preset_(daikin_preset_strings[preset]);
+  }
 }
 
 /**
- * Get the parameters associated with the setpoint mode, nullptr if not a setpoint mode.
+ * Synchronize component state changes to the Daikin unit and Home Assistant UI.
+ *
+ * Converts component state to DaikinClimateSettings and forwards to DaikinS21 component to apply.
+ * Publishs component state to Home Assistant.
+ */
+void DaikinS21Climate::handle_climate_changes(const DaikinS21ClimateChanges changes) {
+  if (changes.internal) {
+    this->get_parent()->set_climate_settings({this->mode, this->get_daikin_fan_mode(), this->unit_setpoint});
+  }
+  if (changes.external) {
+    this->publish_state();
+  }
+}
+
+/**
+ * Get the finite setpoint parameters associated with the mode, nullptr if not a setpoint mode.
  */
 DaikinSetpointMode* DaikinS21Climate::SetpointModeParams::get(const climate::ClimateMode mode) {
   switch (mode) {
