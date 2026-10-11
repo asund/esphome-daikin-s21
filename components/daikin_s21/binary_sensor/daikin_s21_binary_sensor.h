@@ -8,18 +8,18 @@
 
 namespace esphome::daikin_s21 {
 
-class DaikinS21BinarySensorMode : public binary_sensor::BinarySensor {
+class DaikinS21BinarySensorMode final : public binary_sensor::BinarySensor {
  public:
   DaikinS21BinarySensorMode(const DaikinMode mode) : mode(mode) {}
   DaikinMode mode;
 };
 
-class DaikinS21BinarySensor : public Component,
-                              public Parented<DaikinS21> {
+class DaikinS21BinarySensor final : public Component,
+                                    public Parented<DaikinS21> {
  public:
-  void setup() final;
-  void loop() final;
-  void dump_config() final;
+  void setup();
+  void loop();
+  void dump_config();
 
   void set_mode_sensor(DaikinS21BinarySensorMode * const mode_sensor) {
     this->mode_sensors_[mode_sensor->mode] = mode_sensor;

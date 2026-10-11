@@ -14,14 +14,14 @@
 
 namespace esphome::daikin_s21 {
 
-class DaikinS21 : public PollingComponent {
+class DaikinS21 final : public PollingComponent {
  public:
   DaikinS21(uart::UARTComponent * const uart);
 
-  void setup() final;
-  void loop() final;
-  void update() final { this->trigger_cycle(); };
-  void dump_config() final;
+  void setup();
+  void loop();
+  void update() { this->trigger_cycle(); };
+  void dump_config();
   void set_debug_comms(const bool set) { this->debug_comms = set; }
   void set_debug_protocol(const bool set) { this->debug_protocol = set; }
 

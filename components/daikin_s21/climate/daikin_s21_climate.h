@@ -38,15 +38,15 @@ struct DaikinS21ClimateChanges {
   bool external{};  /**< External change, new climate values should be published to Home Assistant. */
 };
 
-class DaikinS21Climate : public climate::Climate,
-                         public PollingComponent,
-                         public Parented<DaikinS21> {
+class DaikinS21Climate final : public climate::Climate,
+                               public PollingComponent,
+                               public Parented<DaikinS21> {
  public:
-  void setup() final;
-  void loop() final;
-  void update() final { this->check_sensors = true; };
-  void dump_config() final;
-  void control(const climate::ClimateCall &call) final;
+  void setup();
+  void loop();
+  void update() { this->check_sensors = true; };
+  void dump_config();
+  void control(const climate::ClimateCall &call);
 
   void set_offset_interval(uint32_t offset_interval);
   void set_setpoint_dither(const bool dither) { this->setpoint_dither = dither; }
@@ -59,7 +59,7 @@ class DaikinS21Climate : public climate::Climate,
 
  protected:
   climate::ClimateTraits traits_{};
-  climate::ClimateTraits traits() final { return traits_; };
+  climate::ClimateTraits traits() { return traits_; };
 
   bool is_free_run() const { return this->get_update_interval() == SCHEDULER_DONT_RUN; }
   bool temperature_sensor_unit_is_valid();

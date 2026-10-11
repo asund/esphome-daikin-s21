@@ -7,30 +7,30 @@
 
 namespace esphome::daikin_s21 {
 
-class DaikinS21SelectLEDBrightness : public select::Select,
-                                     public Parented<DaikinS21> {
+class DaikinS21SelectLEDBrightness final : public select::Select,
+                                           public Parented<DaikinS21> {
  protected:
-  void control(size_t index) final;
+  void control(size_t index);
 };
 
-class DaikinS21SelectHumidity : public select::Select,
-                                public Parented<DaikinS21> {
+class DaikinS21SelectHumidity final : public select::Select,
+                                      public Parented<DaikinS21> {
  protected:
-  void control(size_t index) final;
+  void control(size_t index);
 };
 
-class DaikinS21SelectVerticalSwing : public select::Select,
-                                     public Parented<DaikinS21> {
+class DaikinS21SelectVerticalSwing final : public select::Select,
+                                           public Parented<DaikinS21> {
  protected:
-  void control(size_t index) final;
+  void control(size_t index);
 };
 
-class DaikinS21Select : public Component,
-                        public Parented<DaikinS21> {
+class DaikinS21Select final : public Component,
+                              public Parented<DaikinS21> {
  public:
-  void setup() final;
-  void loop() final;
-  void dump_config() final;
+  void setup();
+  void loop();
+  void dump_config();
 
   void set_brightness_select(DaikinS21SelectLEDBrightness * const brightness_select) {
     this->brightness_select_ = brightness_select;

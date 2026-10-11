@@ -8,21 +8,21 @@
 
 namespace esphome::daikin_s21 {
 
-class DaikinS21SwitchMode : public switch_::Switch,
-                            public Parented<DaikinS21> {
+class DaikinS21SwitchMode final : public switch_::Switch,
+                                  public Parented<DaikinS21> {
  protected:
-  void write_state(bool state) final;
+  void write_state(bool state);
  public:
   DaikinS21SwitchMode(const DaikinMode mode) : mode(mode) {}
   DaikinMode mode{};
 };
 
-class DaikinS21Switch : public Component,
-                        public Parented<DaikinS21> {
+class DaikinS21Switch final : public Component,
+                              public Parented<DaikinS21> {
  public:
-  void setup() final;
-  void loop() final;
-  void dump_config() final;
+  void setup();
+  void loop();
+  void dump_config();
 
   void set_mode_switch(DaikinS21SwitchMode * const mode_switch) {
     this->mode_switches_[mode_switch->mode] = mode_switch;
