@@ -1,207 +1,78 @@
 # esphome-daikin-s21
 
-ESPHome components to control Daikin indoor mini-split units using the wired
-protocol available over S21 and related ports.
+ESPHome components to control Daikin indoor mini-split units using the wired protocol available over S21 and related ports.
 
-***Upgrade Note***: If your automatic update failed, I may have changed some
-config schema. I try not to do this but this project is still evolving. Please
-see the changelog below for details.
+***Upgrade Note***: If your automatic update failed, I may have changed some config schema. I try not to do this but this project is still evolving. Please see the changelog below for details.
 
 A big thanks to:
-* [revk](https://codeberg.org/RevK) for work on the fantastic
-  [Faikout](https://codeberg.org/RevK/ESP32-Faikout) (née Faikin) project, which
-  was the primary inspiration and guide for building this ESPHome component. In
-  addition, the very active and resourceful community that project has fostered
-  that has decoded much of the protocol.
-* [joshbenner](https://github.com/joshbenner), the original author of this
-  integration. His [repository](https://github.com/joshbenner/esphome-daikin-s21)
-  would be my preferred place to commit patches to avoid fragmentation, but he
-  lacks the time at the moment to manage the project.
-* [amzaldua](https://github.com/amzaldua) for help with multiple rounds of v3
-  protocol control debugging.
+* [revk](https://codeberg.org/RevK) for work on the fantastic [Faikout](https://codeberg.org/RevK/ESP32-Faikout) (née Faikin) project, which was the primary inspiration and guide for building this ESPHome component. In addition, the very active and resourceful community that project has fostered that has decoded much of the protocol.
+* [joshbenner](https://github.com/joshbenner), the original author of this integration. His [repository](https://github.com/joshbenner/esphome-daikin-s21) would be my preferred place to commit patches to avoid fragmentation, but he lacks the time at the moment to manage the project.
+* [amzaldua](https://github.com/amzaldua) for help with multiple rounds of v3 protocol control debugging.
 * The users of this project who have contributed, tested or offered feedback.
 
 ## Recent / Breaking Changes
 
-A short changelog of sorts, I'll keep things here where a user might encounter
-breaking or significant changes, including configuration updates.
+A short changelog of sorts, I'll keep things here where a user might encounter breaking or significant changes, including configuration updates.
 
-* Added Ururu/Sarara humidity control modes via climate presets. The presets
-  need to be enabled in your config to use them if you have one of these units.
-* Added vertical angle setpoint emulation for units that lack the setpoint
-  command. Horizontal swing setting is now preserved while using this control
-  for both methods. The discrete step should be preserved in the UI afterwards
-  if vertical swing isn't changed.
-* Climate action can now report defrosting instead of a short cooling period.
-  If this is always on while heating your unit doesn't support the state
-  reporting bits and can be blacklisted. Open an issue.
-* Added enforcement for a non-zero update interval at compile time. If you have
-  an `update_interval` of 0s specified in any polling components (s21, climate,
-  sensor) please change this to `never` to indicate the intent is to free run.
-* Modified humidity control to add support for humid heating. The setting is
-  now also applied when switching to heating or cooling modes and only updated
-  in those modes so the setting is preserved over mode changes.
-* Updated the state class of energy sensors to total_increasing so they
-  integrate into the Home Assistant Energy dashboard. The values still track the
-  unit's lifetime totals; they are seeded from the Daikin's own counter and
-  accumulated monotonically on-device, so the small backward dips the unit
-  reports on power loss are absorbed rather than published as a decrease, and
-  energy consumed after a dip is still counted. The totals are persisted
-  to flash to survive reboots and power loss. If flash wear is a concern (writes
-  are already coalesced and rate-limited by the 0.1 kWh resolution), raise the
-  `flash_write_interval` on the esp32 platform to reduce write frequency.
-* Binary sensor changes: Removed `valve`, use unit `active` instead for the
-  same info. Renamed `multizone_conflict` to `multizone_online`, inverting
-  logic and changing the device class. Added `system_online` to track all units
-  on a compressor. Compressor `short_cycle` device class of lock removed; this
-  was showing up in the HA Security dashboard. History will be inverted and
-  should be purged if it matters to you.
-* ***Important***: Updated configuration schema of climate component. The
-  previous `update_interval` is moved to `offset_interval`. This is the period
-  where the external reference temperature sensor offset is applied to the
-  internal control loop. `update_interval` now means the period at which sensor
-  updates are published to the frontend. This addresses a user request to limit
-  the publishing rate when the system uses noisy or precise sensors with a high
-  update rate that aren't actually that interesting. Changes to other values
-  (action, fan mode, etc.) will still be published immediately. It can be
-  omitted for free run operation if desired.
+* Converted DaikinS21 to inherit from the ESPHome UARTDevice component. The configuration key `uart` should be changed to `uart_id`. A deprecation warning has been added. `uart_id` is now optional if you have a single UART configured in your device. UART settings are now checked at configuration stage.
+* Added Ururu/Sarara humidity control modes via climate presets. The presets need to be enabled in your config to use them if you have one of these units.
+* Added vertical angle setpoint emulation for units that lack the setpoint command. Horizontal swing setting is now preserved while using this control for both methods. The discrete step should be preserved in the UI afterwards if vertical swing isn't changed.
+* Climate action can now report defrosting instead of a short cooling period. If this is always on while heating your unit doesn't support the state reporting bits and can be blacklisted. Open an issue.
+* Added enforcement for a non-zero update interval at compile time. If you have an `update_interval` of 0s specified in any polling components (s21, climate, sensor) please change this to `never` to indicate the intent is to free run.
+* Modified humidity control to add support for humid heating. The setting is now also applied when switching to heating or cooling modes and only updated in those modes so the setting is preserved over mode changes.
+* Updated the state class of energy sensors to total_increasing so they integrate into the Home Assistant Energy dashboard. The values still track the unit's lifetime totals; they are seeded from the Daikin's own counter and accumulated monotonically on-device, so the small backward dips the unit reports on power loss are absorbed rather than published as a decrease, and energy consumed after a dip is still counted. The totals are persisted to flash to survive reboots and power loss. If flash wear is a concern (writes are already coalesced and rate-limited by the 0.1 kWh resolution), raise the `flash_write_interval` on the esp32 platform to reduce write frequency.
+* Binary sensor changes: Removed `valve`, use unit `active` instead for the same info. Renamed `multizone_conflict` to `multizone_online`, inverting logic and changing the device class. Added `system_online` to track all units on a compressor. Compressor `short_cycle` device class of lock removed; this was showing up in the HA Security dashboard. History will be inverted and should be purged if it matters to you.
+* ***Important***: Updated configuration schema of climate component. The previous `update_interval` is moved to `offset_interval`. This is the period where the external reference temperature sensor offset is applied to the internal control loop. `update_interval` now means the period at which sensor updates are published to the frontend. This addresses a user request to limit the publishing rate when the system uses noisy or precise sensors with a high update rate that aren't actually that interesting. Changes to other values (action, fan mode, etc.) will still be published immediately. It can be omitted for free run operation if desired.
 
 ## Features
 
-The S21 platform provides a few ESPhome component types that expose the
-functionality of a Daikin unit.
+The `daikin_s21` platform provides a few ESPhome component types that expose the functionality of a Daikin unit.
 
-**NOTE:** Daikin's support for depth of unit control varies wildly over thier
-product line. Your unit could have a lot of features that are exposed via the
-IR remote but offer only basic control over the S21 wired bus. There's not much
-this project can do for you if this is the case. As an example, I'm unable to
-enable Powerful mode on my own device. ESPHome doesn't yet offer an easy way
-for the unit to dynamically enable components based on feature detection, so
-your best bet at the moment is to include components you'd like to use and
-remove them later if not supported. With newer features I could have more
-development to do (I can't test locally), so if something should be working
-based on the queries available and the protocol version of your unit don't
-hesitate to reach out.
+**NOTE:** Daikin's support for depth of unit control varies wildly over thier product line. Your unit could have a lot of features that are exposed via the IR remote but offer only basic control over the S21 wired bus. There's not much this project can do for you if this is the case. As an example, I'm unable to enable Powerful mode on my own device. ESPHome doesn't yet offer an easy way for the unit to dynamically enable components based on feature detection, so your best bet at the moment is to include components you'd like to use and remove them later if not supported. With newer features I could have more development to do (I can't test locally), so if something should be working based on the queries available and the protocol version of your unit don't hesitate to reach out.
 
-## Control
+### Control
 
-### Climate
+#### Climate
 
 The main control interface. Supported features:
 
 * Setpoint temperature.
-* Climate modes OFF, HEAT_COOL, COOL, HEAT, FAN_ONLY and DRY. The list is
-  configurable in case your unit doesn't support them all or you otherwise want
-  to restrict the ones available.
+* Climate modes OFF, HEAT_COOL, COOL, HEAT, FAN_ONLY and DRY. The list is configurable in case your unit doesn't support them all or you otherwise want to restrict the ones available.
 * Climate action, current temperature and humidity reporting.
 * Fan modes auto, quiet and 1-5.
-* Swing modes off, horizontal, vertical, and both. These can also be restricted
-  to a specified list using configuration.
-* Optional external temperature and humidity sensor reporting, integrating a
-  sensor placed in your living space to get a better reflection of the
-  temperature you feel. The external temperature can be used in a secondary
-  control loop so you can set what you want to feel.
+* Swing modes off, horizontal, vertical, and both. These can also be restricted to a specified list using configuration.
+* Optional external temperature and humidity sensor reporting, integrating a sensor placed in your living space to get a better reflection of the temperature you feel. The external temperature can be used in a secondary control loop so you can set what you want to feel.
 * Optional setpoint mode (HEAT_COOL, COOL, HEAT) configuration:
-  * Offset to apply to commanded value. If your unit is adequately sized to
-    condition your living space, Daikin's control loop will overshoot the
-    setpoint. It can also not achieve the desired setpoint based on the space
-    and reference sensor placement. e.g. One of my rooms is 1.0C less than the
-    target temperature at a steady state so I add a +1.0C offset here.
-  * Temperature range limits for values sent to the unit. Defaults should work
-    fine, but if your unit is different they can be overridden.
-* Optional `offset_interval` (default `5min`). period to recalculate the offset
-  between the "ideal" external reference sensor and the internal Daikin sensor.
-* Optional `setpoint_dither` (default `true`). When the ideal setpoint falls
-  between the unit's steps, the commanded value is rounded in the direction of
-  change so it oscillates over the ideal value over time. Set to `false` to
-  round to the nearest step instead, trading the oscillation (and its periodic
-  setpoint writes while the temperature hovers around the target) for a steady
-  commanded value within half a step of the ideal value.
-* Optionl `preset` (default `false`). Enable preset control of "Ururu Sarara"
-  special humidity modes on models that support them. Due to the command format
-  only "Ururu" Humidify is uniquely available using this control, "Sarara" Dry
-  is available in the regular climate mode. These are humidty first modes that
-  don't attempt to reach a target setpoint. The value is only used and updated
-  in relevant climate modes. Use the separate `humidity` select component for
-  the temperature subordinate Dry Cooling and Humid Heating modes. If your unit
-  doesn't support it you can be prevented switching into heating mode if Ururu
-  Humidify is active as the command will fail. Disable the preset first or
-  better yet, don't enable presets at all.
+  * Offset to apply to commanded value. If your unit is adequately sized to condition your living space, Daikin's control loop will overshoot the setpoint. It can also not achieve the desired setpoint based on the space and reference sensor placement. e.g. One of my rooms is 1.0C less than the target temperature at a steady state so I add a +1.0C offset here.
+  * Temperature range limits for values sent to the unit. Defaults should work fine, but if your unit is different they can be overridden.
+* Optional `offset_interval` (default `5min`). period to recalculate the offset between the "ideal" external reference sensor and the internal Daikin sensor.
+* Optional `setpoint_dither` (default `true`). When the ideal setpoint falls between the unit's steps, the commanded value is rounded in the direction of change so it oscillates over the ideal value over time. Set to `false` to round to the nearest step instead, trading the oscillation (and its periodic setpoint writes while the temperature hovers around the target) for a steady commanded value within half a step of the ideal value.
+* Optionl `preset` (default `false`). Enable preset control of "Ururu Sarara" special humidity modes on models that support them. Due to the command format only "Ururu" Humidify is uniquely available using this control, "Sarara" Dry is available in the regular climate mode. These are humidty first modes that don't attempt to reach a target setpoint. The value is only used and updated in relevant climate modes. Use the separate `humidity` select component for the temperature subordinate Dry Cooling and Humid Heating modes. If your unit doesn't support it you can be prevented switching into heating mode if Ururu Humidify is active as the command will fail. Disable the preset first or better yet, don't enable presets at all.
 
-Daikin's other modes don't neatly fit into the discrete "preset" category
-modelled by ESPHome as they function more like mode modifiers. Switches are
-provided for individual control of these modifiers instead of climate presets.
-The only one that's exclusive to other modes is Powerful, but I felt the
-interface should be uniform.
+Daikin's other modes don't neatly fit into the discrete "preset" category modelled by ESPHome as they function more like mode modifiers. Switches are provided for individual control of these modifiers instead of climate presets. The only one that's exclusive to other modes is Powerful, but I felt the interface should be uniform.
 
 The standard Daikin control loop has a few deficiencies:
 * The setpoint value has 1.0°C granularity.
 * The current temperature feedback value has 0.5°C granularity.
-* The current temperature sensor is located in the unit, in most cases
-  a wall unit placed higher in a room. This reading doesn't always reflect
-  the temperature felt by occupants. It will overshoot the setpoint to try to
-  account for this (see your service manual for details).
+* The current temperature sensor is located in the unit, in most cases a wall unit placed higher in a room. This reading doesn't always reflect the temperature felt by occupants. It will overshoot the setpoint to try to account for this (see your service manual for details).
 
-Because of these, the climate component implements a separate loop on top of
-the Daikin internal one. An external temperature sensor can be used to provide
-a more accurate and precise reference and an offset applied to the internal
-Daikin setpoint. The internal temperature sensor can also be used for this
-functionality to drive the coarse setpoint around the more granular
-temperature sensor. The rate at which this secondary loop runs can be
-configured with the component update interval when using this mode. All of this
-is downstream of Daikin's reported temperature precision and relatively broad
-control loop hysteresis, so it's far from ideal but can compensate for a
-difference in temperature between the unit and your space. Keep in mind the
-unit will overshoot, so you may want to configure an offset for the mode based
-on a measured reference value.
+Because of these, the climate component implements a separate loop on top of the Daikin internal one. An external temperature sensor can be used to provide a more accurate and precise reference and an offset applied to the internal Daikin setpoint. The internal temperature sensor can also be used for this functionality to drive the coarse setpoint around the more granular temperature sensor. The rate at which this secondary loop runs can be configured with the component update interval when using this mode. All of this is downstream of Daikin's reported temperature precision and relatively broad control loop hysteresis, so it's far from ideal but can compensate for a difference in temperature between the unit and your space. Keep in mind the unit will overshoot, so you may want to configure an offset for the mode based on a measured reference value.
 
-Climate publish rate was raised as a problem by a user. When external sensors
-are used any change in temperature or humidity will cause the updated climate
-state to be published over the network. The internal default Daikin sensor can
-also flip between values when on the edge between steps. You can reduce this by
-configuring an explicit temperature sensor (in the case of the internal sensor)
-and then using ESPHome sensor filters in the sensor definitions themselves.
-Any of the averaging filters can be used to flatten out a toggling internal
-sensor and use of the delta filter can gate updates to coarser, more signficant
-changes.
+Climate publish rate was raised as a problem by a user. When external sensors are used any change in temperature or humidity will cause the updated climate state to be published over the network. The internal default Daikin sensor can also flip between values when on the edge between steps. You can reduce this by configuring an explicit temperature sensor (in the case of the internal sensor) and then using ESPHome sensor filters in the sensor definitions themselves. Any of the averaging filters can be used to flatten out a toggling internal sensor and use of the delta filter can gate updates to coarser, more signficant changes.
 
-### Select
+#### Select
 
 Dropdown controls for additional settings with multiple choices.
 
-* LED brightness. v2+ may support this. The value may change when using IR
-  remote modes that make use of the PIR sensor. If this control works for you,
-  there's no need to enable the Sensor LED or Sensor Mode switches or binary
-  sensors as the functions are mutually exclusive.
+* LED brightness. v2+ may support this. The value may change when using IR remote modes that make use of the PIR sensor. If this control works for you, there's no need to enable the Sensor LED or Sensor Mode switches or binary sensors as the functions are mutually exclusive.
 
-* Vertical swing setpoint. Command the vertical louvre to a preset angle and
-  stop there. Horizontal swing is preserved during this time. Some units (v2+)
-  may support a command to do this directly. On those that don't, vertical
-  swing is temporarily enabled and an attempt is made to pause the louvre in
-  the general area of the desired angle. This is only going to work well if the
-  core query rate is in free run or else the polled angle will be stale. These
-  angles can be optionally configured per action and are only used when there's
-  no command support. The range may vary on your unit, turn on vertical swing
-  and monitor the angles for your mode and unit to come up with your presets.
-  Dry action uses cool's angles. You may find that stopping vertical swing
-  causes this control to snap to the nearest discrete setpoint.
+* Vertical swing setpoint. Command the vertical louvre to a preset angle and stop there. Horizontal swing is preserved during this time. Some units (v2+) may support a command to do this directly. On those that don't, vertical swing is temporarily enabled and an attempt is made to pause the louvre in the general area of the desired angle. This is only going to work well if the core query rate is in free run or else the polled angle will be stale. These angles can be optionally configured per action and are only used when there's no command support. The range may vary on your unit, turn on vertical swing and monitor the angles for your mode and unit to come up with your presets. Dry action uses cool's angles. You may find that stopping vertical swing causes this control to snap to the nearest discrete setpoint.
 
-* Humidity operation. v2+ may support this, though you may need an "Ururu
-  Sarara" unit. Controls humidity while in heating and cooling modes to provide
-  dry cooling or humid heating. The operation of this isn't well understood due
-  to lack of user feedback. If you want to help, please post your findings in
-  the discussions section or open an issue if you're willing to assist further
-  development.
+* Humidity operation. v2+ may support this, though you may need an "Ururu Sarara" unit. Controls humidity while in heating and cooling modes to provide dry cooling or humid heating. The operation of this isn't well understood due to lack of user feedback. If you want to help, please post your findings in the discussions section or open an issue if you're willing to assist further development.
 
-### Switch
+#### Switch
 
-Mode toggle switches for protocol v2+. As a reminder: even if these modes are
-supported by your unit, they are not necessarily supported via the S21
-interface. In some cases support exists for reading the current value set by
-the IR remote. If this is true for you, a parallel set of binary sensors are
-offered as a read only indication. Use those instead if that's the case.
-There's no point in having both the switch and corresponding binary sensor
-active at the same time.
+Mode toggle switches for protocol v2+. As a reminder: even if these modes are supported by your unit, they are not necessarily supported via the S21 interface. In some cases support exists for reading the current value set by the IR remote. If this is true for you, a parallel set of binary sensors are offered as a read only indication. Use those instead if that's the case. There's no point in having both the switch and corresponding binary sensor active at the same time.
 
 * Powerful Mode
 * Comfort Mode
@@ -211,45 +82,27 @@ active at the same time.
 * Sensor Mode (unverified)
 * Econo Mode
 
-In the Faikout code some units appear to select the brightness of the unit LEDs
-via a combination of the motion sensor and LED bits. Let me know if this is the
-case for you and I can try to implement better control.
+In the Faikout code some units appear to select the brightness of the unit LEDs via a combination of the motion sensor and LED bits. Let me know if this is the case for you and I can try to implement better control.
 
-### Number
+#### Number
 
-* Demand Control (v2+, unverified). Select from 30%-100% of conditioning power
-  output. As a reference point, the built in Econo mode limits this to around
-  70%. Note that this isn't a direct control of energy consumption.
+* Demand Control (v2+, unverified). Select from 30%-100% of conditioning power output. As a reference point, the built in Econo mode limits this to around 70%. Note that this isn't a direct control of energy consumption.
 
-## Feedback
+### Feedback
 
-### Sensor
+#### Sensor
 
-Sensors in ESPHome are geared more towards a periodic ADC value that can be
-filtered as necessary the pre-processed values from the Daikin unit and won't
-normally require averaging filters and the like. The sensor component supports
-a configurable update interval that will publish the current values at a chosen
-rate. To make this reporting more responsive, the user can set this value to
-`never` and every update from the unit, interesting or not, will be published.
-To reduce spam when doing this, please configure a delta filter on your sensors
-and only changes will be published over the network. See the example
-configuration.
+Sensors in ESPHome are geared more towards a periodic ADC value that can be filtered as necessary the pre-processed values from the Daikin unit and won't normally require averaging filters and the like. The sensor component supports a configurable update interval that will publish the current values at a chosen rate. To make this reporting more responsive, the user can set this value to `never` and every update from the unit, interesting or not, will be published. To reduce spam when doing this, please configure a delta filter on your sensors and only changes will be published over the network. See the example configuration.
 
 * Inside temperature, usually measured at indoor air handler return.
 * Outside temperature from the exchanger.
-* Coil temperature of indoor air handler. These will be very similar for active
-  units sharing an outdoor exchanger. You may only want to enable this on a
-  single indoor unit to reduce UI clutter.
-* Target temperature (internal setpoint, modified by special modes). This is
-  not the user setpoint and usually not that interesting but may help in your
-  automations.
+* Coil temperature of indoor air handler. These will be very similar for active units sharing an outdoor exchanger. You may only want to enable this on a single indoor unit to reduce UI clutter.
+* Target temperature (internal setpoint, modified by special modes). This is not the user setpoint and usually not that interesting but may help in your automations.
 * Fan speed of inside blower.
 * Vertical swing angle of louvre. This uses Daikin's reference frame.
 * Compressor frequency of the outside exchanger.
-* Humidity. Not supported on all units, can report a consistent 50% or 0% if
-  not present.
-* Unit's demand from outside exchanger, a 0-15 value representing the draw from
-  the outside exchanger.
+* Humidity. Not supported on all units, can report a consistent 50% or 0% if not present.
+* Unit's demand from outside exchanger, a 0-15 value representing the draw from the outside exchanger.
 
 v2+ protocol units may also support:
 
@@ -259,20 +112,14 @@ v2+ protocol units may also support:
 
 v3.20+ protocol units may also support:
 
-* Instantaneous unit power consumption in W. If you have a multihead system,
-  sampling jitter may result in incorrect results when summed. Use as a rough
-  indicator only and prefer energy consumption for your dashboard.
-* Energy consumption in cooling and heating modes in kWh, including the outside
-  unit's use, for this inside unit.
+* Instantaneous unit power consumption in W. If you have a multihead system, sampling jitter may result in incorrect results when summed. Use as a rough indicator only and prefer energy consumption for your dashboard.
+* Energy consumption in cooling and heating modes in kWh, including the outside unit's use, for this inside unit.
 
-### Binary Sensor
+#### Binary Sensor
 
-Mode indicators that mirror the switches above for units and modes that don't
-support setting via S21. There's no point in having both the switch and
-corresponding binary sensor active at he same time.
+Mode indicators that mirror the switches above for units and modes that don't support setting via S21. There's no point in having both the switch and corresponding binary sensor active at he same time.
 
-* Powerful Mode. Can pull from unit state bitfield when the primary query is
-  unsupported. See the note about the bitfield and support for it below.
+* Powerful Mode. Can pull from unit state bitfield when the primary query is unsupported. See the note about the bitfield and support for it below.
 * Comfort Mode
 * Quiet Mode
 * Streamer Mode
@@ -280,16 +127,11 @@ corresponding binary sensor active at he same time.
 * Sensor Mode (unverified)
 * Econo Mode
 
-On some units a memory location was identified that contains unit and system
-state informtation. We still need to observe to see how valuable these are. I
-may remove the redundant ones in the future. Not all units support these. If
-you see nonsense output then we are likely reading random memory. Your debug
-logs can let me blacklist your model and let others avoid this.
+On some units a memory location was identified that contains unit and system state informtation. We still need to observe to see how valuable these are. I may remove the redundant ones in the future. Not all units support these. If you see nonsense output then we are likely reading random memory. Your debug logs can let me blacklist your model and let others avoid this.
 
 * Defrost
 * Active (Actively controlling climate, climate action can also tell us this)
-* Multizone Online (Other units are in a compressor dependent mode, useful for
-  resolving conflicts affecting this unit)
+* Multizone Online (Other units are in a compressor dependent mode, useful for resolving conflicts affecting this unit)
 * Online (In a climate controlling mode, climate mode can also tell us this)
 * Short Cycle Lock (2:30-3:00 minute compressor lockout when changing activity)
 * System Defrost (shadows defrost? need to wait for winter to determine this)
@@ -299,7 +141,7 @@ Additional binary sensors:
 
 * Serial error. Always OK if working, this is mainly for developer use.
 
-### Text Sensor
+#### Text Sensor
 
 As always, actual support may vary.
 
@@ -307,104 +149,51 @@ As always, actual support may vary.
 * Software Revision (v3+)
 * Software Version (v2+)
 
-If you've read the Faikout wiki you'll see many more queries available than
-what this project supports. I've added a `text_sensor` component to read these
-raw values out for debugging and protocol decoding use, without having to add
-a dedicated sensor. Normally you wouldn't need to use this, but if a value
-looks interesting you can see the value change over time in Home Assistant.
-I'd prefer if we use this just to confirm a query works and then add proper
-support, rather than trying to interpret the string via HA. Open an issue with
-details if you want a sensor or control added.
+If you've read the Faikout wiki you'll see many more queries available than what this project supports. I've added a `text_sensor` component to read these raw values out for debugging and protocol decoding use, without having to add a dedicated sensor. Normally you wouldn't need to use this, but if a value looks interesting you can see the value change over time in Home Assistant. I'd prefer if we use this just to confirm a query works and then add proper support, rather than trying to interpret the string via HA. Open an issue with details if you want a sensor or control added.
 
 ## Limitations
 
-* Aforementioned S21 control limitations. Your unit may support a mode but
-  support for controlling over S21 may not be there. See your model's
-  documentation for supported wired remotes and their feature sets to confirm.
-* This code has only been tested on ESP32 pico and ESP32-S3. It compiles for
-  ESP8266 and has been reported to work, but only on a hardware UART.
-* Tested with my 4MXL36TVJU outdoor unit and CTXS07LVJU, FTXS12LVJU, FTXS15LVJU
-  indoor units. These are protocol v0, so anything more featureful requires
-  your feedback and help.
-* Presence detection is limited to mode configuration. I haven't found a way to
-  detect the state of the sensor and expose a motion detector sensor. If you're
-  handy with electronics, the active low PIR sensor output can be wired to a
-  spare GPIO and used that way.
+* Aforementioned S21 control limitations. Your unit may support a mode but support for controlling over S21 may not be there. See your model's documentation for supported wired remotes and their feature sets to confirm.
+* This code has only been tested on ESP32 pico and ESP32-S3. It compiles for ESP8266 and has been reported to work, but only on a hardware UART.
+* Tested with my 4MXL36TVJU outdoor unit and CTXS07LVJU, FTXS12LVJU, FTXS15LVJU indoor units. These are protocol v0, so anything more featureful requires your feedback and help.
+* Presence detection is limited to mode configuration. I haven't found a way to detect the state of the sensor and expose a motion detector sensor. If you're handy with electronics, the active low PIR sensor output can be wired to a spare GPIO and used that way.
 * Does not interact with the indoor units schedules. Do that with HA instead.
-* Daikin's internal R&D departments must be a bit chaotic. The latest models
-  might have inferior command sets to those released years ago.
+* Daikin's internal R&D departments must be a bit chaotic. The latest models might have inferior command sets to those released years ago.
 
 ## Hardware
 
-Please see the Faikout [wiring](https://codeberg.org/RevK/ESP32-Faikout/wiki/Wiring)
-page for detailed documentation including pinouts, alternate connectors with
-images. Below is just a quick reference overview.
+Please see the Faikout [wiring](https://codeberg.org/RevK/ESP32-Faikout/wiki/Wiring) page for detailed documentation including pinouts, alternate connectors with images. Below is just a quick reference overview.
 
-**NOTE:** The Daikin connector's Vcc provides >5V, so if you intend to power
-your board with this pin, be sure to test its output and regulate voltage
-accordingly. Mine supplies 14.5V.
+**NOTE:** The Daikin connector's Vcc provides >5V, so if you intend to power your board with this pin, be sure to test its output and regulate voltage accordingly. Mine supplies 14.5V.
 
-For communications pins, I found mine pulled up internally to 5V by the Daikin
-board. I've read some users don't see this, so verify with a multimeter. You may
-need to add your own external pullups or make use of a level shifting circuit.
-Cheap level shifter modules are available that can make use of the provided 5V
-reference to do this if you'd prefer. If you are powering your device
-externally you should still connect a ground reference for the communications.
-A word of warning about very cheap level shifters: a user reported intermittent
-communication, probably due to bad FETs. The ESP chip is 5V tolerant, but a
-passive circuit with a voltage divider on the ESP Rx side should also be
-possible. Said user is using 1K/2K to bring 5V down closer to 3.3V logic levels.
+For communications pins, I found mine pulled up internally to 5V by the Daikin board. I've read some users don't see this, so verify with a multimeter. You may need to add your own external pullups or make use of a level shifting circuit. Cheap level shifter modules are available that can make use of the provided 5V reference to do this if you'd prefer. If you are powering your device externally you should still connect a ground reference for the communications. A word of warning about very cheap level shifters: a user reported intermittent communication, probably due to bad FETs. The ESP chip is unofficially 5V tolerant, but a passive circuit with a voltage divider on the ESP Rx side should also be possible. Said user is using 1K/2K to bring 5V down closer to 3.3V logic levels.
 
-The ESP8266 platform is quite limited. Since the cost of boards are in the same
-ballpark, please use an ESP32 (or at least something with a free hardware UART).
-ESP8266 boards often have a USB-Serial chip wired to their only hardware UART.
-This chip can interfere with the Rx pin on the microcontroller, driving it to
-levels that override the open drain output mode used by the Daikin unit, making
-it unable to pull the Rx line to ground and signalling responses to the
-processor. If you want to use one anyways, a user has reported lifting the pads
-on this chip allows the single hardware UART to be used for communication with
-the unit. ESPHome's software UART implementation isn't viable for this
-application as it uses delays inside an interrupt routine. This might be
-accpetable at higher baud rates, but at 1200 baud the delays become too long
-and the system will watchdog out and reset. Just get an ESP32 board.
+The ESP8266 platform is quite limited. Since the cost of boards are in the same ballpark, please use an ESP32 (or at least something with a free hardware UART). ESP8266 boards often have a USB-Serial chip wired to their only hardware UART. This chip can interfere with the Rx pin on the microcontroller, driving it to levels that override the open drain output mode used by the Daikin unit, making it unable to pull the Rx line to ground and signalling responses to the processor. If you want to use one anyways, a user has reported lifting the pads on this chip allows the single hardware UART to be used for communication with the unit. ESPHome's software UART implementation isn't viable for this application as it uses delays inside an interrupt routine. This might be accpetable at higher baud rates, but at 1200 baud the delays become too long and the system will watchdog out and reset. Just get an ESP32 board.
 
-ESPHome preferences (and the associated flash memory wear) are used in the
-following ways to save information over power cycles:
+### Flash Usage
 
-* Temperature setpoints in the three main modes. Changing operation mode will
-  restore the last used setpoint for that mode by default.
-* Energy sensor totals for coherent reporting as `total_increasing` state
-  class. Daikin preserves these internally but at a lower resolution, so to
-  prevent a small amount of rollback if power is lost at the wrong time the
-  current high resolution value is preserved, making your energy dashboard in
-  Home Assistant glitch free.
+ESPHome preferences (and the associated flash memory wear) are used in the following ways to save information over power cycles:
 
-If these are a concern on your platform, raise the `flash_write_interval` to
-reduce write frequency at the cost of losing the current state if power is
-lost. The flash on an ESP32 device is rated for 100000 write cycles and ESPHome
-provides wear leveling so this isn't thought to be a concern.
+* Temperature setpoints in the three main modes. Changing operation mode will restore the last used setpoint for that mode by default.
+* Energy sensor totals for coherent reporting as `total_increasing` state class. Daikin preserves these internally but at a lower resolution, so to prevent a small amount of rollback if power is lost at the wrong time the current high resolution value is preserved, making your energy dashboard in Home Assistant glitch free.
+
+If these are a concern on your platform, raise the `flash_write_interval` to reduce write frequency at the cost of losing the current state if power is lost. The flash on an ESP32 device is rated for 100000 write cycles and ESPHome provides wear leveling so this isn't thought to be a problem.
 
 ### S21 Port
 
 On my Daikin units, the S21 port has the following pins:
 
-1. Vref (5V) Reference for communications, not to be used for powering your
-  device. Sometimes N/C.
+1. Vref (5V) Reference for communications, not to be used for powering your device. Sometimes N/C.
 2. TX (5V) Daikin Tx, ESPHome Rx
 3. RX (5V) Daikin Rx, ESPHome Tx
 4. Vcc (>5V!)
 5. GND
 
-The S21 plug is JST `EHR-5` and related header `B5B-EH-A(LF)(SN)`, though the
-plug pins are at standard 2.5mm pin header widths. I was able to locate headers
-and precrimped wire leads on Aliexpress for a low cost.
+The S21 plug is JST `EHR-5` and related header `B5B-EH-A(LF)(SN)`, though the plug pins are at standard 2.5mm pin header widths. I was able to locate headers and precrimped wire leads on Aliexpress for a low cost.
 
 ### S403 Port
 
-The project has been reported to work on a unit with the S403 connecter as
-this has the same communication interface with a little additional
-functionality, and most importantly to note, mains voltage exposed on a pin.
-Do not connect anything to pin 10. Don't populate it in your plug.
+The project has been reported to work on a unit with the S403 connecter as this has the same communication interface with a little additional functionality, and most importantly to note, mains voltage exposed on a pin. Do not connect anything to pin 10. Don't populate it in your cable.
 
 1. Vcc (>5V!)
 2. JEM-A OUT (pull down = ON)
@@ -420,74 +209,45 @@ Do not connect anything to pin 10. Don't populate it in your plug.
 Housing: JST `XAP-10V-1`
 Contacts: JST `SXA-001T-P0.6`
 
-### PCB Option 1
+### Circuit Option 1
 
-joshbenner uses the board designed by revk available [here](https://codeberg.org/RevK/ESP32-Faikout/src/branch/main/PCB/Faikout).
-Note that revk's design includes a FET that inverts the logic levels on the
-ESP's RX pin, and on newer revisions the TX pin as well. When interfacing
-through a FET the RX line should be configured with a pullup. This handling
-should be supported with the ESP-IDF framework and regular ESPHome invert pin
-schema, see the example configuration.
+joshbenner uses the board designed by revk available [here](https://codeberg.org/RevK/ESP32-Faikout/src/branch/main/PCB/Faikout). Note that revk's design includes a FET that inverts the logic levels on the ESP's RX pin, and on newer revisions the TX pin as well. When interfacing through a FET the RX line should be configured with a pullup. This handling should be supported with the ESP-IDF framework and regular ESPHome invert pin schema, see the example configuration.
 
-### PCB Option 2
+### Ciruit Option 2
 
-I am using ESP32-S3 mini dev boards and directly wiring communication to the
-S21 port. My Daikin unit pulls the TX line up to 5V, so I've configured my pin
-as open drain to work with it. The RX line relies on the ESP32's 5V tolerant
-GPIO pins. For power I am using a cheap switching regulator module to take
-14.5V from the Daikin unit down to 5V wired into VBUS on the dev board and
-the on board regulator takes it to 3.3V.
+I am using ESP32-S3 mini dev boards and directly wiring communication to the S21 port, relying on the ESP32's GPIO pins being unofficially 5V tolerant. My Daikin unit pulls the TX line up to 5V, so I've configured my pin as open drain to let it float and pull it down when transmitting. For power I am using a cheap switching regulator module to take 14.5V from the Daikin unit down to 5V wired into VBUS on the dev board and the on board regulator takes it to 3.3V.
 
 ## Contributing
 
-If you can write C++, great. Even if you're more of a YAML writer or user,
-your assistance with this project would be helpful. Here are some possible
-ways:
+If you can write C++, great. Even if you're more of a YAML writer or user, your assistance with this project would be helpful. Here are some possible ways:
 
-* Report your experince with different Daikin units. Turning on protocol
-  debugging and getting the protocol and model detection output values would be
-  the first step if you encounter issues and help me learn more about the
-  output of different models. The 60s debug dump in the logs is valuable for
-  documentation and support.
-* Let me know how useful the binary sensor values are and which just shadow
-  other sensor values.
-* Tell me if there are any problems with the control code for your units. The
-  supported features vary wildly so you may find control or even readout of
-  features or sensors doesn't work for you. This is normal, especially for my
-  v0 units. It's recommended that once you figure out what doesn't work for you
-  that you just disable those controls or sensors. However if you find that
-  your unit does support something via enabling protocol debugging or testing
-  with debug queries then I would like to add support for it.
-* Please consider documenting characteristics of your unit in the appropriate
-  place in the Faikout wiki. I don't want to make an inferior copy of this
-  information if possible. Please don't report issues with this component to
-  them as we don't share a codebase. Some of the readout values here are not
-  byteswapped if we don't otherwise use them so unknown static fields may
-  appear reversed compared to that project. Please verify this when
-  contributing.
-* Check the discussions section on Github for things that may not be in this
-  readme yet.
+* Report your experince with different Daikin units. Turning on protocol debugging and getting the protocol and model detection output values would be the first step if you encounter issues and help me learn more about the output of different models. The 1 minute debug state dump in the logs with `protocol_debug` enabled is valuable for documentation and support.
+* Let me know how useful the binary sensor values are and which just shadow other sensor values.
+* Tell me if there are any problems with the control code for your units. The supported features vary wildly so you may find control or even readout of features or sensors doesn't work for you. This is normal, especially for my v0 units. It's recommended that once you figure out what doesn't work for you that you just disable those controls or sensors. However if you find that your unit does support something via enabling protocol debugging or testing with debug queries then I would like to add support for it.
+* Please consider documenting characteristics of your unit in the appropriate place in the Faikout wiki. I don't want to make an inferior copy of this information if possible. Please don't report issues with this component to them as we don't share a codebase. Some of the readout values here are not byteswapped if we don't otherwise use them so unknown static fields may appear reversed compared to that project. Please verify this when contributing.
+* Check the discussions section on Github for things that may not be in this readme yet.
 
-See existing issues, open a new one or post in the discussions section with
-your findings. Thanks.
+See existing issues, open a new one or post in the discussions section with your findings. Thanks.
 
 ## Configuration
 
-On multihead systems some values that come from the outdoor unit will be the
-same (accounting for sampling jitter). It's recommended to use ESPHome's
-subdevice feature to only configure these sensors on your "primary" ESPHome
-instance as a subdevice to keep individual indoor unit representations cleaner.
-See the configuration example below. This feature seems designed for the
-one-to-many case, whereas this system is more of a many-to-one configuration.
-Locally I have two configuration template files, one for indoor only units and
-one for a single indoor unit with an outdoor unit subdevice. If I can find a
-better solution I'll update the example. You can also use this feature to hide
-away a bunch of stats in a subdevice and leave the primary interface clean.
+Work in progress, see the configuration example in the meantime. At this time only a single `daikin_s21` platform can be configured on the device.
 
-When using an external temperature sensor as a room reference instead of the
-internal Daikin value it's recommended to change the target_temperature step
-to 0.5°C to reflect the granularity of the alternate control loop provided.
-The default is 1.0°C to match Daikin's internal granularity.
+### DaikinS21 Platform
+
+```yaml
+# Example configuration entry
+daikin_s21:
+```
+
+* **uart_id** (*Optional*, ID): The UART component to bind to. Required if you have more than one UART configured on your device. Inherited from UARTDevice. Defaults to the single UART on your device.
+* **debug_comms** (*Optional*, boolean): Enables low level communications logging. Transmitted commands are logged. A lot of clutter, useful for development debugging. Defaults to `false`.
+* **debug_protocol** (*Optional*, boolean): Enables additional logging in the 1 minute state dump. Very useful when tracking down bugs or adding features for users, so please enable and include the dump if relevant to your issue. Enables command logging for developers. Defaults to `false`.
+* **update_interval** (*Optional*, Time): Communication polling rate, the rate at which a complete set of registers will be polled from the unit. Set to `never` for free run mode. Inherited from PollingComponent. Defaults to `never`.
+
+On multihead systems some values that come from the outdoor unit will be the same (accounting for sampling jitter). It's recommended to use ESPHome's subdevice feature to only configure these sensors on your "primary" ESPHome instance as a subdevice to keep individual indoor unit representations cleaner. See the configuration example below. This feature seems designed for the one-to-many case, whereas this system is more of a many-to-one configuration. Locally I have two configuration template files, one for indoor only units and one for a single indoor unit with an outdoor unit subdevice. If I can find a better solution I'll update the example. You can also use this feature to hide away a bunch of stats in a subdevice and leave the primary interface clean.
+
+When using an external temperature sensor as a room reference instead of the internal Daikin value it's recommended to change the target_temperature step to 0.5°C to reflect the granularity of the alternate control loop provided. The default is 1.0°C to match Daikin's internal granularity.
 
 ```yaml
 esphome:
@@ -503,25 +263,21 @@ esp32:
 logger:
   baud_rate: 0  # Disable UART logger if using UART0 (pins 1,3)
 
-preferences:
-  flash_write_interval: 72h
-
 external_components:
   - source: github://asund/esphome-daikin-s21@main
     components: [ daikin_s21 ]
 
 uart:
-  - id: s21_uart
-    tx_pin: GPIO1
-    rx_pin: GPIO3
-    baud_rate: 2400
-    data_bits: 8
-    parity: EVEN
-    stop_bits: 2
+  tx_pin: GPIO1
+  rx_pin: GPIO3
+  baud_rate: 2400
+  data_bits: 8
+  parity: EVEN
+  stop_bits: 2
 
 # The parent UART communication hub platform.
 daikin_s21:
-  uart: s21_uart
+  # uart_id: s21_uart # required if your device has more than one UART
   # debug_protocol: true  # please enable when reporting logs!
   # update_interval: never  # Communication cycle rate, 'never' for free run
 
@@ -745,46 +501,37 @@ number:
       name: Demand
 ```
 
-Here is an example of how daikin_s21 can be used with inverted UART pins
-and an RX pullup (newer Faikout PCB rev):
+Here is an example of how daikin_s21 can be used with inverted UART pins and an RX pullup (newer Faikout PCB rev):
 
 ```yaml
 uart:
-  - id: s21_uart
-    tx_pin:
-      number: GPIO48
-      inverted: true
-    rx_pin:
-      number: GPIO34
-      inverted: true
-      mode:
-        input: true
-        pullup: true
-    baud_rate: 2400
-    data_bits: 8
-    parity: EVEN
-    stop_bits: 2
-
-daikin_s21:
-  uart: s21_uart
+  tx_pin:
+    number: GPIO48
+    inverted: true
+  rx_pin:
+    number: GPIO34
+    inverted: true
+    mode:
+      input: true
+      pullup: true
+  baud_rate: 2400
+  data_bits: 8
+  parity: EVEN
+  stop_bits: 2
 ```
 
 Here's an example of an ESP32 dev board using direct wiring:
 
 ```yaml
 uart:
-  - id: s21_uart
-    tx_pin:
-      number: GPIO43
-      mode:
-        output: true
-        open_drain: true  # daikin pulls up to 5V internally
-    rx_pin: GPIO44
-    baud_rate: 2400
-    data_bits: 8
-    parity: EVEN
-    stop_bits: 2
-
-daikin_s21:
-  uart: s21_uart
+  tx_pin:
+    number: GPIO43
+    mode:
+      output: true
+      open_drain: true  # daikin pulls up to 5V internally
+  rx_pin: GPIO44
+  baud_rate: 2400
+  data_bits: 8
+  parity: EVEN
+  stop_bits: 2
 ```

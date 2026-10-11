@@ -3,25 +3,27 @@ Daikin S21 Mini-Split ESPHome component config validation & code generation.
 """
 
 import esphome.codegen as cg
+from esphome.components import uart
 import esphome.config_validation as cv
 from esphome.const import (
   CONF_ID,
   CONF_LED,
   CONF_MOTION,
   CONF_NEVER,
+  CONF_UART_ID,
   CONF_UPDATE_INTERVAL,
   ICON_ACCOUNT_CHECK,
 )
+import logging
 
 DEPENDENCIES = ["uart"]
 
-CONF_DAIKIN_SERIAL_ID = "daikin_serial_id"
 CONF_S21_ID = "s21_id"
-CONF_UART = "uart"
+CONF_UART = "uart"  # deprecated
 CONF_DEBUG_COMMS = "debug_comms"
 CONF_DEBUG_PROTOCOL = "debug_protocol"
 
-# used by subcomponents
+# used by platform components
 CONF_COMFORT = "comfort"
 CONF_ECONO = "econo"
 CONF_POWERFUL = "powerful"
@@ -36,7 +38,7 @@ ICON_STREAMER = "mdi:creation"
 ICON_VERTICAL_SWING = "mdi:pan-vertical"
 
 daikin_s21_ns = cg.esphome_ns.namespace("daikin_s21")
-DaikinS21 = daikin_s21_ns.class_("DaikinS21", cg.PollingComponent)
+DaikinS21 = daikin_s21_ns.class_("DaikinS21", cg.PollingComponent, uart.UARTDevice)
 DaikinS21Modes = daikin_s21_ns.enum("DaikinMode")
 DAIKIN_MODE_CONFIG_ENUMS = {
     CONF_POWERFUL: DaikinS21Modes.ModePowerful,
@@ -57,19 +59,35 @@ CONFIG_SCHEMA = (
     cv.COMPONENT_SCHEMA
     .extend({cv.GenerateID(): cv.declare_id(DaikinS21)})
     .extend(cv.polling_component_schema(CONF_NEVER))
+    .extend(uart.UART_DEVICE_SCHEMA)
     .extend({
       cv.Optional(CONF_UPDATE_INTERVAL): validate_interval,
-      cv.Required(CONF_UART): cv.use_id(UARTComponent),
+      cv.Optional(CONF_UART): cv.use_id(UARTComponent), # deprecated
       cv.Optional(CONF_DEBUG_COMMS, default=False): cv.boolean,
       cv.Optional(CONF_DEBUG_PROTOCOL, default=False): cv.boolean,
     })
 )
 
+FINAL_VALIDATE_SCHEMA = uart.final_validate_device_schema(
+    "daikin_s21",
+    baud_rate=2400,
+    require_tx=True,
+    require_rx=True,
+    data_bits=8,
+    parity="EVEN",
+    stop_bits=2,
+)
+
 S21_PARENT_SCHEMA = cv.Schema({cv.GenerateID(CONF_S21_ID): cv.use_id(DaikinS21)})
 
 async def to_code(config):
-    uart = await cg.get_variable(config[CONF_UART])
-    s21 = cg.new_Pvariable(config[CONF_ID], uart)
+    if CONF_UART in config:
+      logging.getLogger(__name__).warning("`daikin_s21` config schema change: use `uart_id` if using more than one UART. Support for `uart` will be removed in the future.")
+      config[CONF_UART_ID] = config.pop(CONF_UART)
+
+    s21 = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(s21, config)
+    await uart.register_uart_device(s21, config)
+
     cg.add(s21.set_debug_comms(config[CONF_DEBUG_COMMS]))
     cg.add(s21.set_debug_protocol(config[CONF_DEBUG_PROTOCOL]))
