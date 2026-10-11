@@ -14,9 +14,9 @@
 
 namespace esphome::daikin_s21 {
 
-class DaikinS21 final : public PollingComponent {
+class DaikinS21 final : public PollingComponent, public uart::UARTDevice {
  public:
-  DaikinS21(uart::UARTComponent * const uart);
+  DaikinS21();
 
   void setup();
   void loop();
@@ -154,7 +154,6 @@ class DaikinS21 final : public PollingComponent {
   void send_command(std::string_view command, std::span<const uint8_t> payload);
 
   // serial
-  uart::UARTComponent& uart;
   FixedVector<uint8_t> response{};
   enum class CommState : uint8_t {
     CommandAck,

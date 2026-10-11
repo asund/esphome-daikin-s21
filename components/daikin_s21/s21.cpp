@@ -323,8 +323,7 @@ constexpr auto QueryEnvSystemState = get_query_params("RzC3");
 constexpr auto QueryMiscModel = get_query_params("M");
 constexpr auto QueryMiscVersion = get_query_params("V");
 
-DaikinS21::DaikinS21(uart::UARTComponent * const uart)
-  : uart(*uart) { // uart required in config, non-null
+DaikinS21::DaikinS21() {
   // populate supported queries
   // this is done in the constructor so debug queries are only ever added to this list
   // see https://codeberg.org/RevK/ESP32-Faikout/wiki/S21-Protocol for documentation
@@ -362,9 +361,9 @@ void DaikinS21::setup() {
 void DaikinS21::loop() {
   // We're trying the receive data from the unit
   uint8_t rx_bytes = 0;
-  while (this->uart.available()) {
+  while (this->available()) {
     uint8_t byte;
-    this->uart.read_byte(&byte);
+    this->read_byte(&byte);
     rx_bytes++;
 
     // handle the byte
@@ -772,25 +771,25 @@ void DaikinS21::send_frame(const std::string_view cmd, const std::span<const uin
 
   // clear software and hardware receive buffers
   this->response.clear();
-  while (this->uart.available()) {
+  while (this->available()) {
     uint8_t byte;
-    this->uart.read_byte(&byte);
+    this->read_byte(&byte);
   }
 
   // transmit
-  this->uart.write_byte(STX);
-  this->uart.write_array(reinterpret_cast<const uint8_t *>(cmd.data()), cmd.size());
+  this->write_byte(STX);
+  this->write_array(reinterpret_cast<const uint8_t *>(cmd.data()), cmd.size());
   uint8_t checksum = std::reduce(cmd.begin(), cmd.end(), 0U);
   if (payload.empty() == false) {
-    this->uart.write_array(payload.data(), payload.size());
+    this->write_array(payload.data(), payload.size());
     checksum = std::reduce(payload.begin(), payload.end(), checksum);
   }
   // mid-message special control characters are offset to avoid framing errors
   if (is_control_character(checksum)) {
     checksum += 2;
   }
-  this->uart.write_byte(checksum);
-  this->uart.write_byte(ETX);
+  this->write_byte(checksum);
+  this->write_byte(ETX);
 
   // wait for result
   this->comm_state = payload.empty() ? CommState::QueryAck : CommState::CommandAck;
@@ -810,7 +809,7 @@ void DaikinS21::serial_timeout_handler() {
     case CommState::DelayAck: // Waiting for turnaround time to send Ack
       this->comm_state = CommState::DelayIdle;
       this->set_timeout(TIMER_ID_SERIAL_EVENT, next_tx_delay_period_ms, [this](){ this->serial_timeout_handler(); });
-      this->uart.write_byte(ACK);
+      this->write_byte(ACK);
       break;
 
     default:  // Other states are Rx timeouts
