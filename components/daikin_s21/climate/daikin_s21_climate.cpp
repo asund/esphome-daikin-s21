@@ -310,7 +310,7 @@ void DaikinS21Climate::set_supported_modes(const climate::ClimateModeMask modes)
  */
 void DaikinS21Climate::set_supported_swing_modes(const climate::ClimateSwingModeMask swing_modes) {
   this->traits_.set_supported_swing_modes(swing_modes);
-  this->get_parent()->request_readout(DaikinS21::ReadoutSwingHumidty);
+  this->get_parent()->request_readout(ReadoutSwingHumidty);
 }
 
 /**

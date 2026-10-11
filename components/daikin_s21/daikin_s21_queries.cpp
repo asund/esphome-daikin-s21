@@ -9,7 +9,7 @@ static const char * const TAG = "daikin_s21.queries";
 /**
  * Copy the last result into the query instance and records the length.
  */
-void DaikinQuery::set_value(std::span<const uint8_t> payload) {
+void DaikinQueryState::set_value(std::span<const uint8_t> payload) {
   // decide where to store value
   uint8_t * dest{};
   if (payload.size() <= this->buffer.internal.size()) {
@@ -30,7 +30,7 @@ void DaikinQuery::set_value(std::span<const uint8_t> payload) {
       std::free(this->buffer.external);
     }
     if (dest == nullptr) {
-      ESP_LOGI(TAG, "result buffer failed to allocate %" PRI_SV ": %s", PRI_SV_ARGS(this->command), hex_repr(payload).c_str());
+      ESP_LOGI(TAG, "result buffer failed to allocate %" PRI_SV ": %s", PRI_SV_ARGS(this->params.command), hex_repr(payload).c_str());
       payload = payload.first(this->buffer.internal.size());
       dest = this->buffer.internal.data();
     } else {
@@ -41,7 +41,7 @@ void DaikinQuery::set_value(std::span<const uint8_t> payload) {
   this->size = payload.size();
 }
 
-void DaikinQuery::clear() {
+void DaikinQueryState::clear() {
   this->enabled = false;
   this->set_value(unscheduled_value);
   this->naks = 0;
@@ -51,10 +51,10 @@ void DaikinQuery::clear() {
 /**
  * Handles an ACK response
  */
-void DaikinQuery::ack(const std::span<const uint8_t> payload) {
+void DaikinQueryState::ack(const std::span<const uint8_t> payload) {
   this->acked = true;
   this->naks = 0;
-  if (this->is_static) {
+  if (this->params.is_static) {
     this->enabled = false;  // got the query result and know it won't change, disable
   }
   this->set_value(payload);
@@ -63,11 +63,11 @@ void DaikinQuery::ack(const std::span<const uint8_t> payload) {
 /**
  * Handles a NAK response
  */
-void DaikinQuery::nak(const std::span<const uint8_t> payload /*= nak_value*/) {
+void DaikinQueryState::nak(const std::span<const uint8_t> payload /*= nak_value*/) {
   this->naks++;
   if (this->failed()) {
     // query failed, disable
-    ESP_LOGW(TAG, "disabling %" PRI_SV " as unsupported", PRI_SV_ARGS(this->command));
+    ESP_LOGW(TAG, "disabling %" PRI_SV " as unsupported", PRI_SV_ARGS(this->params.command));
     this->enabled = false;
     this->set_value(payload);
   }

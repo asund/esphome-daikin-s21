@@ -19,14 +19,22 @@ inline constexpr std::size_t EXTENDED_PAYLOAD_SIZE{32};
 inline constexpr std::size_t MAX_RESPONSE_SIZE{MAX_COMMAND_SIZE + EXTENDED_PAYLOAD_SIZE + 1U};  // +1 for checksum
 
 struct ProtocolVersion {
+  constexpr ProtocolVersion(const uint8_t major, const uint8_t minor) : major(major), minor(minor) {}
+
   uint8_t major{};
   uint8_t minor{};
 
   auto operator<=>(const ProtocolVersion&) const = default;
 };
 
-inline constexpr ProtocolVersion ProtocolUndetected{0xFF, 0xFF};
+inline constexpr ProtocolVersion ProtocolUndetected{0xFF,0xFF};
 inline constexpr ProtocolVersion ProtocolUnknown{0,0xFF};  // treat as a protocol 0
+inline constexpr ProtocolVersion Protocol0{0,0};
+inline constexpr ProtocolVersion ProtocolLessThan2{1,0xFF};
+inline constexpr ProtocolVersion Protocol2{2,0};
+inline constexpr ProtocolVersion Protocol3{3,0};
+inline constexpr ProtocolVersion Protocol320{3,20};
+inline constexpr ProtocolVersion Protocol340{3,40};
 
 /**
  * Class representing a temperature in degrees C scaled by 10, the most granular internal temperature measurement format
@@ -401,5 +409,39 @@ inline constexpr DaikinModel ModelRXC24AXVJU{0x4431}; // indoor FTXC24AXVJU
 
 // V2+ indoor units
 inline constexpr DaikinModel ModelFTXC24AXVJU{0x0B66};  // outdoor RXC24AXVJU
+
+enum ReadoutRequest : uint8_t {
+  // binary sensor
+  ReadoutErrorStatus,
+  ReadoutUnitStateBits,
+  ReadoutSystemStateBits,
+  // sensor
+  ReadoutTemperatureTarget,
+  ReadoutTemperatureOutside,
+  ReadoutTemperatureLiquid,
+  ReadoutFanSpeed,
+  ReadoutSwingAngle,
+  ReadoutCompressorFrequency,
+  ReadoutHumidity,
+  ReadoutDemand,
+  ReadoutIRCounter,
+  ReadoutEnergyConsumptionTotal,
+  ReadoutOutdoorCapacity,
+  ReadoutEnergyConsumptionClimateModes,
+  ReadoutUnitPower,
+  // select
+  ReadoutVerticalSwingMode,
+  // multiple components
+  ReadoutPowerful,
+  ReadoutSwingHumidty,
+  ReadoutSpecialModes,
+  ReadoutDemandAndEcono,
+  // special classes
+  ReadoutInit,  // protocol detection queries
+  ReadoutBasic, // always enabled queries
+  ReadoutCount, // just for bitset sizing
+};
+
+using ReadoutRequests = std::bitset<ReadoutCount>;
 
 } // namespace esphome::daikin_s21

@@ -8,27 +8,27 @@
 
 namespace esphome::daikin_s21 {
 
-class DaikinS21Sensor : public PollingComponent,
-                        public Parented<DaikinS21> {
+class DaikinS21Sensor final : public PollingComponent,
+                              public Parented<DaikinS21> {
  public:
-  void setup() final;
-  void loop() final;
-  void update() final;
-  void dump_config() final;
+  void setup();
+  void loop();
+  void update();
+  void dump_config();
 
   void publish_sensors();
 
   void set_energy_sensor(sensor::Sensor * const sensor) {
     this->energy_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutEnergyConsumptionTotal);
+    this->get_parent()->request_readout(ReadoutEnergyConsumptionTotal);
   }
   void set_energy_cooling_sensor(sensor::Sensor * const sensor) {
     this->energy_cooling_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutEnergyConsumptionClimateModes);
+    this->get_parent()->request_readout(ReadoutEnergyConsumptionClimateModes);
   }
   void set_energy_heating_sensor(sensor::Sensor * const sensor) {
     this->energy_heating_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutEnergyConsumptionClimateModes);
+    this->get_parent()->request_readout(ReadoutEnergyConsumptionClimateModes);
   }
   void set_temp_setpoint_sensor(sensor::Sensor * const sensor) {
     this->temp_setpoint_sensor_ = sensor;
@@ -38,47 +38,47 @@ class DaikinS21Sensor : public PollingComponent,
   }
   void set_temp_target_sensor(sensor::Sensor * const sensor) {
     this->temp_target_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutTemperatureTarget);
+    this->get_parent()->request_readout(ReadoutTemperatureTarget);
   }
   void set_temp_outside_sensor(sensor::Sensor * const sensor) {
     this->temp_outside_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutTemperatureOutside);
+    this->get_parent()->request_readout(ReadoutTemperatureOutside);
   }
   void set_temp_coil_sensor(sensor::Sensor * const sensor) {
     this->temp_coil_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutTemperatureCoil);
+    this->get_parent()->request_readout(ReadoutTemperatureLiquid);
   }
   void set_fan_speed_sensor(sensor::Sensor * const sensor) {
     this->fan_speed_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutFanSpeed);
+    this->get_parent()->request_readout(ReadoutFanSpeed);
   }
   void set_swing_vertical_angle_sensor(sensor::Sensor * const sensor) {
     this->swing_vertical_angle_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutSwingAngle);
+    this->get_parent()->request_readout(ReadoutSwingAngle);
   }
   void set_compressor_frequency_sensor(sensor::Sensor * const sensor) {
     this->compressor_frequency_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutCompressorFrequency);
+    this->get_parent()->request_readout(ReadoutCompressorFrequency);
   }
   void set_humidity_sensor(sensor::Sensor * const sensor) {
     this->humidity_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutHumidity);
+    this->get_parent()->request_readout(ReadoutHumidity);
   }
   void set_demand_sensor(sensor::Sensor * const sensor) {
     this->demand_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutDemand);
+    this->get_parent()->request_readout(ReadoutDemand);
   }
   void set_ir_counter_sensor(sensor::Sensor * const sensor) {
     this->ir_counter_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutIRCounter);
+    this->get_parent()->request_readout(ReadoutIRCounter);
   }
   void set_unit_power_sensor(sensor::Sensor * const sensor) {
     this->unit_power_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutUnitPower);
+    this->get_parent()->request_readout(ReadoutUnitPower);
   }
   void set_outdoor_capacity_sensor(sensor::Sensor * const sensor) {
     this->outdoor_capacity_sensor_ = sensor;
-    this->get_parent()->request_readout(DaikinS21::ReadoutOutdoorCapacity);
+    this->get_parent()->request_readout(ReadoutOutdoorCapacity);
   }
 
  protected:

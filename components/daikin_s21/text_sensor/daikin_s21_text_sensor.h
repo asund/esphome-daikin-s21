@@ -10,28 +10,17 @@ using namespace esphome;
 
 namespace esphome::daikin_s21 {
 
-class DaikinS21TextSensor : public Component,
-                            public Parented<DaikinS21> {
+class DaikinS21TextSensor final : public Component,
+                                  public Parented<DaikinS21> {
  public:
-  void setup() final;
-  void loop() final;
-  void dump_config() final;
+  void setup();
+  void loop();
+  void dump_config();
 
-  void set_model_sensor(text_sensor::TextSensor * const sensor) {
-    this->model_sensor_ = sensor;
-  }
-
-  void set_software_revision_sensor(text_sensor::TextSensor * const sensor) {
-    this->software_revision_sensor_ = sensor;
-  }
-
-  void set_software_version_sensor(text_sensor::TextSensor * const sensor) {
-    this->software_version_sensor_ = sensor;
-  }
-
-  void set_debug_query_sensors(const std::initializer_list<text_sensor::TextSensor *> init_list) {
-    this->sensors = init_list;
-  }
+  void set_model_sensor(text_sensor::TextSensor * const sensor) { this->model_sensor_ = sensor; }
+  void set_software_revision_sensor(text_sensor::TextSensor * const sensor) { this->software_revision_sensor_ = sensor; }
+  void set_software_version_sensor(text_sensor::TextSensor * const sensor) { this->software_version_sensor_ = sensor; }
+  void set_debug_query_sensors(const std::initializer_list<text_sensor::TextSensor *> init_list) { this->sensors = init_list; }
 
  protected:
   bool statics_done{};

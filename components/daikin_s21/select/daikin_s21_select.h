@@ -7,45 +7,45 @@
 
 namespace esphome::daikin_s21 {
 
-class DaikinS21SelectLEDBrightness : public select::Select,
-                                     public Parented<DaikinS21> {
+class DaikinS21SelectLEDBrightness final : public select::Select,
+                                           public Parented<DaikinS21> {
  protected:
-  void control(size_t index) final;
+  void control(size_t index);
 };
 
-class DaikinS21SelectHumidity : public select::Select,
-                                public Parented<DaikinS21> {
+class DaikinS21SelectHumidity final : public select::Select,
+                                      public Parented<DaikinS21> {
  protected:
-  void control(size_t index) final;
+  void control(size_t index);
 };
 
-class DaikinS21SelectVerticalSwing : public select::Select,
-                                     public Parented<DaikinS21> {
+class DaikinS21SelectVerticalSwing final : public select::Select,
+                                           public Parented<DaikinS21> {
  protected:
-  void control(size_t index) final;
+  void control(size_t index);
 };
 
-class DaikinS21Select : public Component,
-                        public Parented<DaikinS21> {
+class DaikinS21Select final : public Component,
+                              public Parented<DaikinS21> {
  public:
-  void setup() final;
-  void loop() final;
-  void dump_config() final;
+  void setup();
+  void loop();
+  void dump_config();
 
   void set_brightness_select(DaikinS21SelectLEDBrightness * const brightness_select) {
     this->brightness_select_ = brightness_select;
-    this->get_parent()->request_readout(DaikinS21::ReadoutSpecialModes);
+    this->get_parent()->request_readout(ReadoutSpecialModes);
   }
 
   void set_humidity_select(DaikinS21SelectHumidity * const humidity_select) {
     this->humidity_select_ = humidity_select;
-    this->get_parent()->request_readout(DaikinS21::ReadoutSwingHumidty);
+    this->get_parent()->request_readout(ReadoutSwingHumidty);
   }
 
   void set_vertical_swing_select(DaikinS21SelectVerticalSwing * const vertical_swing_select) {
     this->vertical_swing_select_ = vertical_swing_select;
-    this->get_parent()->request_readout(DaikinS21::ReadoutSwingHumidty);
-    this->get_parent()->request_readout(DaikinS21::ReadoutVerticalSwingMode);
+    this->get_parent()->request_readout(ReadoutSwingHumidty);
+    this->get_parent()->request_readout(ReadoutVerticalSwingMode);
   }
 
  protected:
