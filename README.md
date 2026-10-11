@@ -14,11 +14,11 @@ A big thanks to:
 
 A short changelog of sorts, I'll keep things here where a user might encounter breaking or significant changes, including configuration updates.
 
-* Converted DaikinS21 to inherit from the ESPHome UARTDevice component. The configuration key `uart` should be changed to `uart_id`. A deprecation warning has been added. `uart_id` is now optional if you have a single UART configured in your device. UART settings are now checked at configuration stage.
+* Converted DaikinS21 to inherit from the ESPHome UARTDevice component. The configuration key `uart` should be changed to `uart_id`. A deprecation warning has been added. `uart_id` is now optional if you have a single UART configured in your device. UART settings are now checked at the configuration stage.
 * Added Ururu/Sarara humidity control modes via climate presets. The presets need to be enabled in your config to use them if you have one of these units.
 * Added vertical angle setpoint emulation for units that lack the setpoint command. Horizontal swing setting is now preserved while using this control for both methods. The discrete step should be preserved in the UI afterwards if vertical swing isn't changed.
 * Climate action can now report defrosting instead of a short cooling period. If this is always on while heating your unit doesn't support the state reporting bits and can be blacklisted. Open an issue.
-* Added enforcement for a non-zero update interval at compile time. If you have an `update_interval` of 0s specified in any polling components (s21, climate, sensor) please change this to `never` to indicate the intent is to free run.
+* Added enforcement for a non-zero update interval at the configuration stage. If you have an `update_interval` of 0s specified in any polling components (s21, climate, sensor) please change this to `never` to indicate the intent is to free run.
 * Modified humidity control to add support for humid heating. The setting is now also applied when switching to heating or cooling modes and only updated in those modes so the setting is preserved over mode changes.
 * Updated the state class of energy sensors to total_increasing so they integrate into the Home Assistant Energy dashboard. The values still track the unit's lifetime totals; they are seeded from the Daikin's own counter and accumulated monotonically on-device, so the small backward dips the unit reports on power loss are absorbed rather than published as a decrease, and energy consumed after a dip is still counted. The totals are persisted to flash to survive reboots and power loss. If flash wear is a concern (writes are already coalesced and rate-limited by the 0.1 kWh resolution), raise the `flash_write_interval` on the esp32 platform to reduce write frequency.
 * Binary sensor changes: Removed `valve`, use unit `active` instead for the same info. Renamed `multizone_conflict` to `multizone_online`, inverting logic and changing the device class. Added `system_online` to track all units on a compressor. Compressor `short_cycle` device class of lock removed; this was showing up in the HA Security dashboard. History will be inverted and should be purged if it matters to you.
@@ -231,9 +231,11 @@ See existing issues, open a new one or post in the discussions section with your
 
 ## Configuration
 
-Work in progress, see the configuration example in the meantime. At this time only a single `daikin_s21` platform can be configured on the device.
+Work in progress, see the configuration example in the meantime.
 
 ### DaikinS21 Platform
+
+At this time only a single `daikin_s21` platform can be configured on the device.
 
 ```yaml
 # Example configuration entry
@@ -245,9 +247,13 @@ daikin_s21:
 * **debug_protocol** (*Optional*, boolean): Enables additional logging in the 1 minute state dump. Very useful when tracking down bugs or adding features for users, so please enable and include the dump if relevant to your issue. Enables command logging for developers. Defaults to `false`.
 * **update_interval** (*Optional*, Time): Communication polling rate, the rate at which a complete set of registers will be polled from the unit. Set to `never` for free run mode. Inherited from PollingComponent. Defaults to `never`.
 
+### Recommendations
+
 On multihead systems some values that come from the outdoor unit will be the same (accounting for sampling jitter). It's recommended to use ESPHome's subdevice feature to only configure these sensors on your "primary" ESPHome instance as a subdevice to keep individual indoor unit representations cleaner. See the configuration example below. This feature seems designed for the one-to-many case, whereas this system is more of a many-to-one configuration. Locally I have two configuration template files, one for indoor only units and one for a single indoor unit with an outdoor unit subdevice. If I can find a better solution I'll update the example. You can also use this feature to hide away a bunch of stats in a subdevice and leave the primary interface clean.
 
 When using an external temperature sensor as a room reference instead of the internal Daikin value it's recommended to change the target_temperature step to 0.5°C to reflect the granularity of the alternate control loop provided. The default is 1.0°C to match Daikin's internal granularity.
+
+### Examples
 
 ```yaml
 esphome:
