@@ -266,6 +266,7 @@ enum DaikinLEDBrightnessMode : uint8_t {
   DaikinLEDBrightnessHigh,
   DaikinLEDBrightnessLow,
   DaikinLEDBrightnessOff,
+  DaikinLEDBrightnessModeCount,  // for select sizing
 };
 
 enum DaikinHumidityMode : uint8_t {
@@ -292,7 +293,7 @@ enum DaikinMode : uint8_t {
   ModeSensorLED,    // motion sensor LED control
   ModeMotionSensor, // "intelligent eye" PIR occupancy setpoint offset
   ModeEcono,        // limits demand for power consumption
-  DaikinModeCount,  // for mode array sizing
+  DaikinModeCount,  // for array sizing
 };
 
 inline constexpr auto DaikinSpecialModesCount = ModeMotionSensor + 1;

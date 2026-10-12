@@ -1,3 +1,4 @@
+#include <limits>
 #include "daikin_s21_sensor.h"
 #include "../s21.h"
 
@@ -65,10 +66,16 @@ void DaikinS21Sensor::publish_sensors() {
     this->energy_sensor_->publish_state(this->get_parent()->get_energy_consumption_total() / 10.0F);
   }
   if (this->energy_cooling_sensor_ != nullptr) {
-    this->energy_cooling_sensor_->publish_state(this->get_parent()->get_energy_consumption_cooling() / 10.0F);
+    const auto value = this->get_parent()->get_energy_consumption_cooling();
+    if (value != std::numeric_limits<uint32_t>::max()) {  // don't publish if invalid
+      this->energy_cooling_sensor_->publish_state(this->get_parent()->get_energy_consumption_cooling() / 10.0F);
+    }
   }
   if (this->energy_heating_sensor_ != nullptr) {
-    this->energy_heating_sensor_->publish_state(this->get_parent()->get_energy_consumption_heating() / 10.0F);
+    const auto value = this->get_parent()->get_energy_consumption_heating();
+    if (value != std::numeric_limits<uint32_t>::max()) {  // don't publish if invalid
+      this->energy_heating_sensor_->publish_state(this->get_parent()->get_energy_consumption_heating() / 10.0F);
+    }
   }
   if (this->temp_setpoint_sensor_ != nullptr) {
     this->temp_setpoint_sensor_->publish_state(this->get_parent()->get_temp_setpoint().f_degc());
@@ -95,7 +102,10 @@ void DaikinS21Sensor::publish_sensors() {
     this->compressor_frequency_sensor_->publish_state(this->get_parent()->get_compressor_frequency());
   }
   if (this->humidity_sensor_ != nullptr) {
-    this->humidity_sensor_->publish_state(this->get_parent()->get_humidity());
+    const auto value = this->get_parent()->get_humidity();
+    if (value <= 100) {  // don't publish if invalid
+      this->humidity_sensor_->publish_state(value);
+    }
   }
   if (this->demand_sensor_ != nullptr) {
     this->demand_sensor_->publish_state(this->get_parent()->get_demand_pull());

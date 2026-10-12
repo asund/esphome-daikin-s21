@@ -1564,8 +1564,8 @@ void DaikinS21::handle_state_inside_outside_temperature(const std::span<const ui
   if (this->support.outside_temperature_query == false) {
     this->temp_outside.set_s21_coarse(payload[1]);
   }
-  if ((this->support.humidity_query == false) && ((payload[2] - '0') <= 100)) {  // Some units report 0xFF when unsupported
-    this->humidity = payload[2] - '0';  // 5% granularity
+  if (this->support.humidity_query == false) {
+    this->humidity = payload[2] - '0';  // 5% granularity, some units report 0xFF when unsupported
   }
 }
 
@@ -1614,8 +1614,10 @@ void DaikinS21::handle_state_model_name(std::span<const uint8_t> payload) {
   payload = payload.first(22);
   const auto end = std::ranges::find(payload, ' ');
   payload = { payload.begin(), end };
-  std::ranges::copy(payload, this->model_name.begin());
-  this->model_name[payload.size()] = 0;
+  if (payload.size() > 0) { // some units report all spaces, leave default value instead of empty string
+    std::ranges::copy(payload, this->model_name.begin());
+    this->model_name[payload.size()] = 0;
+  }
 }
 
 void DaikinS21::handle_state_unit_power(std::span<const uint8_t> payload) {
