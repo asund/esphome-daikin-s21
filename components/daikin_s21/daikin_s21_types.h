@@ -332,11 +332,9 @@ using VerticalAngleSetpoints = std::array<uint8_t, (DaikinVerticalSwingBottom - 
  */
 struct LouvreState {
   static constexpr uint32_t PauseTimeoutMs{60*1000};
+  static constexpr uint8_t PauseTolerance{5};
   static constexpr uint32_t CommandTimeoutMs{PauseTimeoutMs / 2};  // TODO hopefully temporary pending user feedback
-  static constexpr uint8_t SwingPauseTolerance{5};
-
-  constexpr bool is_command_active() const { return enabled && command_support; }
-  constexpr bool is_pause_active() const { return enabled && (command_support == false); }
+  static constexpr uint8_t CommandTolerance{10}; // TODO temporary 10x scaling
 
   uint32_t timeout_ms{};          /**< Expiry timeout */
   int16_t pause_setpoint{};       /**< Angle setpoint used in swing paused mode. */
@@ -346,6 +344,7 @@ struct LouvreState {
   // saved state to reapply
   bool horizontal_swing{};        /**< Horizontal swing should be (re)enabled when done in setpoint command mode. */
   bool angle_query{};             /**< Angle query was enabled already. */
+  bool angle_setpoint_query{};    /**< Angle setpoint query was enabled already. */
 };
 
 /**
