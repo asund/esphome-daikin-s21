@@ -334,7 +334,7 @@ struct LouvreState {
   static constexpr uint32_t PauseTimeoutMs{60*1000};
   static constexpr uint8_t PauseTolerance{5};
   static constexpr uint32_t CommandTimeoutMs{PauseTimeoutMs / 2};  // TODO hopefully temporary pending user feedback
-  static constexpr uint8_t CommandTolerance{10}; // TODO temporary 10x scaling
+  static constexpr uint8_t CommandTolerance{2};
 
   uint32_t timeout_ms{};          /**< Expiry timeout */
   int16_t pause_setpoint{};       /**< Angle setpoint used in swing paused mode. */

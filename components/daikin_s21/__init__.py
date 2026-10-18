@@ -19,9 +19,10 @@ import logging
 DEPENDENCIES = ["uart"]
 
 CONF_S21_ID = "s21_id"
-CONF_UART = "uart"  # deprecated
+CONF_ANGLE_SCALE = "angle_scale"
 CONF_DEBUG_COMMS = "debug_comms"
 CONF_DEBUG_PROTOCOL = "debug_protocol"
+CONF_UART = "uart"  # deprecated
 
 # used by platform components
 CONF_COMFORT = "comfort"
@@ -61,10 +62,12 @@ CONFIG_SCHEMA = (
     .extend(cv.polling_component_schema(CONF_NEVER))
     .extend(uart.UART_DEVICE_SCHEMA)
     .extend({
+      cv.Optional(CONF_ANGLE_SCALE): cv.one_of(1, 10, int=True),
+      cv.Optional(CONF_UPDATE_INTERVAL): validate_interval,
       cv.Optional(CONF_UPDATE_INTERVAL): validate_interval,
       cv.Optional(CONF_UART): cv.use_id(UARTComponent), # deprecated
-      cv.Optional(CONF_DEBUG_COMMS, default=False): cv.boolean,
-      cv.Optional(CONF_DEBUG_PROTOCOL, default=False): cv.boolean,
+      cv.Optional(CONF_DEBUG_COMMS): cv.boolean,
+      cv.Optional(CONF_DEBUG_PROTOCOL): cv.boolean,
     })
 )
 
@@ -85,9 +88,13 @@ async def to_code(config):
       logging.getLogger(__name__).warning("`daikin_s21` config schema change: use `uart_id` if using more than one UART. Support for `uart` will be removed in the future.")
       config[CONF_UART_ID] = config.pop(CONF_UART)
 
-    s21 = cg.new_Pvariable(config[CONF_ID])
-    await cg.register_component(s21, config)
-    await uart.register_uart_device(s21, config)
+    var = cg.new_Pvariable(config[CONF_ID])
+    await cg.register_component(var, config)
+    await uart.register_uart_device(var, config)
 
-    cg.add(s21.set_debug_comms(config[CONF_DEBUG_COMMS]))
-    cg.add(s21.set_debug_protocol(config[CONF_DEBUG_PROTOCOL]))
+    if CONF_ANGLE_SCALE in config:
+      cg.add(var.set_angle_scale(config[CONF_ANGLE_SCALE]))
+    if CONF_DEBUG_COMMS in config:
+      cg.add(var.set_debug_comms(config[CONF_DEBUG_COMMS]))
+    if CONF_DEBUG_PROTOCOL in config:
+      cg.add(var.set_debug_protocol(config[CONF_DEBUG_PROTOCOL]))

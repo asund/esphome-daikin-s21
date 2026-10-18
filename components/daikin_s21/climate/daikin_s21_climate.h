@@ -44,7 +44,7 @@ class DaikinS21Climate final : public climate::Climate,
  public:
   void setup();
   void loop();
-  void update() { this->check_sensors = true; };
+  void update() { this->check_sensors = true; }
   void dump_config();
   void control(const climate::ClimateCall &call);
 

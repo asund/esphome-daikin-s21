@@ -7,6 +7,10 @@ namespace esphome::daikin_s21 {
 static const char * const TAG = "daikin_s21.sensor";
 
 void DaikinS21Sensor::setup() {
+  // if not overridden, set vertical angle accuracy based on scaling factor
+  if ((this->swing_vertical_angle_sensor_ != nullptr) && (this->swing_vertical_angle_sensor_->has_accuracy_decimals() == false)) {
+    this->swing_vertical_angle_sensor_->set_accuracy_decimals((this->get_parent()->get_angle_scale() == 10) ? 1 : 0);
+  }
   // register for update events from DaikinS21
   if (this->is_free_run()) {
     this->get_parent()->update_callbacks.add([this](){ this->enable_loop_soon_any_context(); });

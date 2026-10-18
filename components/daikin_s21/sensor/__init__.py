@@ -129,7 +129,6 @@ CONFIG_SCHEMA = (
         cv.Optional(CONF_SWING_VERTICAL_ANGLE): sensor.sensor_schema(
             unit_of_measurement=UNIT_DEGREES,
             icon=ICON_VERTICAL_SWING,
-            accuracy_decimals=0,
             device_class=DEVICE_CLASS_WIND_DIRECTION,
             state_class=STATE_CLASS_MEASUREMENT_ANGLE,
         ),

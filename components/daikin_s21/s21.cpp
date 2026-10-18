@@ -1130,8 +1130,8 @@ void DaikinS21::louvre_runtime() {
     } else if ((this->louvres.command_support == false) && is_vertical_setpoint_action(this->action_reported)) {  // attempt to recover setpoint if swing pause
       // find the closest setpoint for the current range, then see if it's close enough to the current angle
       auto &setpoints = this->angle_setpoints.get(this->action_reported);
-      auto closest = std::ranges::min_element(setpoints, {}, [this](const auto &setpoint){ return std::abs(this->vertical_angle - setpoint); });  // don't have to search them all, but it's only 5
-      if (std::abs(this->vertical_angle - *closest) <= LouvreState::PauseTolerance) {
+      auto closest = std::ranges::min_element(setpoints, {}, [this](const auto &setpoint){ return std::abs((this->vertical_angle / this->angle_scale) - setpoint); });  // don't have to search them all, but it's only 5
+      if (std::abs((this->vertical_angle / this->angle_scale) - *closest) <= LouvreState::PauseTolerance) {
         this->louvres.mode = static_cast<DaikinVerticalSwingMode>(DaikinVerticalSwingTop + std::ranges::distance(setpoints.begin(), closest));
       } else {
         this->louvres.mode = DaikinVerticalSwingOff;  // not at a setpoint
@@ -1706,9 +1706,9 @@ void DaikinS21::handle_env_vertical_swing_angle(const std::span<const uint8_t> p
   // reduce latency by servicing the swing angle state machine as soon as there's a new measurement
   if (this->louvres.enabled) {
     if (this->louvres.command_support ?
-        (std::abs(this->vertical_angle - this->vertical_angle_setpoint) <= LouvreState::CommandTolerance) :
-        (std::abs(this->vertical_angle - this->louvres.pause_setpoint) <= LouvreState::PauseTolerance)) {
-      ESP_LOGD(TAG, "Vertical setpoint control successful, terminating at %" PRId16 "°", this->vertical_angle);
+        ((std::abs(this->vertical_angle - this->vertical_angle_setpoint) / this->angle_scale) <= LouvreState::CommandTolerance) :
+        (std::abs((this->vertical_angle / this->angle_scale) - this->louvres.pause_setpoint) <= LouvreState::PauseTolerance)) {
+      ESP_LOGD(TAG, "Vertical setpoint control successful, terminating at %" PRId16 "°", this->vertical_angle / this->angle_scale);
       this->louvre_terminate();
     }
   }

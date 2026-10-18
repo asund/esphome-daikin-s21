@@ -58,7 +58,8 @@ CONFIG_SCHEMA = (
     .extend({
         cv.Optional(CONF_UPDATE_INTERVAL): validate_interval,
         cv.Optional(CONF_OFFSET_INTERVAL, default="5min"): validate_interval,
-        cv.Optional(CONF_SETPOINT_DITHER, default=True): cv.boolean,
+        cv.Optional(CONF_SETPOINT_DITHER): cv.boolean,
+        cv.Optional(CONF_PRESET): cv.boolean,
         cv.Optional(CONF_SENSOR): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_HUMIDITY_SENSOR): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_SUPPORTED_MODES, default=list(SUPPORTED_CLIMATE_MODES_OPTIONS)): cv.ensure_list(validate_supported_climate_mode),
@@ -66,7 +67,6 @@ CONFIG_SCHEMA = (
         cv.Optional(CONF_HEAT_COOL_MODE, default={}): CONFIG_MODE_SCHEMA,
         cv.Optional(CONF_COOL_MODE, default={CONF_MAX_TEMPERATURE:"32"}): CONFIG_MODE_SCHEMA,
         cv.Optional(CONF_HEAT_MODE, default={CONF_MIN_TEMPERATURE:"10"}): CONFIG_MODE_SCHEMA,
-        cv.Optional(CONF_PRESET, default=False): cv.boolean,
     })
 )
 
@@ -76,8 +76,10 @@ async def to_code(config):
     await cg.register_parented(var, config[CONF_S21_ID])
 
     cg.add(var.set_offset_interval(config[CONF_OFFSET_INTERVAL]))
-    cg.add(var.set_setpoint_dither(config[CONF_SETPOINT_DITHER]))
-    cg.add(var.set_enable_presets(config[CONF_PRESET]))
+    if CONF_PRESET in config:
+        cg.add(var.set_enable_presets(config[CONF_PRESET]))
+    if CONF_SETPOINT_DITHER in config:
+        cg.add(var.set_setpoint_dither(config[CONF_SETPOINT_DITHER]))
 
     if CONF_SENSOR in config:
         sens = await cg.get_variable(config[CONF_SENSOR])
