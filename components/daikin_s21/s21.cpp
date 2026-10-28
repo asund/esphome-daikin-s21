@@ -597,7 +597,7 @@ void DaikinS21::set_vertical_swing_mode(const DaikinVerticalSwingMode swing) {
         if (is_vertical_active(climate_swing)) {
           // temporarily hide active vertical component so a stale reading doesn't look like a user command to enable oscillation
           apply_vertical_swing_mode(DaikinVerticalSwingOff, climate_swing);
-          this->swing_humidity.pending = {climate_swing, this->swing_humidity.active.humidity};
+          this->swing_humidity.pending = {climate_swing, this->get_humidity_mode()};
           this->swing_humidity.set_confirm_ms(this->get_cycle_interval_ms());
         }
         // apply the vertical swing mode via command
