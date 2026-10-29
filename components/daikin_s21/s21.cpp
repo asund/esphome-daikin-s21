@@ -280,7 +280,7 @@ constexpr DaikinQueryParams supported_queries[] = {
   {"RI", ReadoutTemperatureLiquid, Protocol0, false, 4, &DaikinS21::handle_env_liquid_temperature},
   // {"RK", 0U, Protocol0, false, 3, &DaikinS21::handle_env_fan_speed_setpoint},  // not supported, can translate DaikinFanMode to RPM
   {"RL", ReadoutFanSpeed, Protocol0, false, 3, &DaikinS21::handle_env_fan_speed},
-  // {"RM", 0U, Protocol0, false, 4, &DaikinS21::handle_env_vertical_swing_angle_setpoint}, // unsupported, slow update rate means limited use for direct control
+  {"RM", 0U, Protocol0, false, 4, &DaikinS21::handle_env_vertical_swing_angle_setpoint},  // enabled for command driven vertical swing setpoint only
   {"RN", ReadoutSwingAngle, Protocol0, false, 4, &DaikinS21::handle_env_vertical_swing_angle},
   // {"RW", 0U, Protocol0, false, 2}; // unknown, "00" for me
   {"RX", ReadoutTemperatureTarget, Protocol0, false, 4, &DaikinS21::handle_env_target_temperature}, // (not user setpoint, see details)
@@ -314,6 +314,7 @@ constexpr auto QueryStateNewProtocol = get_query_params("FY00");
 constexpr auto QueryStateV3Model = get_query_params("FY20");
 constexpr auto QueryEnvFanMode = get_query_params("RG");
 constexpr auto QueryEnvInsideTemperature = get_query_params("RH");
+constexpr auto QueryEnvVerticalSwingAngleSetpoint = get_query_params("RM");
 constexpr auto QueryEnvVerticalSwingAngle = get_query_params("RN");
 constexpr auto QueryEnvOutsideTemperature = get_query_params("Ra");
 constexpr auto QueryEnvIndoorHumidity = get_query_params("Re");
@@ -485,7 +486,7 @@ void DaikinS21::set_climate_settings(const DaikinClimateSettings climate) {
 void DaikinS21::set_swing_mode(const climate::ClimateSwingMode swing) {
   if (this->get_swing_mode() != swing) {
     // allow user to request horizontal swing changes when vertical control ends if command mode is active
-    if (this->louvres.is_command_active()) {
+    if (this->louvres.enabled && this->louvres.command_support) {
       this->louvres.horizontal_swing = is_horizontal_active(swing);
     }
     // apply the new swing mode now
@@ -568,26 +569,36 @@ void DaikinS21::set_demand_control(const uint8_t percent) {
  */
 void DaikinS21::set_vertical_swing_mode(const DaikinVerticalSwingMode swing) {
   if (this->louvres.mode != swing) {
+    auto climate_swing = this->get_swing_mode();
     // set UI to the commanded choice
     this->louvres.mode = swing;
     // handle the request
     if ((swing == DaikinVerticalSwingOff) || (swing == DaikinVerticalSwingOn)) {
       // binary setting, delegate to the regular swing mode command
-      auto climate_swing = this->get_swing_mode();
       apply_vertical_swing_mode(swing, climate_swing);
       this->set_swing_mode(climate_swing);
     } else if (this->action_reported != climate::CLIMATE_ACTION_OFF) {  // setpoint mode, ignore when off
-      // both paths use the angle query, save current state when enabling to restore when done and enable it
+      // both paths use the angle query
       auto& angle_query = this->get_query(QueryEnvVerticalSwingAngle);
-      if (this->louvres.enabled == false) {
+      auto& angle_setpoint_query = this->get_query(QueryEnvVerticalSwingAngleSetpoint);
+      if (this->louvres.enabled == false) { // save current states when enabling to restore when done
         this->louvres.angle_query = angle_query.enabled;
+        this->louvres.angle_setpoint_query = angle_setpoint_query.enabled;
       }
       angle_query.enabled = true;
-      auto climate_swing = this->get_swing_mode();
       if (this->louvres.command_support) {
-        // use of vertical swing mode command will clear basic swing mode, remember if horizontal was enabled to reapply afterwards
+        // command mode also uses the angle setpoint query
+        angle_setpoint_query.enabled = true;
+        // use of vertical swing mode command will clear basic swing mode
         if (this->louvres.enabled == false) {
+          // remember if horizontal was enabled to reapply afterwards
           this->louvres.horizontal_swing = is_horizontal_active(climate_swing);
+        }
+        if (is_vertical_active(climate_swing)) {
+          // temporarily hide active vertical component so a stale reading doesn't look like a user command to enable oscillation
+          apply_vertical_swing_mode(DaikinVerticalSwingOff, climate_swing);
+          this->swing_humidity.pending = {climate_swing, this->get_humidity_mode()};
+          this->swing_humidity.set_confirm_ms(this->get_cycle_interval_ms());
         }
         // apply the vertical swing mode via command
         this->vertical_swing.stage(swing);
@@ -1105,6 +1116,7 @@ void DaikinS21::louvre_runtime() {
       this->louvres.enabled = true;
       // previous horizontal state captured during readout
       this->louvres.angle_query = true; // don't touch whatever's configured on termination
+      this->louvres.angle_setpoint_query = true;
       this->louvres.timeout_ms = App.get_loop_component_start_time() + LouvreState::CommandTimeoutMs;
     }
   }
@@ -1119,7 +1131,7 @@ void DaikinS21::louvre_runtime() {
       // find the closest setpoint for the current range, then see if it's close enough to the current angle
       auto &setpoints = this->angle_setpoints.get(this->action_reported);
       auto closest = std::ranges::min_element(setpoints, {}, [this](const auto &setpoint){ return std::abs(this->vertical_angle - setpoint); });  // don't have to search them all, but it's only 5
-      if (std::abs(this->vertical_angle - *closest) <= LouvreState::SwingPauseTolerance) {
+      if (std::abs(this->vertical_angle - *closest) <= LouvreState::PauseTolerance) {
         this->louvres.mode = static_cast<DaikinVerticalSwingMode>(DaikinVerticalSwingTop + std::ranges::distance(setpoints.begin(), closest));
       } else {
         this->louvres.mode = DaikinVerticalSwingOff;  // not at a setpoint
@@ -1141,6 +1153,9 @@ void DaikinS21::louvre_terminate() {
     // disable queries if they weren't previously enabled
     if (this->louvres.angle_query == false) {
       this->get_query(QueryEnvVerticalSwingAngle).enabled = false;
+    }
+    if (this->louvres.angle_setpoint_query == false) {
+      this->get_query(QueryEnvVerticalSwingAngleSetpoint).enabled = false;
     }
     // restore swing state
     auto climate_swing = this->get_swing_mode();
@@ -1689,8 +1704,10 @@ void DaikinS21::handle_env_vertical_swing_angle_setpoint(const std::span<const u
 void DaikinS21::handle_env_vertical_swing_angle(const std::span<const uint8_t> payload) {
   this->vertical_angle = bytes_to_num(payload);
   // reduce latency by servicing the swing angle state machine as soon as there's a new measurement
-  if (this->louvres.is_pause_active()) {
-    if (std::abs(this->vertical_angle - this->louvres.pause_setpoint) <= LouvreState::SwingPauseTolerance) {
+  if (this->louvres.enabled) {
+    if (this->louvres.command_support ?
+        (std::abs(this->vertical_angle - this->vertical_angle_setpoint) <= LouvreState::CommandTolerance) :
+        (std::abs(this->vertical_angle - this->louvres.pause_setpoint) <= LouvreState::PauseTolerance)) {
       ESP_LOGD(TAG, "Vertical setpoint control successful, terminating at %" PRId16 "°", this->vertical_angle);
       this->louvre_terminate();
     }
