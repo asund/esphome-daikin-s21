@@ -22,6 +22,7 @@ class DaikinS21 final : public PollingComponent, public uart::UARTDevice {
   void loop();
   void update() { this->trigger_cycle(); };
   void dump_config();
+  void set_angle_scale(const uint8_t scale) { this->angle_scale = scale; }
   void set_debug_comms(const bool set) { this->debug_comms = set; }
   void set_debug_protocol(const bool set) { this->debug_protocol = set; }
 
@@ -56,8 +57,8 @@ class DaikinS21 final : public PollingComponent, public uart::UARTDevice {
   auto get_temp_coil() const { return this->temp_coil; }
   auto get_fan_rpm_setpoint() const { return this->fan_rpm_setpoint; }
   auto get_fan_rpm() const { return this->fan_rpm; }
-  auto get_swing_vertical_angle_setpoint() const { return this->vertical_angle_setpoint; }
-  auto get_swing_vertical_angle() const { return this->vertical_angle; }
+  auto get_swing_vertical_angle_setpoint() const { return static_cast<float>(this->vertical_angle_setpoint) / this->angle_scale; }
+  auto get_swing_vertical_angle() const { return static_cast<float>(this->vertical_angle) / this->angle_scale; }
   auto get_ir_counter() const { return this->ir_counter; }
   auto get_energy_consumption_total() const { return this->energy_.total.value(); }
   auto get_energy_consumption_cooling() const { return this->energy_.cooling.value(); }
@@ -77,8 +78,10 @@ class DaikinS21 final : public PollingComponent, public uart::UARTDevice {
   bool get_serial_error() const { return this->serial_error; }
   bool get_mode(DaikinMode mode) const;
   DaikinLEDBrightnessMode get_brightness_mode() const;
+
   std::span<const uint8_t> get_query_result(std::string_view query_str);
   auto get_cycle_interval_ms() const { return std::max(this->cycle_time_ms, this->is_free_run() ? 0 : this->get_update_interval()); }
+  auto get_angle_scale() const { return this->angle_scale; }
 
   // query handlers
   void handle_state_basic(std::span<const uint8_t> payload);
@@ -204,8 +207,8 @@ class DaikinS21 final : public PollingComponent, public uart::UARTDevice {
   uint16_t fan_rpm_setpoint{};  // not supported
   uint16_t fan_rpm{};
   uint16_t compressor_hz{};
-  int16_t vertical_angle_setpoint{};  /**< Vertical louvre angle setpoint. */
-  int16_t vertical_angle{};           /**< Vertical louvre angle. */
+  int16_t vertical_angle_setpoint{};  /**< Vertical louvre angle setpoint, scaled by angle_scale. */
+  int16_t vertical_angle{};           /**< Vertical louvre angle, scaled by angle_scale. */
   uint16_t ir_counter{};
   // energy accumulators, persisted as one blob so totals survive reboots and power loss
   struct EnergyCounters {
@@ -235,6 +238,7 @@ class DaikinS21 final : public PollingComponent, public uart::UARTDevice {
   uint8_t outdoor_capacity{};
 
   // config
+  uint8_t angle_scale{1};
   bool debug_comms{};
   bool debug_protocol{};
   struct VerticalModeAngleSetpoints {
