@@ -57,18 +57,11 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await cg.register_parented(var, config[CONF_S21_ID])
-
-    selects = (
-        (CONF_BRIGHTNESS, var.set_brightness_select, ["High", "Low", "Off"]),
-        (CONF_HUMIDITY, var.set_humidity_select, ["Off", "Low", "Standard", "High", "Continuous"]),
-        (CONF_VERTICAL_SWING, var.set_vertical_swing_select, ["Off", "Top", "Upper", "Middle", "Lower", "Bottom", "On"]),
-    )
-    for key, func, options in selects:
-        if key in config:
-            sel = await select.new_select(config[key], options=options)
-            await cg.register_parented(sel, config[CONF_S21_ID])
-            cg.add(func(sel))
-    if CONF_VERTICAL_SWING in config:
-        cg.add(parent.set_vertical_angle_setpoints(ClimateAction.CLIMATE_ACTION_COOLING, config[CONF_VERTICAL_SWING][CONF_COOL_ACTION]))
-        cg.add(parent.set_vertical_angle_setpoints(ClimateAction.CLIMATE_ACTION_FAN, config[CONF_VERTICAL_SWING][CONF_FAN_ONLY_ACTION]))
-        cg.add(parent.set_vertical_angle_setpoints(ClimateAction.CLIMATE_ACTION_HEATING, config[CONF_VERTICAL_SWING][CONF_HEAT_ACTION]))
+    selects = select.sub_selects(config, parent=config[CONF_S21_ID])
+    await selects(CONF_BRIGHTNESS, var.set_brightness_select, options=["High", "Low", "Off"])
+    await selects(CONF_HUMIDITY, var.set_humidity_select, options=["Off", "Low", "Standard", "High", "Continuous"])
+    await selects(CONF_VERTICAL_SWING, var.set_vertical_swing_select, options=["Off", "Top", "Upper", "Middle", "Lower", "Bottom", "On"])
+    if vertical_swing := config.get(CONF_VERTICAL_SWING):
+        cg.add(parent.set_vertical_angle_setpoints(ClimateAction.CLIMATE_ACTION_COOLING, vertical_swing[CONF_COOL_ACTION]))
+        cg.add(parent.set_vertical_angle_setpoints(ClimateAction.CLIMATE_ACTION_FAN, vertical_swing[CONF_FAN_ONLY_ACTION]))
+        cg.add(parent.set_vertical_angle_setpoints(ClimateAction.CLIMATE_ACTION_HEATING, vertical_swing[CONF_HEAT_ACTION]))

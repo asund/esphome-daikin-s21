@@ -18,6 +18,7 @@ from esphome.const import (
     CONF_SENSOR,
     CONF_SUPPORTED_MODES,
     CONF_SUPPORTED_SWING_MODES,
+    CONF_TEMPERATURE_STEP,
     CONF_UPDATE_INTERVAL,
 )
 from .. import (
@@ -58,8 +59,9 @@ CONFIG_SCHEMA = (
     .extend({
         cv.Optional(CONF_UPDATE_INTERVAL): validate_interval,
         cv.Optional(CONF_OFFSET_INTERVAL, default="5min"): validate_interval,
-        cv.Optional(CONF_SETPOINT_DITHER): cv.boolean,
         cv.Optional(CONF_PRESET): cv.boolean,
+        cv.Optional(CONF_TEMPERATURE_STEP): cv.one_of(0.5, 1.0, float=True),
+        cv.Optional(CONF_SETPOINT_DITHER): cv.boolean,
         cv.Optional(CONF_SENSOR): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_HUMIDITY_SENSOR): cv.use_id(sensor.Sensor),
         cv.Optional(CONF_SUPPORTED_MODES, default=list(SUPPORTED_CLIMATE_MODES_OPTIONS)): cv.ensure_list(validate_supported_climate_mode),
@@ -76,17 +78,19 @@ async def to_code(config):
     await cg.register_parented(var, config[CONF_S21_ID])
 
     cg.add(var.set_offset_interval(config[CONF_OFFSET_INTERVAL]))
-    if CONF_PRESET in config:
-        cg.add(var.set_enable_presets(config[CONF_PRESET]))
-    if CONF_SETPOINT_DITHER in config:
-        cg.add(var.set_setpoint_dither(config[CONF_SETPOINT_DITHER]))
+    if preset := config.get(CONF_PRESET):
+        cg.add(var.set_enable_presets(preset))
+    if step := config.get(CONF_TEMPERATURE_STEP):
+        cg.add(var.set_setpoint_step(step))
+    if dither := config.get(CONF_SETPOINT_DITHER):
+        cg.add(var.set_setpoint_dither(dither))
 
-    if CONF_SENSOR in config:
-        sens = await cg.get_variable(config[CONF_SENSOR])
+    if temperature_sensor := config.get(CONF_SENSOR):
+        sens = await cg.get_variable(temperature_sensor)
         cg.add(var.set_temperature_reference_sensor(sens))
 
-    if CONF_HUMIDITY_SENSOR in config:
-        sens = await cg.get_variable(config[CONF_HUMIDITY_SENSOR])
+    if humidity_sensor := config.get(CONF_HUMIDITY_SENSOR):
+        sens = await cg.get_variable(humidity_sensor)
         cg.add(var.set_humidity_reference_sensor(sens))
 
     if "OFF" not in config[CONF_SUPPORTED_MODES]:

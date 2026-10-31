@@ -46,17 +46,10 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await cg.register_parented(var, config[CONF_S21_ID])
-
-    sensors = (
-        (CONF_MODEL, var.set_model_sensor),
-        (CONF_SOFTWARE_REVISION, var.set_software_revision_sensor),
-        (CONF_SOFTWARE_VERSION, var.set_software_version_sensor),
-    )
-    for key, func in sensors:
-        if key in config:
-            sens = await text_sensor.new_text_sensor(config[key])
-            cg.add(func(sens))
-
+    text_sensors = text_sensor.sub_text_sensors(config)
+    await text_sensors(CONF_MODEL, var.set_model_sensor)
+    await text_sensors(CONF_SOFTWARE_REVISION, var.set_software_revision_sensor)
+    await text_sensors(CONF_SOFTWARE_VERSION, var.set_software_version_sensor)
     if (CONF_QUERIES in config):
         debug_sensors = []
         for query in config[CONF_QUERIES]:

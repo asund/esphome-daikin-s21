@@ -39,17 +39,5 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await cg.register_parented(var, config[CONF_S21_ID])
-
-    numbers = (
-        (CONF_DEMAND, var.set_demand, 30, 100, 1),
-    )
-    for key, func, min_value, max_value, step in numbers:
-        if key in config:
-            num = await number.new_number(
-                config[key],
-                min_value=min_value,
-                max_value=max_value,
-                step=step,
-            )
-            await cg.register_parented(num, config[CONF_S21_ID])
-            cg.add(func(num))
+    numbers = number.sub_numbers(config, parent=config[CONF_S21_ID])
+    await numbers(CONF_DEMAND, var.set_demand, min_value=30, max_value=100, step=1)

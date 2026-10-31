@@ -73,23 +73,14 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await cg.register_parented(var, config[CONF_S21_ID])
-
+    binary_sensors = binary_sensor.sub_binary_sensors(config)
+    await binary_sensors(CONF_ACTIVE, var.set_active_sensor)
+    await binary_sensors(CONF_DEFROST, var.set_defrost_sensor)
+    await binary_sensors(CONF_MULTIZONE_ONLINE, var.set_multizone_online_sensor)
+    await binary_sensors(CONF_ONLINE, var.set_online_sensor)
+    await binary_sensors(CONF_SERIAL_ERROR, var.set_serial_error_sensor)
+    await binary_sensors(CONF_SHORT_CYCLE, var.set_short_cycle_sensor)
+    await binary_sensors(CONF_SYSTEM_DEFROST, var.set_system_defrost_sensor)
+    await binary_sensors(CONF_SYSTEM_ONLINE, var.set_system_online_sensor)
     for key, mode_enum in DAIKIN_MODE_CONFIG_ENUMS.items():
-        if key in config:
-            sens = await binary_sensor.new_binary_sensor(config[key], mode_enum)
-            cg.add(var.set_mode_sensor(sens))
-
-    binary_sensors = (
-        (CONF_ACTIVE, var.set_active_sensor),
-        (CONF_DEFROST, var.set_defrost_sensor),
-        (CONF_MULTIZONE_ONLINE, var.set_multizone_online_sensor),
-        (CONF_ONLINE, var.set_online_sensor),
-        (CONF_SERIAL_ERROR, var.set_serial_error_sensor),
-        (CONF_SHORT_CYCLE, var.set_short_cycle_sensor),
-        (CONF_SYSTEM_DEFROST, var.set_system_defrost_sensor),
-        (CONF_SYSTEM_ONLINE, var.set_system_online_sensor),
-    )
-    for key, func in binary_sensors:
-        if key in config:
-            sens = await binary_sensor.new_binary_sensor(config[key])
-            cg.add(func(sens))
+        await binary_sensors(key, var.set_mode_sensor, mode_enum)

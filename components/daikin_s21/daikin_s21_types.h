@@ -79,49 +79,6 @@ class DaikinC10 {
   int16_t value{off_sentinel};
 };
 
-inline constexpr DaikinC10 SETPOINT_STEP{1.0F}; // Daikin setpoint granularity
-inline constexpr DaikinC10 TEMPERATURE_STEP{0.5F}; // Daikin temperature sensor granularity
-inline constexpr DaikinC10 SETPOINT_OFF{DaikinC10::off_sentinel};
-inline constexpr DaikinC10 SETPOINT_DRY{DaikinC10::dry_sentinel};
-inline constexpr DaikinC10 SETPOINT_HUMIDIFY{DaikinC10::humidify_sentinel};
-
-/**
- * Function template for looking up an index enum value from an encoding.
- *
- * Encoding is checked and the first index is returned if out of range.
- *
- * @tparam T enum type
- * @tparam &encoding_table encoding table
- * @param encoding encoding to look up
- * @return associated index enum value
- */
-template <typename T, const auto &encoding_table>
-constexpr T encoding_to_enum(const uint8_t encoding) {
-  const auto iter = std::ranges::find(encoding_table, encoding);
-  if (iter != std::ranges::end(encoding_table)) {
-    return static_cast<T>(std::ranges::distance(std::begin(encoding_table), iter));
-  }
-  return static_cast<T>(0);
-}
-
-/**
- * Function template for looking up an encoding from an index enum value for enums outside of our control.
- *
- * Index is checked and the first value is returned if out of range.
- *
- * @tparam T enum type
- * @tparam &encoding_table encoding table
- * @param index index to look up
- * @return associated encoding
- */
-template <typename T, const auto &encoding_table>
-constexpr uint8_t enum_to_encoding(const T index) {
-  if (index < encoding_table.size()) {
-    return encoding_table[index];
-  }
-  return encoding_table[0];
-}
-
 /**
  * Command states.
  *
