@@ -49,6 +49,7 @@ class DaikinS21Climate final : public climate::Climate,
   void control(const climate::ClimateCall &call);
 
   void set_offset_interval(uint32_t offset_interval);
+  void set_setpoint_step(const DaikinC10 step) { this->setpoint_step = step; }
   void set_setpoint_dither(const bool dither) { this->setpoint_dither = dither; }
   void set_supported_modes(climate::ClimateModeMask modes);
   void set_supported_swing_modes(climate::ClimateSwingModeMask swing_modes);
@@ -80,6 +81,7 @@ class DaikinS21Climate final : public climate::Climate,
 
   sensor::Sensor *temperature_sensor_{};
   sensor::Sensor *humidity_sensor_{};
+  DaikinC10 setpoint_step{0.5F};
   DaikinC10 unit_setpoint{};
   bool setpoint_dither{true};
   bool check_sensors{true};

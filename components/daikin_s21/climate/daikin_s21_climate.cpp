@@ -14,6 +14,11 @@ static const char * const TAG = "daikin_s21.climate";
 
 constexpr uint32_t TIMER_ID_OFFSET = 0U;
 
+constexpr DaikinC10 TEMPERATURE_STEP{0.5F}; // Daikin internal temperature granularity
+constexpr DaikinC10 SETPOINT_OFF{DaikinC10::off_sentinel};
+constexpr DaikinC10 SETPOINT_DRY{DaikinC10::dry_sentinel};
+constexpr DaikinC10 SETPOINT_HUMIDIFY{DaikinC10::humidify_sentinel};
+
 /**
  * Save target for the mode to persistent storage.
  *
@@ -26,7 +31,7 @@ void DaikinSetpointMode::save_target(const DaikinC10 value) {
 }
 
 /**
- * Load target setpont for the mode from persistent storage.
+ * Load target setpoint for the mode from persistent storage.
  */
 DaikinC10 DaikinSetpointMode::load_target() {
   DaikinC10 load_val{SETPOINT_OFF};
@@ -35,7 +40,7 @@ DaikinC10 DaikinSetpointMode::load_target() {
 }
 
 void DaikinS21Climate::setup() {
-  uint32_t h = this->get_object_id_hash();
+  const uint32_t h = this->get_object_id_hash();
   this->setpoint_params.heat_cool.target_pref = global_preferences->make_preference<int16_t>(h + 1);
   this->setpoint_params.cool.target_pref = global_preferences->make_preference<int16_t>(h + 2);
   this->setpoint_params.heat.target_pref = global_preferences->make_preference<int16_t>(h + 3);
@@ -43,7 +48,7 @@ void DaikinS21Climate::setup() {
   this->traits_.add_feature_flags(climate::CLIMATE_SUPPORTS_CURRENT_TEMPERATURE | climate::CLIMATE_SUPPORTS_ACTION);
   this->traits_.set_visual_min_temperature(std::min({this->setpoint_params.heat_cool.min, this->setpoint_params.cool.min, this->setpoint_params.heat.min}).f_degc());  // will be overridden in get_traits()
   this->traits_.set_visual_max_temperature(std::max({this->setpoint_params.heat_cool.max, this->setpoint_params.cool.max, this->setpoint_params.heat.max}).f_degc());
-  this->traits_.set_visual_target_temperature_step(SETPOINT_STEP.f_degc());
+  this->traits_.set_visual_target_temperature_step(this->setpoint_step.f_degc());
   this->traits_.set_visual_current_temperature_step(TEMPERATURE_STEP.f_degc());
   this->traits_.set_supported_fan_modes({climate::CLIMATE_FAN_AUTO, climate::CLIMATE_FAN_QUIET});
   // populate local state used in get_traits()
@@ -401,16 +406,16 @@ bool DaikinS21Climate::calc_unit_setpoint(const DaikinSetpointMode& mode_params,
     // No dither: round to the nearest step. Truncation alone would bias the command
     // down by up to a full step, which compounds with units that already regulate
     // below their commanded setpoint.
-    new_unit_setpoint = new_unit_setpoint + (SETPOINT_STEP / 2);
+    new_unit_setpoint = new_unit_setpoint + (this->setpoint_step / 2);
   } else if (new_unit_setpoint < unit_temperature) {
     // commanding the unit lower, round down
   } else if (new_unit_setpoint > unit_temperature) {
     // commanding the unit higher, round up by adding almost a full step
-    new_unit_setpoint = new_unit_setpoint + (SETPOINT_STEP - 1);
+    new_unit_setpoint = new_unit_setpoint + (this->setpoint_step - 1);
   } else {
     // no difference, no rounding necessary
   }
-  new_unit_setpoint = (new_unit_setpoint / SETPOINT_STEP) * SETPOINT_STEP;  // complete round by truncating fractional component of step
+  new_unit_setpoint = (new_unit_setpoint / this->setpoint_step) * this->setpoint_step;  // complete round by truncating fractional component of step
 
   // Ensure it's valid for the unit's current mode.
   // Daikin will clamp internally with a slightly out of range value, but it's faster for the UI to do it here without waiting for comms
@@ -434,47 +439,42 @@ float DaikinS21Climate::get_current_humidity() const {
   if ((this->humidity_sensor_ != nullptr) &&
       (this->humidity_sensor_->get_unit_of_measurement_ref() == "%")) {
     return this->humidity_sensor_->get_state(); // NAN state is fine
-  } else {
-    return NAN;
   }
+  return NAN;
 }
 
 DaikinFanMode DaikinS21Climate::get_daikin_fan_mode() const {
   if (this->fan_mode.has_value()) {
     if (this->fan_mode.value() == climate::CLIMATE_FAN_QUIET) {
       return DaikinFanSilent;
-    } else {
-      return DaikinFanAuto;
     }
-  } else {
-    return stringref_to_daikin_fan_mode(this->get_custom_fan_mode());
+    return DaikinFanAuto;
   }
+  return stringref_to_daikin_fan_mode(this->get_custom_fan_mode());
 }
 
 bool DaikinS21Climate::set_daikin_fan_mode(const DaikinFanMode fan) {
   if (fan == DaikinFanAuto) {
     return this->set_fan_mode_(climate::CLIMATE_FAN_AUTO);
-  } else if (fan == DaikinFanSilent) {
-    return this->set_fan_mode_(climate::CLIMATE_FAN_QUIET);
-  } else {
-    return this->set_custom_fan_mode_(daikin_fan_mode_to_cstr(fan));
   }
+  if (fan == DaikinFanSilent) {
+    return this->set_fan_mode_(climate::CLIMATE_FAN_QUIET);
+  }
+  return this->set_custom_fan_mode_(daikin_fan_mode_to_cstr(fan));
 }
 
 DaikinPreset DaikinS21Climate::get_daikin_preset() const {
   if (this->preset.has_value()) {
     return DaikinPresetNone;  // only one standard preset supported
-  } else {
-    return stringref_to_daikin_preset(this->get_custom_preset());
   }
+  return stringref_to_daikin_preset(this->get_custom_preset());
 }
 
 bool DaikinS21Climate::set_daikin_preset(const DaikinPreset preset) {
   if (preset == DaikinPresetNone) {
     return this->set_preset_(climate::CLIMATE_PRESET_NONE);
-  } else {
-    return this->set_custom_preset_(daikin_preset_strings[preset]);
   }
+  return this->set_custom_preset_(daikin_preset_strings[preset]);
 }
 
 /**
@@ -499,13 +499,10 @@ DaikinSetpointMode* DaikinS21Climate::SetpointModeParams::get(const climate::Cli
   switch (mode) {
     case climate::CLIMATE_MODE_COOL:
       return &this->cool;
-      break;
     case climate::CLIMATE_MODE_HEAT:
       return &this->heat;
-      break;
     case climate::CLIMATE_MODE_HEAT_COOL:
       return &this->heat_cool;
-      break;
     default:
       return nullptr;
   }

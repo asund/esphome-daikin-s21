@@ -21,6 +21,43 @@ constexpr uint32_t next_tx_delay_period_ms{35};  // official remote delay time b
 constexpr uint32_t error_delay_period_ms{3000};  // cooldown time when something goes wrong
 constexpr uint32_t rx_timout_period_ms{250};     // waiting for a response from the unit
 
+/**
+ * Function template for looking up an index enum value from an encoding.
+ *
+ * Encoding is checked and the first index is returned if out of range.
+ *
+ * @tparam T enum type
+ * @tparam &encoding_table encoding table
+ * @param encoding encoding to look up
+ * @return associated index enum value
+ */
+template <typename T, const auto &encoding_table>
+constexpr T encoding_to_enum(const uint8_t encoding) {
+  const auto iter = std::ranges::find(encoding_table, encoding);
+  if (iter != std::ranges::end(encoding_table)) {
+    return static_cast<T>(std::ranges::distance(std::begin(encoding_table), iter));
+  }
+  return static_cast<T>(0);
+}
+
+/**
+ * Function template for looking up an encoding from an index enum value for enums outside of our control.
+ *
+ * Index is checked and the first value is returned if out of range.
+ *
+ * @tparam T enum type
+ * @tparam &encoding_table encoding table
+ * @param index index to look up
+ * @return associated encoding
+ */
+template <typename T, const auto &encoding_table>
+constexpr uint8_t enum_to_encoding(const T index) {
+  if (index < encoding_table.size()) {
+    return encoding_table[index];
+  }
+  return encoding_table[0];
+}
+
 constexpr uint8_t climate_mode_to_s21(const climate::ClimateMode mode) {
   switch (mode) {
       break;

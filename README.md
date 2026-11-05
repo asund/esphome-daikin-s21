@@ -14,6 +14,8 @@ A big thanks to:
 
 A short changelog of sorts, I'll keep things here where a user might encounter breaking or significant changes, including configuration updates.
 
+* Minimum ESPHome version bump to 2026.10.0 to make use of improved subcomponent codegen helpers. Update ESPHome if you get new errors during configuration.
+* Added `temperature_step` to the climate component. This now defaults to 0.5° after testing with my older unit, but if you see errors using it, set it to 1.0°.
 * Added `angle_scale` to the `daikin_s21` platform. If your vertical swing angles are in the 128-400 degree range you can specify a scale of 10 here.
 * Converted DaikinS21 to inherit from the ESPHome UARTDevice component. The configuration key `uart` should be changed to `uart_id`. A deprecation warning has been added. `uart_id` is now optional if you have a single UART configured in your device. UART settings are now checked at the configuration stage.
 * Added Ururu/Sarara humidity control modes via climate presets. The presets need to be enabled in your config to use them if you have one of these units.
@@ -187,11 +189,11 @@ binary_sensor:
 
 The primary control interface. More than just a wrapper around direct control of the Daikin unit because the Daikin control loop has a few deficiencies:
 
-* The setpoint value has 1.0°C (sometimes 0.5°C) granularity.
+* The setpoint value has 0.5°C granularity.
 * The temperature feedback value has 0.5°C granularity.
 * The temperature sensor is located in the unit, in most cases a wall unit placed higher in a room. This reading doesn't always reflect the temperature felt by occupants. It is programmed to overshoot the setpoint to try to account for this (see your service manual for details).
 
-Because of these, the climate component implements a separate loop on top of the Daikin internal one. An external temperature sensor can be used to provide a more accurate and precise reference and a dynamic offset applied to the internal Daikin setpoint. The internal temperature sensor can also be used for this functionality to provide a variable offset to drive the coarse setpoint around the more granular temperature sensor. Static offsets can also be configured to reduce the overshoot that will occur even with an accurate reference sensor. All of this is downstream of Daikin's reported temperature precision and relatively broad control loop hysteresis, so it's far from ideal but can help compensate for a difference in temperature between the unit and your space.
+Because of these, the climate component implements a separate loop on top of the Daikin internal one. An external temperature sensor can be used to provide a more accurate and precise reference and a dynamic offset applied to the internal Daikin setpoint. The internal temperature sensor can also be used for this functionality to provide a variable offset to drive the setpoint around the temperature sensor. Static offsets can also be configured to reduce the overshoot that will occur even with an accurate reference sensor. All of this is downstream of Daikin's reported temperature precision and relatively broad control loop hysteresis, so it's far from ideal but can help compensate for a difference in temperature between the unit and your space.
 
 Supported standard Climate features:
 * Setpoint temperature control.
@@ -212,6 +214,7 @@ climate:
     offset_interval: 5min
     setpoint_dither: true
     preset: true
+    temperature_step: 0.5
     sensor: daikin_temperature
     humidity_sensor: daikin_humidity
     supported_modes:
@@ -242,6 +245,7 @@ climate:
 * **offset_interval** (*Optional*, Time): Dynamic offset recalculation rate, where the difference between the reference sensor and the internal sensor is recalculated and integrated into the secondary control loop. Set to `never` for free run mode. Defaults to `5mins`.
 * **setpoint_dither** (Optional, boolean): Round calculated setpoint in the direction of change when snapping to a setpoint step to try to oscillate the commanded setpoint over the ideal setpoint. Disabling this simply truncates the extra precision and consistently rounds to the nearest step. Defaults to `true`.
 * **preset** (Optional, boolean): Enable preset control of "Ururu Sarara" special humidity modes on models that support them. Due to the underlying protocol format only "Ururu" Humidify is uniquely available using this control, "Sarara" Dry is linked to the regular climate mode Dry. These are humidity first modes that don't attempt to reach a target setpoint. The value is only used and updated in relevant climate modes. Use the separate `humidity` select component for the temperature subordinate Dry Cooling and Humid Heating modes. If your unit doesn't support it you can be prevented switching into heating mode if Ururu Humidify is active as the command will fail. Disable the preset first or better yet, don't enable presets at all. Defaults to `false`.
+* **temperature_step** (*Optional*, float, either 0.5 or 1.0): Internal setpoint temperature step. For the lifetime of this project this was one degree resolution but it was pointed out it could be half a degree. After testing on my modestly featureful unit I've decided to make this the default. If your unit encounters errors when setting the setpoint to half degree steps you will need to set this value to `1.0`. Defaults to `0.5`.
 * **sensor** (*Optional*, Sensor ID): Temperature sensor to use as a reference and report as the current temperature of the climate device. Filters can be used on the underlying sensor to control the rate of updates and values reported by this component. Units must be `°C` or `°F`. The temperature sensor provided by this project, an onboard sensor provided by a different ESPHome pomponent or an external Home Assistant provided sensor are all valid options. Omitting this option will report the Daikin measured temperature, bypassing sensor filtering.
 * **humidity_sensor** (*Optional*, Sensor ID): Humidity sensor to report as the current humidity of the climate device. Filters can be used on the underlying sensor to control the rate of updates and values reported by this component. Units must be `%`. The humidity sensor provided by this project, an onboard sensor provided by a different ESPHome pomponent or an external Home Assistant provided sensor are all valid options. Omitting this option will disable humidity reporting.
 * **supported_modes** (*Optional*, list of strings): A list of allowed modes to present in case your unit doesn't support them all or you otherwise want to restrict availability. `OFF`, `HEAT_COOL`, `COOL`, `HEAT`, `FAN_ONLY` and `DRY` are valid options. `OFF` is always available. Defaults to all options being enabled.
@@ -461,8 +465,6 @@ If you've read the Faikout wiki you'll see many more queries available than what
 
 On multihead systems some values that come from the outdoor unit will be the same (accounting for sampling jitter). It's recommended to use ESPHome's subdevice feature to only configure these sensors on your "primary" ESPHome instance as a subdevice to keep individual indoor unit representations cleaner. See the configuration example below where I wire these up to the `daikin_outdoor` subdevice I configure. This feature seems designed for the one-to-many case, whereas this system is more of a many-to-one configuration. Locally I have two configuration template files, one for indoor only units and one for a single indoor unit with an outdoor unit subdevice. If I can find a better solution I'll update the example. You could also use this feature to hide away a bunch of stats in a subdevice and leave the primary interface clean.
 
-When using an external temperature sensor as a room reference instead of the internal Daikin value it's recommended to change the target_temperature step to 0.5°C to reflect the granularity of the alternate control loop provided. The default is 1.0°C to match Daikin's common internal granularity.
-
 ESPHome doesn't offer an easy way for someone of my familiarity to dynamically enable components based on feature detection from the unit, so your best bet at the moment is to include components you'd like to use and remove them later if they're not supported. With newer features I could have more development to do (I can't test locally), so if something should be working based on the queries available and the protocol version of your unit don't hesitate to reach out.
 
 If something isn't working, connect to your ESPHome device to read out logs. You should enable the `protocol_debug` option in the configuration to provide additional information I will require to help you. Every minute you'll see a general state debug dump printed with lists of queries.
@@ -474,7 +476,7 @@ If your unit is failing to poll `F8` and `FY00` over and over you most likely ha
 ```yaml
 # Example configuration
 esphome:
-  min_version: "2026.7.0"
+  min_version: "2026.10.0"
   devices:
     - id: daikin_outdoor
       name: "Daikin Compressor"
@@ -508,7 +510,7 @@ climate:
     # Visual limits and steps can be adjusted to match the granularity of your external sensor:
     # visual:
     #   temperature_step:
-    #     target_temperature: 1
+    #     target_temperature: 0.5
     #     current_temperature: 0.5
     # Settings from DaikinS21Climate:
     # supported_modes:  # optional, restricts available climate modes. off is always supported.
@@ -524,6 +526,7 @@ climate:
     # update_interval: never # Interval used to limit sensor publishing rate, 'never' for free run
     # offset_interval: 5min # Interval used to adjust the unit's setpoint using finer grained control, 'never' for free run
     # preset: true  # Enable preset selection for Ururu Sarara humidity control modes
+    # temperature_step: 1.0 # If your unit doesn't support half degree internal setpoints
     # Optional sensors to use for temperature and humidity references
     sensor: daikin_temperature  # Internal, see indoor temperature sensor below
     # sensor: room_temp  # External, see homeassistant sensor below

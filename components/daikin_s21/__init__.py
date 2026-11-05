@@ -92,9 +92,9 @@ async def to_code(config):
     await cg.register_component(var, config)
     await uart.register_uart_device(var, config)
 
-    if CONF_ANGLE_SCALE in config:
-      cg.add(var.set_angle_scale(config[CONF_ANGLE_SCALE]))
-    if CONF_DEBUG_COMMS in config:
-      cg.add(var.set_debug_comms(config[CONF_DEBUG_COMMS]))
-    if CONF_DEBUG_PROTOCOL in config:
-      cg.add(var.set_debug_protocol(config[CONF_DEBUG_PROTOCOL]))
+    if angle_scale := config.get(CONF_ANGLE_SCALE):
+      cg.add(var.set_angle_scale(angle_scale))
+    if debug_comms := config.get(CONF_DEBUG_COMMS):
+      cg.add(var.set_debug_comms(debug_comms))
+    if debug_protocol := config.get(CONF_DEBUG_PROTOCOL):
+      cg.add(var.set_debug_protocol(debug_protocol))

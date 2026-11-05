@@ -59,9 +59,6 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await cg.register_parented(var, config[CONF_S21_ID])
-
+    switches = switch.sub_switches(config, parent=config[CONF_S21_ID])
     for key, mode_enum in DAIKIN_MODE_CONFIG_ENUMS.items():
-        if key in config:
-            sw = await switch.new_switch(config[key], mode_enum)
-            await cg.register_parented(sw, config[CONF_S21_ID])
-            cg.add(var.set_mode_switch(sw))
+        await switches(key, var.set_mode_switch, mode_enum)

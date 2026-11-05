@@ -140,26 +140,20 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await cg.register_parented(var, config[CONF_S21_ID])
-
-    sensors = (
-        (CONF_COIL_TEMP, var.set_temp_coil_sensor),
-        (CONF_COMPRESSOR_FREQUENCY, var.set_compressor_frequency_sensor),
-        (CONF_DEMAND, var.set_demand_sensor),
-        (CONF_ENERGY, var.set_energy_sensor),
-        (CONF_ENERGY_COOLING, var.set_energy_cooling_sensor),
-        (CONF_ENERGY_HEATING, var.set_energy_heating_sensor),
-        (CONF_FAN_SPEED, var.set_fan_speed_sensor),
-        (CONF_HUMIDITY, var.set_humidity_sensor),
-        (CONF_IR_COUNTER, var.set_ir_counter_sensor),
-        (CONF_INSIDE_TEMP, var.set_temp_inside_sensor),
-        (CONF_OUTDOOR_CAPACITY, var.set_outdoor_capacity_sensor),
-        (CONF_OUTSIDE_TEMP, var.set_temp_outside_sensor),
-        (CONF_POWER, var.set_unit_power_sensor),
-        (CONF_SETPOINT_TEMP, var.set_temp_setpoint_sensor),
-        (CONF_SWING_VERTICAL_ANGLE, var.set_swing_vertical_angle_sensor),
-        (CONF_TARGET_TEMPERATURE, var.set_temp_target_sensor),
-    )
-    for key, func in sensors:
-        if key in config:
-            sens = await sensor.new_sensor(config[key])
-            cg.add(func(sens))
+    sensors = sensor.sub_sensors(config)
+    await sensors(CONF_COIL_TEMP, var.set_temp_coil_sensor)
+    await sensors(CONF_COMPRESSOR_FREQUENCY, var.set_compressor_frequency_sensor)
+    await sensors(CONF_DEMAND, var.set_demand_sensor)
+    await sensors(CONF_ENERGY, var.set_energy_sensor)
+    await sensors(CONF_ENERGY_COOLING, var.set_energy_cooling_sensor)
+    await sensors(CONF_ENERGY_HEATING, var.set_energy_heating_sensor)
+    await sensors(CONF_FAN_SPEED, var.set_fan_speed_sensor)
+    await sensors(CONF_HUMIDITY, var.set_humidity_sensor)
+    await sensors(CONF_IR_COUNTER, var.set_ir_counter_sensor)
+    await sensors(CONF_INSIDE_TEMP, var.set_temp_inside_sensor)
+    await sensors(CONF_OUTDOOR_CAPACITY, var.set_outdoor_capacity_sensor)
+    await sensors(CONF_OUTSIDE_TEMP, var.set_temp_outside_sensor)
+    await sensors(CONF_POWER, var.set_unit_power_sensor)
+    await sensors(CONF_SETPOINT_TEMP, var.set_temp_setpoint_sensor)
+    await sensors(CONF_SWING_VERTICAL_ANGLE, var.set_swing_vertical_angle_sensor)
+    await sensors(CONF_TARGET_TEMPERATURE, var.set_temp_target_sensor)
