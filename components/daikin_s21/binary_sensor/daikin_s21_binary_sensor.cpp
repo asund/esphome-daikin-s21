@@ -47,9 +47,6 @@ void DaikinS21BinarySensor::loop() {
   if (this->short_cycle_sensor_ != nullptr) {
     this->short_cycle_sensor_->publish_state(system.locked());
   }
-  if (this->system_defrost_sensor_ != nullptr) {
-    this->system_defrost_sensor_->publish_state(system.defrost());
-  }
   if (this->system_online_sensor_ != nullptr) {
     this->system_online_sensor_->publish_state(unit.online() || system.multizone_online());
   }
@@ -65,7 +62,6 @@ void DaikinS21BinarySensor::dump_config() {
   LOG_BINARY_SENSOR("", "Online", this->online_sensor_);
   LOG_BINARY_SENSOR("", "Serial Error", this->serial_error_sensor_);
   LOG_BINARY_SENSOR("", "Short Cycle", this->short_cycle_sensor_);
-  LOG_BINARY_SENSOR("", "System Defrost", this->system_defrost_sensor_);
   LOG_BINARY_SENSOR("", "System Online", this->system_online_sensor_);
 }
 

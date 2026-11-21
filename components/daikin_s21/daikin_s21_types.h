@@ -348,8 +348,8 @@ class DaikinSystemState {
   // this unit:
   constexpr bool idle() const { return (this->raw & 0x0F) == 0; } // just this unit
   constexpr bool locked() const { return (this->raw & 0x01) != 0; }
-  constexpr bool active() const { return (this->raw & 0x04) != 0; } // TODO another active indicator in case UnitState fails
-  constexpr bool defrost() const { return (this->raw & 0x08) != 0; }
+  constexpr bool active() const { return (this->raw & 0x04) != 0; } // shadows unit state
+  constexpr bool defrost() const { return (this->raw & 0x08) != 0; }  // shadows unit state
   // other units:
   constexpr bool multizone_online() const { return (this->raw & 0x20) != 0; }
   uint8_t raw{};
@@ -370,7 +370,6 @@ inline constexpr DaikinModel ModelFTXC24AXVJU{0x0B66};  // outdoor RXC24AXVJU
 enum ReadoutRequest : uint8_t {
   // binary sensor
   ReadoutErrorStatus,
-  ReadoutUnitStateBits,
   ReadoutSystemStateBits,
   // sensor
   ReadoutTemperatureTarget,

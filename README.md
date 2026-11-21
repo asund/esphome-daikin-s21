@@ -14,6 +14,8 @@ A big thanks to:
 
 A short changelog of sorts, I'll keep things here where a user might encounter breaking or significant changes, including configuration updates.
 
+* Minimum ESPHome version bump to 2026.11.0 as it has a small breaking change.
+* Remove `system_defrost` binary sensor. This just shadows the unit state provided `defrost` sensor. Use it instead.
 * Minimum ESPHome version bump to 2026.10.0 to make use of improved subcomponent codegen helpers. Update ESPHome if you get new errors during configuration.
 * Added `temperature_step` to the climate component. This now defaults to 0.5° after testing with my older unit, but if you see errors using it, set it to 1.0°.
 * Added `angle_scale` to the `daikin_s21` platform. If your vertical swing angles are in the 128-400 degree range you can specify a scale of 10 here.
@@ -56,7 +58,7 @@ Please see the Faikout [wiring](https://codeberg.org/RevK/ESP32-Faikout/wiki/Wir
 
 For communications pins, I found mine pulled up internally to 5V by the Daikin board. I've read some users don't see this, so verify with a multimeter. You may need to add your own external pullups or make use of a level shifting circuit. Cheap level shifter modules are available that can make use of the provided 5V reference to do this if you'd prefer. If you are powering your device externally you should still connect a ground reference for the communications. A word of warning about very cheap level shifters: a user reported intermittent communication, probably due to bad FETs. The ESP chip is unofficially 5V tolerant, but a passive circuit with a voltage divider on the ESP Rx side should also be possible. Said user is using 1K/2K to bring 5V down closer to 3.3V logic levels.
 
-The ESP8266 platform is quite limited. Since the cost of boards are in the same ballpark, please use an ESP32 (or at least something with a free hardware UART). ESP8266 boards often have a USB-Serial chip wired to their only hardware UART. This chip can interfere with the Rx pin on the microcontroller, driving it to levels that override the open drain output mode used by the Daikin unit, making it unable to pull the Rx line to ground and signalling responses to the processor. If you want to use one anyways, a user has reported lifting the pads on this chip allows the single hardware UART to be used for communication with the unit. ESPHome's software UART implementation isn't viable for this application as it uses delays inside an interrupt routine. This might be accpetable at higher baud rates, but at 1200 baud the delays become too long and the system will watchdog out and reset. Just get an ESP32 board.
+The ESP8266 platform is quite limited. Since the cost of boards are in the same ballpark, please use an ESP32 (or at least something with a free hardware UART). ESP8266 boards often have a USB-Serial chip wired to their only hardware UART. This chip can interfere with the Rx pin on the microcontroller, driving it to levels that override the open drain output mode used by the Daikin unit, making it unable to pull the Rx line to ground and signalling responses to the processor. If you want to use one anyways, a user has reported lifting the pads on this chip allows the single hardware UART to be used for communication with the unit. ESPHome's software UART implementation wasn't viable for this application as it used delays inside an interrupt routine. At 1200 baud the delays become too long and the system would watchdog out and reset. https://github.com/esphome/esphome/pull/22450 has revised this but it's untested at this low of a baud rate. Just get an ESP32 board.
 
 ### Flash Usage
 
@@ -142,6 +144,7 @@ binary_sensor:
       name: Comfort Mode Sensor
     defrost:
       name: Defrost
+      device_id: daikin_outdoor
     econo:
       name: Econo Mode Sensor
     led:
@@ -161,9 +164,6 @@ binary_sensor:
       device_id: daikin_outdoor
     streamer:
       name: Streamer Mode Sensor
-    system_defrost:
-      name: System Defrost
-      device_id: daikin_outdoor
     system_online:
       name: System Online
       device_id: daikin_outdoor
@@ -182,7 +182,6 @@ binary_sensor:
 * **serial_error** (*Optional*, Binary Sensor): Indicates there's a serial interface error, as read out from the `F4` query. This is always OK when working, you can ignore this if you're not a developer.
 * **short_cycle** (*Optional*, Binary Sensor): Indicates the short cycle protection period is active, a 120-180s delay when operational modes are changed, as read out from the `RzC3` query. Shared on all indoor units.
 * **streamer** (*Optional*, Binary Sensor): Indicates Streamer mode is active, as read out from the `F6` query. Supported on some v2+ units.
-* **system_defrost** (*Optional*, Binary Sensor): Indicates the outdoor unit is in a defrost cycle, as read out from the `RzC3` query. Appears to shadow the unit defrost indicator, but I have to wait for winter to confirm. Shared on all indoor units.
 * **system_online** (*Optional*, Binary Sensor): Indicates any indoor unit is online, as read out from the `RzB2` and `RzC3` queries. Shared on all indoor units.
 
 ## Climate
@@ -396,9 +395,9 @@ sensor:
 * **outdoor_capacity** (*Optional*, Sensor): Outdoor unit capacity in indoor units. Static value, so not very interesting. Shared on all indoor units. Supported on some v2+ units.
 * **outside_temperature** (*Optional*, Sensor): The ambient temperature measured at the outdoor compressor. Shared on all indoor units.
 * **power** (*Optional*, Sensor): The instantaneous power draw of the unit in W. If you have a multihead system, sampling jitter may result in incorrect results when summed into energy consumption. Use as a rough indicator only and prefer the real energy consumption sensors for your dashboard. Supported on some v3.20+ units.
-* **setpoint_temperature** (*Optional*, Sensor): The setpoint temperature after taking any Climate provided offsets into account.
+* **setpoint_temperature** (*Optional*, Sensor): The setpoint temperature after taking any Climate provided offsets into account. This is the equivalent of the IR remote setpoint.
 * **swing_vertical_angle** (*Optional*, Sensor): The angle of the vertical louvres in degrees. This uses Daikin's reference frame, 90 is horizontal and 0 is vertical for my wall units.
-* **target_temperature** (*Optional*, Sensor): The internal target temperature after taking special modes into account. This is not the user setpoint and usually not that interesting but may help with debugging or your automations.
+* **target_temperature** (*Optional*, Sensor): The internal target temperature determined from the setpoint temperature after taking operational mode and modifiers into account. This value is used in the control specifications in the service manual. Usually not that interesting but may help with understanding unit operation.
 
 ### Switch
 
@@ -476,10 +475,11 @@ If your unit is failing to poll `F8` and `FY00` over and over you most likely ha
 ```yaml
 # Example configuration
 esphome:
-  min_version: "2026.10.0"
+  min_version: "2026.11.0"
   devices:
     - id: daikin_outdoor
       name: "Daikin Compressor"
+      relation: via
 
 esp32:
   framework:
@@ -690,6 +690,7 @@ binary_sensor:
     # unit and system state bitfield derived, not always supported or reliable:
     defrost:
       name: Defrost
+      device_id: daikin_outdoor
     multizone_online:
       name: Multizone Online
     online:
@@ -698,9 +699,6 @@ binary_sensor:
     #   name: Serial Error
     short_cycle:
       name: Short Cycle
-      device_id: daikin_outdoor
-    system_defrost:
-      name: System Defrost
       device_id: daikin_outdoor
     system_online:
       name: System Online

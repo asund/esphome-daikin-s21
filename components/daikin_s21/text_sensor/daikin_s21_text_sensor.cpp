@@ -9,7 +9,7 @@ static const char * const TAG = "daikin_s21.text_sensor";
 
 void DaikinS21TextSensor::setup() {
   for (const auto &sensor : this->sensors) {
-    this->get_parent()->add_debug_query(sensor->get_name().c_str());  // register queries
+    this->get_parent()->add_debug_query(LOG_STR_ARG(sensor->get_log_name()));  // register queries
   }
 
   // register for update events from DaikinS21
@@ -42,7 +42,7 @@ void DaikinS21TextSensor::loop() {
   }
   // update all debug sensors
   for (auto * const sensor : this->sensors) {
-    std::string current_state = str_repr(this->get_parent()->get_query_result(sensor->get_name().c_str()));
+    std::string current_state = str_repr(this->get_parent()->get_query_result(LOG_STR_ARG(sensor->get_log_name())));
     if (sensor->state != current_state) {
       sensor->publish_state(current_state);
     }
