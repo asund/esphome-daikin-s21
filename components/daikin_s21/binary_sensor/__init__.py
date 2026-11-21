@@ -43,7 +43,6 @@ CONF_MULTIZONE_ONLINE = "multizone_online"
 CONF_ONLINE = "online"
 CONF_SERIAL_ERROR = "serial_error"
 CONF_SHORT_CYCLE = "short_cycle"
-CONF_SYSTEM_DEFROST = "system_defrost"
 CONF_SYSTEM_ONLINE = "system_online"
 
 CONFIG_SCHEMA = (
@@ -64,7 +63,6 @@ CONFIG_SCHEMA = (
         cv.Optional(CONF_SERIAL_ERROR): binary_sensor.binary_sensor_schema(device_class=DEVICE_CLASS_PROBLEM),
         cv.Optional(CONF_SHORT_CYCLE): binary_sensor.binary_sensor_schema(),
         cv.Optional(CONF_STREAMER): binary_sensor.binary_sensor_schema(DaikinS21BinarySensorMode, icon=ICON_STREAMER),
-        cv.Optional(CONF_SYSTEM_DEFROST): binary_sensor.binary_sensor_schema(device_class=DEVICE_CLASS_COLD),
         cv.Optional(CONF_SYSTEM_ONLINE): binary_sensor.binary_sensor_schema(device_class=DEVICE_CLASS_POWER),
     })
 )
@@ -80,7 +78,6 @@ async def to_code(config):
     await binary_sensors(CONF_ONLINE, var.set_online_sensor)
     await binary_sensors(CONF_SERIAL_ERROR, var.set_serial_error_sensor)
     await binary_sensors(CONF_SHORT_CYCLE, var.set_short_cycle_sensor)
-    await binary_sensors(CONF_SYSTEM_DEFROST, var.set_system_defrost_sensor)
     await binary_sensors(CONF_SYSTEM_ONLINE, var.set_system_online_sensor)
     for key, mode_enum in DAIKIN_MODE_CONFIG_ENUMS.items():
         await binary_sensors(key, var.set_mode_sensor, mode_enum)

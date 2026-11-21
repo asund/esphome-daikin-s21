@@ -1465,9 +1465,7 @@ void DaikinS21::check_ready_model_detection() {
         break;
     }
     if (this->support.unit_system_state_queries) {
-      if (this->readout_requests[ReadoutUnitStateBits]) {
-        this->enable_query(QueryEnvUnitState);
-      }
+      this->enable_query(QueryEnvUnitState);
       if (this->readout_requests[ReadoutSystemStateBits]) {
         this->enable_query(QueryEnvSystemState);
       }
@@ -1492,7 +1490,6 @@ void DaikinS21::check_ready_active_source() {
       this->support.active_source = ActiveSourceUnsupported;
     } else if (unit_state.enabled == false) {
       if (this->support.unit_system_state_queries) {
-        this->readout_requests.set(ReadoutUnitStateBits);
         unit_state.enabled = true;
       } else {
         this->support.active_source = ActiveSourceUnsupported;
@@ -1526,7 +1523,6 @@ void DaikinS21::check_ready_powerful_source() {
         this->support.powerful_source = PowerfulSourceDisabled;
       } else if (unit_state.enabled == false) {
         if (this->support.unit_system_state_queries) {
-          this->readout_requests.set(ReadoutUnitStateBits);
           unit_state.enabled = true;
         } else {
           this->support.powerful_source = PowerfulSourceDisabled;

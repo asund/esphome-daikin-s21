@@ -36,7 +36,6 @@ class DaikinS21BinarySensor final : public Component,
   }
   void set_defrost_sensor(binary_sensor::BinarySensor * const sensor) {
     this->defrost_sensor_ = sensor;
-    this->get_parent()->request_readout(ReadoutUnitStateBits);
   }
   void set_multizone_online_sensor(binary_sensor::BinarySensor * const sensor) {
     this->multizone_online_sensor_ = sensor;
@@ -44,7 +43,6 @@ class DaikinS21BinarySensor final : public Component,
   }
   void set_online_sensor(binary_sensor::BinarySensor * const sensor) {
     this->online_sensor_ = sensor;
-    this->get_parent()->request_readout(ReadoutUnitStateBits);
   }
   void set_serial_error_sensor(binary_sensor::BinarySensor * const sensor) {
     this->serial_error_sensor_ = sensor;
@@ -54,13 +52,8 @@ class DaikinS21BinarySensor final : public Component,
     this->short_cycle_sensor_ = sensor;
     this->get_parent()->request_readout(ReadoutSystemStateBits);
   }
-  void set_system_defrost_sensor(binary_sensor::BinarySensor * const sensor) {
-    this->system_defrost_sensor_ = sensor;
-    this->get_parent()->request_readout(ReadoutSystemStateBits);
-  }
   void set_system_online_sensor(binary_sensor::BinarySensor * const sensor) {
     this->system_online_sensor_ = sensor;
-    this->get_parent()->request_readout(ReadoutUnitStateBits);
     this->get_parent()->request_readout(ReadoutSystemStateBits);
   }
 
@@ -72,7 +65,6 @@ class DaikinS21BinarySensor final : public Component,
   binary_sensor::BinarySensor *online_sensor_{};
   binary_sensor::BinarySensor *serial_error_sensor_{};
   binary_sensor::BinarySensor *short_cycle_sensor_{};
-  binary_sensor::BinarySensor *system_defrost_sensor_{};
   binary_sensor::BinarySensor *system_online_sensor_{};
 };
 
