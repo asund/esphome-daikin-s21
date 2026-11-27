@@ -46,9 +46,24 @@ The Faikout S21 Protocol [wiki page](https://codeberg.org/RevK/ESP32-Faikout/wik
 * I only test with my ESP32-S3 hardware. It compiles for ESP8266 and has been reported to work, but only with the hardware UART. As the S21 interface only requires a slow UART, it should work on most hardware platforms.
 * I only test with my 4MXL36TVJU outdoor unit and CTXS07LVJU, FTXS12LVJU, FTXS15LVJU indoor units. These are protocol v0, so anything more featureful requires your feedback and help.
 * Presence detection is limited to mode configuration and even that support is spotty. No one has found a way to detect the state of the sensor and expose a motion detector sensor. If you're handy with electronics, the active low PIR sensor output can be wired to a spare GPIO and used that way.
-* While support has been decoded, this project does not interact with the indoor unit schedules. Similar functionality should be easy enough to add using Home Assistant or ESPHome Time based actions if required.
 
 Lastly, some Daikin units use other protocols this project doesn't support. Faikout is the most capable project, with support for CN_WIRED and work to add support for the S_DGC bus. There's also a CN_WIRED ESPHome project out there.
+
+### Workarounds
+
+Some advertised functionality for your unit may not be supported, but can be emulated using Home Assistant or ESPHome. While support could be added to emulate these in this project, tight control isn't necessary to accomplish them and the cost in development time, code complexity and testing burden make it not worth it to me at the moment.
+
+#### Comfort airflow
+
+This mode simply controls the vertical louvre depending on the climate action. Cooling is directed upwards, heating is directed downwards. If you find this useful and built in support doesn't work, triggering off a state change to `action` (ESPHome) or `hvac_action` (Home Assistant) and commanding the vertical louvre yourself could work.
+
+#### Powerful operation
+
+This mode temporarily sets the setpoint to the limit for the current mode/action for 20 minutes. This forces the compressor to its maximum and the indoor unit can operate at its maximum power. If you find this useful and built in support doesn't work, a Home Assistant scene that temporarily commands the setpoint and makes use of the `snapshot_entities` option to save the preexisting state could work.
+
+#### Schedules
+
+While support has been decoded, this project does not interact with the indoor unit schedules. It's not that powerful and reading the current state is flawed. Similar functionality should be easy enough to add using Home Assistant or ESPHome Time based actions if required.
 
 ## Hardware
 
